@@ -1,0 +1,1 @@
+* * * * * root /usr/bin/python3 /usr/local/share/lib-network/post_install.py >>/var/log/lib-network-start.log 2>&1

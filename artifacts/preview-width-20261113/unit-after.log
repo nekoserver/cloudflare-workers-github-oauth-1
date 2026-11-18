@@ -1,0 +1,12 @@
+
+ RUN  v5.0.5 /root/cloudflare-workers-github-oauth-1
+
+
+ Test Files  2 passed (2)
+      Tests  8 passed (8)
+   Start at  04:24:38
+   Duration  2.98s (transform 50%, import 40%, tests 7%, worker 4%)
+
+    Isolate  2 workers spawned · ~539ms startup each (spawn + environment, per file)
+             at least ~539ms faster with isolate: false — reuses workers across files instead of one per file
+

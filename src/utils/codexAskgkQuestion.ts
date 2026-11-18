@@ -4,14 +4,25 @@ export function formatCodexAskgkQuestion(message: string): string {
   return match ? match[1] : message;
 }
 
-/** Codex/Claudeコマンドの質問本文。中継する入力は引用符ごと保持する。 */
+/** Codex/Claude/Museコマンドの質問本文。中継する入力は引用符ごと保持する。 */
 export function formatAskgkPromptQuestion(message: string): string {
-  const match = message.match(/^\s*\/neko\s+askgk\s+(?:codex|claude)_prompt\s*=\s*["“”]([\s\S]*)["“”]\s*$/i);
+  const match = message.match(/^\s*\/(?:neko\s+askgk\s+(?:codex|claude|muse)_prompt|askmuse\s+prompt)\s*=\s*["“”]([\s\S]*)["“”]\s*$/i);
   return match ? match[1] : message;
+}
+
+/** `/askmuse prompt="◯"` の◯を返す。形式が違えばnull。 */
+export function parseAskMusePrompt(message: string): string | null {
+  const match = message.match(/^\s*\/askmuse\s+prompt\s*=\s*["“”]([\s\S]*)["“”]\s*$/i);
+  return match ? match[1] : null;
 }
 
 /** 完全一致でのみ認める既存のコマンド別名。 */
 const ASKGK_SLASH_ALIASES: Record<string, string> = { './usage': '/usage' };
+
+/** 別名を正式なスラッシュコマンドへ置き換える。別名でなければ入力のまま返す。 */
+export function resolveAskgkSlashAlias(prompt: string): string {
+  return ASKGK_SLASH_ALIASES[prompt.trim().toLowerCase()] ?? prompt;
+}
 
 /** エージェント制御入力を通常のAI回答履歴から除外する。 */
 export function isAskgkSlashPrompt(question: string): boolean {

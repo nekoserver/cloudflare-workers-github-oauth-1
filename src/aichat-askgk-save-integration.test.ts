@@ -4,7 +4,17 @@ import { createJWT } from './utils/jwt';
 import { computeQuestionHash, computeConversationHash } from './utils/conversationHash';
 import { getMarkdownParserScript } from './utils/markdownRenderer';
 
-describe('/neko askgk Codex/Claudeの応答ログ', () => {
+// 2026-11-07(#2532)以降、muse_promptは送信前に本体コンテナのTailscaleを確かめ、確かめられなければ送らない。
+// この保存のテストでは、Tailscaleが動いていてmuse-vmがオンラインの状態を与える(停止時の動作はmuseTailscalePreflightのテストで見る)。
+const stub = vi.hoisted(() => ({
+  getState: async () => ({ status: 'running' }),
+  fetch: async (request: Request) => (new URL(request.url).pathname === '/debug/tailscale-peers'
+    ? new Response(JSON.stringify({ backendState: 'Running', peers: [{ hostName: 'muse-vm', online: true }] }))
+    : new Response('unexpected', { status: 500 })),
+}));
+vi.mock('./containers/demoContainerStub', () => ({ getDemoContainer: () => stub }));
+
+describe('/neko askgk Codex/Claude/Museの応答ログ', () => {
   it.each([
     { threadId: '', saveFails: false, openQuote: '"' },
     { threadId: '', saveFails: false, openQuote: '“' },
@@ -13,7 +23,7 @@ describe('/neko askgk Codex/Claudeの応答ログ', () => {
     { threadId: 'a'.repeat(32), saveFails: false },
     { threadId: 'a'.repeat(32), saveFails: true },
     { threadId: '', saveFails: true },
-  ].flatMap(testCase => ['codex', 'claude'].map(model => ({ ...testCase, model }))))('replyの保存: model=$model, threadId=$threadId, saveFails=$saveFails', async ({ model, threadId, saveFails, openQuote = '"', missingThread = false }) => {
+  ].flatMap(testCase => ['codex', 'claude', 'muse'].map(model => ({ ...testCase, model }))))('replyの保存: model=$model, threadId=$threadId, saveFails=$saveFails', async ({ model, threadId, saveFails, openQuote = '"', missingThread = false }) => {
     const reply = '## 回答\n\n1行目\n2行目\n\n- 項目';
     const question = '以下は Cursr VM の公式ドキュメントですが日本語に訳してから要約してください https://cursor.com/docs/cloud-agent/security';
     const message = '/neko askgk ' + model + '_prompt=' + openQuote + question + (openQuote === '“' ? '”' : '"');
@@ -21,6 +31,7 @@ describe('/neko askgk Codex/Claudeの応答ログ', () => {
     const DB = {
       prepare(sql: string) {
         return {
+          first: async () => ({ revision: 1, timeoutSeconds: 120 }),
           all: async () => ({ results: [] }),
           bind(...args: unknown[]) {
             return {
@@ -53,7 +64,7 @@ describe('/neko askgk Codex/Claudeの応答ログ', () => {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, source: 'textbox', threadId }),
-    }, { JWT_SECRET, DB, RUST_WORKER });
+    }, { JWT_SECRET, DB, RUST_WORKER, DEMO_CONTAINER: {} });
 
     if (saveFails) {
       if (threadId && !missingThread) {
@@ -96,7 +107,7 @@ describe('/neko askgk Codex/Claudeの応答ログ', () => {
   });
   it.each(['invalid'])('形式が無効なスレッドには保存しない: %s', async (threadId) => {
     const run = vi.fn();
-    const DB = { prepare: (sql: string) => ({ bind: (...args: unknown[]) => ({
+    const DB = { prepare: (sql: string) => ({ first: async () => ({ revision: 1, timeoutSeconds: 120 }), bind: (...args: unknown[]) => ({
       first: async () => {
         if (sql.includes('user_sessions')) return { revoked_at: null };
         expect(args).toEqual(['test-user', threadId]);

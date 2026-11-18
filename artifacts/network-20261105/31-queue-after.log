@@ -1,0 +1,9 @@
+test_invalid_queue_ack_is_not_accepted (__main__.QueueInputTest.test_invalid_queue_ack_is_not_accepted) ... ok
+test_observation_cannot_enqueue (__main__.QueueInputTest.test_observation_cannot_enqueue) ... ok
+test_owned_thread_queues_once_to_same_thread (__main__.QueueInputTest.test_owned_thread_queues_once_to_same_thread) ... ok
+test_queue_failure_is_not_accepted_or_retried (__main__.QueueInputTest.test_queue_failure_is_not_accepted_or_retried) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.089s
+
+OK

@@ -59,6 +59,20 @@ if [ ! -f "$TLS_DIR/nekoroot.crt" ]; then
 fi
 
 # --- sshd: ホスト鍵・authorized_keys ---
+# SSH_HOST_ED25519_KEY_B64(秘密鍵のbase64)があれば、作り直しても同じホスト鍵を使う。
+# 無ければ起動のたびに新しい鍵になる。子プロセスへ秘密鍵を渡さないよう、使ったら消す。
+if [ -n "${SSH_HOST_ED25519_KEY_B64:-}" ]; then
+  host_key=/etc/ssh/ssh_host_ed25519_key
+  (umask 077; printf '%s' "$SSH_HOST_ED25519_KEY_B64" | base64 -d > "$host_key") 2>/dev/null
+  if host_pub=$(ssh-keygen -y -P '' -f "$host_key" 2>/dev/null) && [ "${host_pub%% *}" = ssh-ed25519 ]; then
+    printf '%s\n' "$host_pub" > "$host_key.pub"
+    log "ssh host key restored from SSH_HOST_ED25519_KEY_B64"
+  else
+    rm -f "$host_key" "$host_key.pub"
+    log "WARN: SSH_HOST_ED25519_KEY_B64 is not an ed25519 private key; generating a new host key"
+  fi
+fi
+unset SSH_HOST_ED25519_KEY_B64
 ssh-keygen -A >/tmp/sshkeygen.log 2>&1 || log "WARN: ssh-keygen -A failed"
 mkdir -p /root/.ssh
 chmod 700 /root/.ssh
@@ -67,7 +81,13 @@ chmod 700 /root/.ssh
 # 経由の直接sshでも同じ鍵でログインできるようにする。
 cat > /root/.ssh/authorized_keys <<'EOF'
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJM8/iV+DiD+cTQQgadOhHKkTUR+2ldz9ocGxC45sRbD admin
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC2kQ2c3dcds19h599IEkj45GWerMrzC0AELnKqaOMZc
 EOF
+# 追加の公開鍵。改行か;で区切る。鍵の行以外は捨てる。
+if [ -n "${SSH_AUTHORIZED_KEYS:-}" ]; then
+  printf '%s\n' "$SSH_AUTHORIZED_KEYS" | tr ';' '\n' | sed 's/^[[:space:]]*//' \
+    | grep -E '^(ssh-(ed25519|rsa)|ecdsa-sha2-|sk-)' >> /root/.ssh/authorized_keys
+fi
 chmod 600 /root/.ssh/authorized_keys
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -77,7 +97,10 @@ sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd
 # Create the log privately before the redirect (which otherwise uses umask).
 (umask 077; touch /tmp/sshd.log)
 chmod 600 /tmp/sshd.log
-/usr/sbin/sshd -D -e -p 2222 2> >(
+# The demo image builds OpenSSH into /usr/local; the shared Redmine image keeps APT's sshd.
+SSHD_BIN=/usr/sbin/sshd
+if [ -x /usr/local/sbin/sshd ]; then SSHD_BIN=/usr/local/sbin/sshd; fi
+"$SSHD_BIN" -D -e -p 2222 2> >(
   export TZ=UTC
   while IFS= read -r sshd_line || [ -n "$sshd_line" ]; do
     printf '%(%Y-%m-%dT%H:%M:%SZ)T %s sshd: %s\n' -1 "${HOSTNAME:-localhost}" "$sshd_line"
@@ -191,10 +214,51 @@ if [ -d /opt/redmine ] && [ ! -f "$REDMINE_DB" ]; then
   chown www-data:www-data "$REDMINE_DB" 2>/dev/null || true
 fi
 
+# --- Reapply reusable container-only SSI setup after installation ---
+python3 /usr/local/libexec/container_setup.py \
+  && log "container SSI configured" \
+  || log "WARN: container SSI setup failed"
+
+# --- lib(SSI): /root/lib を /var/www/html/lib に見せる(apache-lib.conf、管理者だけ) ---
+# libはイメージに入れない(container_setup.py・lib-network/README.mdの方針)。コンテナに置かれた /root/lib を、
+# Apacheの実行ユーザー(www-data)が /root を通らずに読めるようbind mountする。失敗しても起動は続ける。
+if [ -d /root/lib ]; then
+  mkdir -p /var/www/html/lib
+  if mountpoint -q /var/www/html/lib; then
+    log "lib: /var/www/html/lib is already mounted"
+  elif mount --bind /root/lib /var/www/html/lib; then
+    log "lib: mounted /root/lib on /var/www/html/lib"
+  else
+    log "WARN: lib: mount --bind /root/lib /var/www/html/lib failed (lib SSI stays unavailable)"
+  fi
+else
+  log "lib: no /root/lib, lib SSI stays unavailable (/root/lib が無い)"
+fi
+
 # --- Apache(server.jsへのTLSプロキシ・Redmineは127.0.0.1:8444で内部待ち受け) ---
-apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \
-  && (apache2ctl start >/tmp/apache.log 2>&1 && log "apache2 started") \
-  || log "WARN: apache2 configtest/start failed, see /tmp/apache-configtest.log /tmp/apache.log"
+# apache2ctl のサービス制御は使わない。Ubuntu の apache2ctl は systemd が居ると判定すると
+# systemctl へ委譲し、systemctl は chroot 環境では start を無視して正常終了するため、
+# Apache が起動していないのに成功扱いになる(2026-11-18、実機の /tmp/apache.log で確認:
+# "Running in chroot, ignoring command 'start'")。envvars を読み込んで httpd 本体を直接
+# 起動し、起動後は待ち受けを実測で確認する(終了コードは成功の根拠にしない)。
+if apache2ctl configtest >/tmp/apache-configtest.log 2>&1; then
+  ( . /etc/apache2/envvars; /usr/sbin/apache2 -k start ) >/tmp/apache.log 2>&1
+  apache_listening=""
+  for _ in 1 2 3 4 5; do
+    if (exec 3<>/dev/tcp/127.0.0.1/8443) 2>/dev/null && (exec 3<>/dev/tcp/127.0.0.1/8445) 2>/dev/null; then
+      apache_listening=1
+      break
+    fi
+    sleep 1
+  done
+  if [ -n "$apache_listening" ]; then
+    log "apache2 started (8443/8445 listening)"
+  else
+    log "WARN: apache2 start failed or not listening on 8443/8445, see /tmp/apache-configtest.log /tmp/apache.log"
+  fi
+else
+  log "WARN: apache2 configtest failed, see /tmp/apache-configtest.log"
+fi
 
 # --- cloudflared(nekorootトンネル) ---
 NEKOROOT_TUNNEL_TOKEN=$(extract_tunnel_token "${NEKOROOT_TUNNEL_TOKEN:-}")
@@ -235,14 +299,45 @@ if [ -n "${TAILSCALE_AUTHKEY:-}" ]; then
     --socket=/var/run/tailscale/tailscaled.sock \
     --tun=userspace-networking \
     >/tmp/tailscaled.log 2>&1 &
-  log "tailscaled started (pid $!, userspace-networking)"
+  TAILSCALED_PID=$!
+  log "tailscaled started (pid ${TAILSCALED_PID}, userspace-networking)"
   sleep 1
-  tailscale up --authkey="${TAILSCALE_AUTHKEY}" --hostname=cf-demo-container --accept-dns=false \
-    >/tmp/tailscale-up.log 2>&1 \
-    && log "tailscale up succeeded" \
-    || log "WARN: tailscale up failed, see /tmp/tailscale-up.log"
+  # tailscale up はバックグラウンドでリトライする(1分間隔で3回、駄目なら tailscaled を停止)。
+  # 起動処理は待たせない。管理サーバーは TAILSCALE_LOGIN_SERVER で指定する(未設定は既定)。
+  (
+    . /usr/local/bin/tailscale-up.sh
+    tailscale_up_with_retry
+  ) >>/tmp/tailscale-up.log 2>&1 &
+  log "tailscale up supervisor started (pid $!)"
 else
   log "TAILSCALE_AUTHKEY未設定のため、tailscaledは起動しない"
+fi
+
+# --- T3 Code ---
+# T3 Codeは127.0.0.1:3773、埋め込み用の中継は127.0.0.1:3774のloopbackだけで待ち受ける。
+# 外へ出す入口は、nekorootトンネルのPublic Hostname(接続先 http://127.0.0.1:3774)だけ。
+# 起動に失敗しても他のサービスは止めない。落ちたら3秒待って起動し直す(終了のたびにログへ記録する)。
+# ペアリングは、コンテナ内で `t3 pair` を実行して作る(コードはログやリポジトリに残さない)。
+if command -v t3 >/dev/null 2>&1; then
+  mkdir -p /root/t3-workspace
+  (
+    while true; do
+      t3 serve --host 127.0.0.1 --port 3773 --no-browser /root/t3-workspace
+      echo "[entrypoint] t3 serve exited (code $?) at $(date -u +%FT%TZ), restarting in 3s"
+      sleep 3
+    done
+  ) >>/tmp/t3.log 2>&1 &
+  log "t3 serve supervisor started (pid $!)"
+  (
+    while true; do
+      node /usr/local/libexec/t3-embed-proxy.cjs
+      echo "[entrypoint] t3-embed-proxy exited (code $?) at $(date -u +%FT%TZ), restarting in 3s"
+      sleep 3
+    done
+  ) >>/tmp/t3-proxy.log 2>&1 &
+  log "t3-embed-proxy supervisor started (pid $!)"
+else
+  log "WARN: t3コマンドが無いため、T3 Codeは起動しない"
 fi
 
 # --- dockerd ---
@@ -282,6 +377,19 @@ if [ -n "${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
     || log "WARN: gh auth setup-git failed (see /tmp/gh-setup-git.log)"
 else
   log "gh: GH_TOKEN未設定(CONTAINER_GH_TOKENを設定すると使える)"
+fi
+
+# --- lib の復元(/root/lib/claude/ops/restore-claude-host.sh、nekoserver/lib) ---
+# libはイメージに入れない。コンテナに置かれた /root/lib の起動処理で、tunnels API・LLM worker・会話observer・
+# ストリーム・Claude Code のhookを毎回の起動で戻す。ORIGIN_HMAC_SECRET・MUSE_API_KEY・起動オプション
+# LIB_ROUTE_ACCESS_CONTROL は Worker から環境変数で届き、コマンドラインには出さない。
+# /root/lib は起動より後に置かれることがある(2026-11-18 は約2時間後)ので、届くまで裏で待つ(30秒ごと、1日で諦める。待つ間は眠っているだけ)。
+# 届いたら、上の bind mount がまだなら行ってから復元する。準備完了を遅らせず、失敗しても起動は続ける。
+/usr/local/libexec/lib-restore-wait.sh /root/lib /var/www/html/lib 86400 30 /tmp/restore-claude-host.log &
+
+# Restore the versioned Codex Japanese hooks at boot; preserve other hooks and trust.
+if ! /usr/bin/python3 /usr/local/share/codex-harness/restore.py; then
+  log "WARN: Codex Japanese hook restore failed; existing settings retained"
 fi
 
 log "exec: $*"

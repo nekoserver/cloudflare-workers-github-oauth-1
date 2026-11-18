@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-11-04T07:17:29.222901+00:00",
+  "files": {
+    "nft-ruleset.txt": {
+      "bytes": 1231,
+      "sha256": "c53e43f72aa97efcfdf927191bc4cfd51a098bd03a7a3f867ee2ae67c695190c"
+    },
+    "firewall.log": {
+      "bytes": 132050,
+      "sha256": "4eec6658ed4462474ba34c2a3ebf68ac84e7fbec0d1f64dad2a490ee43fe65fa"
+    }
+  }
+}

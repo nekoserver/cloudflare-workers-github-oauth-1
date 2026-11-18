@@ -1,0 +1,14 @@
+✔ tree: bindgen CLI matches the locked WASM schema (4.547624ms)
+✔ tree: tests and rebuilds preserve the dependency lock (0.459439ms)
+✔ msb: bindgen CLI matches the locked WASM schema (0.149474ms)
+✔ msb: tests and rebuilds preserve the dependency lock (0.10005ms)
+✔ sqlx: bindgen CLI matches the locked WASM schema (0.149885ms)
+✔ sqlx: tests and rebuilds preserve the dependency lock (0.102745ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 328.1131

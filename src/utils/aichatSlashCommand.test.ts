@@ -27,6 +27,7 @@ import {
   type CommitAgentLogRow,
   type MlbTodayGame,
 } from './aichatSlashCommand';
+import type { AichatSlashCommandDeps } from './aichatSlashCommand';
 
 describe('formatJstDateTime', () => {
   it('UTCの時刻をJST(UTC+9)に変換して返す', () => {
@@ -1003,6 +1004,15 @@ describe('/neko askgk claude_prompt="..."', () => {
   // (ヘッダX-LLM-Engine等は複数ホップのJSON文字列ラッピングを経由するため
   // ここには届かず、JSON本体のllm_model/llm_effortのみ読む)。
   // Engineは`◯◯_prompt=`の接頭語から判定し、回答文の末尾に埋め込む。
+  // 故障想定: Museだけ専用の保存経路へ入らず、model='neko/askgk'として記録される。
+  it('muse_prompt="..."を接頭語ごと渡し、Claudeと同じくAI回答として記録する印を返す', async () => {
+    const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文', llmModel: 'muse' });
+    const result = await interpretAichatSlashCommand('/neko askgk muse_prompt="テスト質問"', now, { ...unusedDeps, askTunnelSigner });
+    expect(askTunnelSigner).toHaveBeenCalledWith('muse_prompt="テスト質問"');
+    expect(result).toMatchObject({ handled: true, saveAsAiResponse: true, museAskgk: true });
+    expect(result).not.toHaveProperty('claudeAskgk');
+  });
+
   it('claude_prompt="..."でllm_model/llm_effortが返れば回答文末尾にEngine/Model/Effortを埋め込む', async () => {
     const askTunnelSigner = vi.fn().mockResolvedValue({ reply: '回答本文', llmModel: 'claude-sonnet-5-5', llmEffort: 'medium' });
     const result = await interpretAichatSlashCommand(
@@ -1084,5 +1094,71 @@ describe('formatAskgkLlmInfoLine / appendAskgkLlmInfoLine', () => {
   it('appendAskgkLlmInfoLineはinfoLineがあればreplyの末尾に空行区切りで追記する', () => {
     expect(appendAskgkLlmInfoLine('回答', 'claude', 'claude-sonnet-5-5', 'medium'))
       .toBe('回答\n\nEngine: Claude / Model: claude-sonnet-5-5 / Effort: medium');
+  });
+});
+
+describe('/askmuse prompt="..."', () => {
+  it('/neko helpにMuse選択時のコマンドを載せる', () => {
+    const help = formatAichatSlashCommandHelp();
+    for (const command of ['/help', '/usage', '/status', '/ping', '/models']) expect(help).toContain(command);
+    expect(help).toContain('言語モデルがMuse');
+  });
+
+  const now = new Date('2026-11-06T00:00:00Z');
+  const deps = {} as AichatSlashCommandDeps;
+
+  it('本文だけをMuseへ送り、Museの回答として保存する印とEngine行を返す', async () => {
+    const askMuseDirect = vi.fn().mockResolvedValue({ ok: true, reply: ' 回答本文 ', llmModel: 'muse' });
+    const askTunnelSigner = vi.fn();
+    const result = await interpretAichatSlashCommand('/askmuse prompt="テスト質問"', now, { ...deps, askMuseDirect, askTunnelSigner });
+    expect(askMuseDirect).toHaveBeenCalledWith('テスト質問');
+    expect(askTunnelSigner).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ handled: true, saveAsAiResponse: true, museAskgk: true, response: '回答本文\n\nEngine: Muse / Model: muse' });
+  });
+
+  // 故障想定: lib経由へ黙って切り替えると、どちらの経路の結果か分からなくなる。
+  it.each([
+    ['container_not_running', '本体コンテナ'], ['muse_not_authenticated', 'MUSE_API_KEY'], ['muse_connection_failed', 'muse_connection_failed'], ['llm_timeout', 'llm_timeout'],
+  ])('%sは保存せず、別の経路へ送らない', async (error, text) => {
+    const askTunnelSigner = vi.fn();
+    const result = await interpretAichatSlashCommand('/askmuse prompt="質問"', now, { ...deps, askMuseDirect: vi.fn().mockResolvedValue({ ok: false, error }), askTunnelSigner });
+    expect(result).toMatchObject({ handled: true });
+    if (!result.handled) throw new Error('handled');
+    expect(result.response).toContain('❌');
+    expect(result.response).toContain(text);
+    expect(result.saveAsAiResponse).toBeUndefined();
+    expect(result.museAskgk).toBeUndefined();
+    expect(askTunnelSigner).not.toHaveBeenCalled();
+  });
+
+  it.each(['/askmuse', '/askmuse 質問', '/askmuse prompt="質問', '/askmuse prompt=""', '/askmuse prompt="  "'])('%s には使い方を返して送らない', async (message) => {
+    const askMuseDirect = vi.fn();
+    const result = await interpretAichatSlashCommand(message, now, { ...deps, askMuseDirect });
+    expect(result).toMatchObject({ handled: true });
+    if (!result.handled) throw new Error('handled');
+    expect(result.response).toContain('/askmuse prompt="<質問文>"');
+    expect(askMuseDirect).not.toHaveBeenCalled();
+  });
+
+  it('連携が未設定なら利用できないと返す', async () => {
+    const result = await interpretAichatSlashCommand('/askmuse prompt="質問"', now, deps);
+    expect(result).toMatchObject({ handled: true });
+    if (!result.handled) throw new Error('handled');
+    expect(result.response).toContain('現在利用できません');
+  });
+
+  it('依存が例外を投げたら文面で返す', async () => {
+    const result = await interpretAichatSlashCommand('/askmuse prompt="質問"', now, { ...deps, askMuseDirect: vi.fn().mockRejectedValue(new Error('D1 down')) });
+    expect(result).toMatchObject({ handled: true });
+    if (!result.handled) throw new Error('handled');
+    expect(result.response).toContain('D1 down');
+  });
+
+  it('別の語は横取りしない', async () => {
+    expect(await interpretAichatSlashCommand('/askmusefoo prompt="質問"', now, { ...deps, askMuseDirect: vi.fn() })).toEqual({ handled: false });
+  });
+
+  it('ヘルプに載せる', () => {
+    expect(formatAichatSlashCommandHelp()).toContain('/askmuse prompt=');
   });
 });

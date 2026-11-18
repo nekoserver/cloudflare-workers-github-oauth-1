@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/root/cloudflare-workers-github-oauth-1/containers/demo/tests/post_install_test.py", line 9, in <module>
+    spec.loader.exec_module(config)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 755, in exec_module
+  File "<frozen importlib._bootstrap_external>", line 892, in get_code
+  File "<frozen importlib._bootstrap_external>", line 950, in get_data
+FileNotFoundError: [Errno 2] No such file or directory: '/root/cloudflare-workers-github-oauth-1/containers/demo/lib-network/post_install.py'

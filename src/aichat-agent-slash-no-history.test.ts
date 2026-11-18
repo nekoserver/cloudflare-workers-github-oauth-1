@@ -20,7 +20,7 @@ describe('エージェントのスラッシュコマンドは通常のAI応答�
     { message: '/status', model: 'claude' },
   ])('返信を維持し保存・トークン推定・色登録を行わない: %j', async (request) => {
     const writes: string[] = [];
-    const DB = { prepare: (sql: string) => ({
+    const DB = { prepare: (sql: string) => ({ first: async () => ({ revision: 1, timeoutSeconds: 120 }),
       all: async () => ({ results: [] }),
       bind: (..._args: unknown[]) => ({
         first: async () => sql.includes('user_sessions') ? { revoked_at: null } : null,

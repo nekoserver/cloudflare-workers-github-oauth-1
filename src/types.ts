@@ -2,7 +2,7 @@
  * 共通型定義
  */
 import type { JWTPayload } from './utils/jwt';
-// import typeのため実行時にはこの行自体が消える(@cloudflare/containersの
+// import typeのため実行時にはこの行自体が消える(demoContainer.tsの
 // cloudflare:workers importも実行されない)。プレーンNode環境のテストが
 // このファイルをimportしても問題ない。
 import type { DemoContainer } from './containers/demoContainer';
@@ -13,6 +13,11 @@ export type Bindings = {
   REDMINE_HMAC_TARGETS?: string;
   /** Shared origin HMAC; legacy Redmine-specific binding remains a fallback. */
   ORIGIN_HMAC_SECRET?: string;
+  /**
+   * 起動オプション(wrangler.toml の [vars])。"1" のときだけ、demoコンテナの起動時の lib の復元が、
+   * libを管理者専用のまま経路情報(via)をもとにしたアクセス制御を行う(ユーザー指定、2026-11-13)。
+   */
+  LIB_ROUTE_ACCESS_CONTROL?: string;
   HMAC_SECRET?: string;
   REDMINE_HMAC_SECRET?: string;
   JWT_SECRET: string;
@@ -43,6 +48,14 @@ export type Bindings = {
    */
   DYNAMICNEKO?: Fetcher;
   /**
+   * muse-monitor(読み取り専用のMuseシステムモニタWorker)へのService Binding。
+   * *.workers.dev同士の直接fetch()は1042で拒否されるため、[[services]]でbindingする。
+   * 認証はMONITOR_HMAC_SECRETによるHMAC署名(src/utils/museMonitor.ts)。
+   */
+  MUSE_MONITOR?: Fetcher;
+  /** muse-monitorと共有するHMAC鍵(wrangler secret)。両方のWorkerに同じ値を設定する。 */
+  MONITOR_HMAC_SECRET?: string;
+  /**
    * /cf-containers（Cloudflare Containersのデモ用管理ページ、管理者限定）が
    * 起動・停止・再起動・プロキシの対象にするデモコンテナのDurable Object
    * バインディング。wrangler.tomlの[[containers]]・
@@ -50,6 +63,17 @@ export type Bindings = {
    * 発生するため、使い終わったら必ず停止すること。
    */
   DEMO_CONTAINER?: DurableObjectNamespace<DemoContainer>;
+  /**
+   * AIチャットのジョブ(src/durable/aichatJob.ts)。送信後にタブを閉じても、応答と
+   * ログ保存を最後まで行う(ユーザー指定、2026-11-07)。wrangler.tomlの
+   * [[durable_objects.bindings]]参照。未設定なら /api/aichat/jobs は503を返す。
+   */
+  AICHAT_JOB?: DurableObjectNamespace;
+  /**
+   * Museとの協議の記録(D1 agent-inquiries)。/muse-inquiriesのカンバンが読む(ユーザー指定、2026-11-07)。
+   * 書き込みはClaude Codeが問い合わせのたびに行い、Workerは読むだけ。未設定なら503を返す。
+   */
+  INQUIRY_DB?: D1Database;
   /**
    * デモコンテナ内のcloudflared(トンネル名nekoroot)が公開するホスト名。
    * コンテナのenvVars経由で渡す(src/containers/demoContainer.ts参照)。
@@ -66,6 +90,30 @@ export type Bindings = {
    * entrypoint.sh側でtailscaled起動自体をスキップする。
    */
   TAILSCALE_AUTHKEY?: string;
+  /**
+   * `/askmuse`がmuse-vmへ渡すキー。`wrangler secret put MUSE_API_KEY`で設定する。
+   * コンテナのenvVarsには入れず、要求ごとにAuthorizationで渡す(src/utils/museDirectAsk.ts)。
+   */
+  MUSE_API_KEY?: string;
+  /** Worker-owned tailnet node; default route for prefixless Muse input. */
+  TAILSCALE_WASM?: DurableObjectNamespace;
+  /** Optional dedicated key; otherwise use the existing TAILSCALE_AUTHKEY for this route. */
+  TAILSCALE_WASM_AUTHKEY?: string;
+  MUSE_GADGET_SDK_TOKEN?: string;
+  MUSE_GADGET_RELAY_URL?: string;
+  /** デモコンテナのsshのed25519ホスト秘密鍵(base64)。未設定時は起動のたびに新しい鍵になる。 */
+  SSH_HOST_ED25519_KEY_B64?: string;
+  /** デモコンテナのauthorized_keysへ足す公開鍵。改行か;で区切る。 */
+  SSH_AUTHORIZED_KEYS?: string;
+  /** Optional server-side inventory API token; never sent to the browser. */
+  TAILSCALE_API_TOKEN?: string;
+  TAILSCALE_TAILNET?: string;
+  /**
+   * デモコンテナ内のtailscale upが使う管理サーバーのURL(例: Headscale)。
+   * 未設定なら既定のcontrolplane.tailscale.comを使う。秘密情報ではないため
+   * wrangler.tomlの[vars]でも設定できる。
+   */
+  TAILSCALE_LOGIN_SERVER?: string;
   /**
    * デモコンテナ内のcfコマンド(Cloudflare API簡易CLI)が使うAPI Token。
    * Worker本体のCLOUDFLARE_API_KEYとは別の、コンテナ専用トークン。
@@ -89,6 +137,8 @@ export type Bindings = {
   RUST_WORKER?: Fetcher;
   /** /neko askgk の転送先。未指定時は会話配信用トンネルの tunnels API。 */
   ASKGK_TUNNELS_URL?: string;
+  ASKGK_ROUTES?: string;
+  ASKGK_ROUTE_ID?: string;
   /** dynamicneko側 GET /api/ping のAuthorizationヘッダに使う共有シークレット。dynamicneko側のPING_SECRETと同じ値を設定する */
   DYNAMICNEKO_PING_SECRET?: string;
   /**

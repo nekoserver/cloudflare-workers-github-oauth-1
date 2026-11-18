@@ -1,0 +1,61 @@
+ca-certificates:
+  Installed: 20260816ubuntu0.26.04.1
+  Candidate: 20260816ubuntu0.26.04.2
+  Version table:
+     20260816ubuntu0.26.04.2 500
+        500 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu resolute-security/main amd64 Packages
+ *** 20260816ubuntu0.26.04.1 100
+        100 /var/lib/dpkg/status
+     20260223 500
+        500 http://archive.ubuntu.com/ubuntu resolute/main amd64 Packages
+apache2:
+  Installed: 2.4.66-2ubuntu2.6
+  Candidate: 2.4.66-2ubuntu2.6
+  Version table:
+ *** 2.4.66-2ubuntu2.6 500
+        500 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu resolute-security/main amd64 Packages
+        100 /var/lib/dpkg/status
+     2.4.66-2ubuntu2 500
+        500 http://archive.ubuntu.com/ubuntu resolute/main amd64 Packages
+openssh-server:
+  Installed: 1:10.2p1-2ubuntu3.8
+  Candidate: 1:10.2p1-2ubuntu3.8
+  Version table:
+ *** 1:10.2p1-2ubuntu3.8 500
+        500 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu resolute-security/main amd64 Packages
+        100 /var/lib/dpkg/status
+     1:10.2p1-2ubuntu3 500
+        500 http://archive.ubuntu.com/ubuntu resolute/main amd64 Packages
+openssl:
+  Installed: 3.5.5-1ubuntu3.7
+  Candidate: 3.5.5-1ubuntu3.7
+  Version table:
+ *** 3.5.5-1ubuntu3.7 500
+        500 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu resolute-security/main amd64 Packages
+        100 /var/lib/dpkg/status
+     3.5.5-1ubuntu3 500
+        500 http://archive.ubuntu.com/ubuntu resolute/main amd64 Packages
+libpcre2-8-0:
+  Installed: 10.46-1ubuntu0.1
+  Candidate: 10.46-1ubuntu0.1
+  Version table:
+ *** 10.46-1ubuntu0.1 500
+        500 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu resolute-security/main amd64 Packages
+        100 /var/lib/dpkg/status
+     10.46-1build1 500
+        500 http://archive.ubuntu.com/ubuntu resolute/main amd64 Packages
+bind9-libs:
+  Installed: 1:9.20.24-1ubuntu0.5
+  Candidate: 1:9.20.24-1ubuntu0.5
+  Version table:
+ *** 1:9.20.24-1ubuntu0.5 500
+        500 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu resolute-security/main amd64 Packages
+        100 /var/lib/dpkg/status
+     1:9.20.18-1ubuntu2 500
+        500 http://archive.ubuntu.com/ubuntu resolute/main amd64 Packages

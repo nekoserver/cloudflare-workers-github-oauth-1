@@ -1,0 +1,82 @@
+# containers/demo/packages/ の git と Apache httpd を Ubuntu 26.04 で作り直し、更新する PR を出す。
+# 仕様: SPEC.cloudflare-workers-github-oauth-1.20261111.container-auto-build.md(ルール8: Ubuntu 26.04 x86_64 で作る)。
+# 版と上流の公開ハッシュは scripts/build-demo-packages-ubuntu26.sh にある。版を上げるときはスクリプトを直してから実行する。
+name: demo-packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container:
+      image: ubuntu:26.04
+    timeout-minutes: 120
+    steps:
+      - name: Prepare Ubuntu 26.04
+        run: |
+          set -eu
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl xz-utils git
+      - uses: actions/checkout@v4
+      - name: Build git and Apache packages
+        run: bash scripts/build-demo-packages-ubuntu26.sh "$GITHUB_WORKSPACE/out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-packages
+          path: out/
+          if-no-files-found: error
+
+  apply:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: demo-packages
+          path: out
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --progress=false
+      - name: Apply to containers/demo
+        run: |
+          set -eu
+          git_version="$(sed -n 's/^GIT_VERSION=//p' scripts/build-demo-packages-ubuntu26.sh)"
+          httpd_version="$(sed -n 's/^HTTPD_VERSION=//p' scripts/build-demo-packages-ubuntu26.sh)"
+          node scripts/demo-packages-apply.mjs --from out --git "$git_version" --apache "$httpd_version" \
+            --built "$(date -u +%Y-%m-%d) GitHub Actions (ubuntu:26.04 container, run ${GITHUB_RUN_ID})"
+          echo "GIT_VERSION=$git_version" >> "$GITHUB_ENV"
+          echo "HTTPD_VERSION=$httpd_version" >> "$GITHUB_ENV"
+      # イメージの固定は、この PR のマージ後に container-image が更新する。それまで固定のずれの検査は失敗するので、ここでは除く。
+      - run: npx vitest run src/cf-containers --exclude src/cf-containers-image-lock.test.ts
+      - name: Open a pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          branch="packages/git-${GIT_VERSION}-apache-${HTTPD_VERSION}-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A containers/demo
+          git commit -m "demo の git を ${GIT_VERSION}、Apache を ${HTTPD_VERSION} のパッケージにする(Ubuntu 26.04 で作り直し)"
+          git push origin "$branch"
+          {
+            echo "GitHub Actions(demo-packages)が ubuntu:26.04 のコンテナで scripts/build-demo-packages-ubuntu26.sh を実行し、上流の公開ハッシュで照合したソースからパッケージを作りました。マージすると container-image がイメージを作り直し、固定を更新する PR を出します。"
+            echo
+            echo "## コンテナ"
+            echo "- 再ビルド: 必要(containers/demo/packages と Dockerfile を変える。マージ後に container-image が行う)"
+            echo "- 再起動: 必要(新しいイメージで動かすため)"
+            echo
+            echo "仕様: SPEC.cloudflare-workers-github-oauth-1.20261111.container-auto-build.md"
+          } > pr-body.md
+          gh pr create --base main --head "$branch" \
+            --title "demo の git を ${GIT_VERSION}、Apache を ${HTTPD_VERSION} のパッケージにする" \
+            --body-file pr-body.md

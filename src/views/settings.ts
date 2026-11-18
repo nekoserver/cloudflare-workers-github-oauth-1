@@ -1,6 +1,7 @@
 /**
  * 設定ページのHTML
  */
+import { DEFAULT_ASKGK_TIMEOUT_SECONDS, MAX_ASKGK_TIMEOUT_SECONDS } from '../utils/askgkTimeoutSettings';
 import { escapeHtml } from '../utils/html';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
@@ -37,6 +38,7 @@ export function getSettingsPage(user: {
   d1QueryCatalogSingleTable?: string;
   d1QueryCatalogExpandCategoryTables?: string;
   emailConfirmLoginEnabled?: boolean;
+  askgkTimeoutSetting?: { timeoutSeconds: number; revision: number };
   githubScopes?: string;
   githubGrantedScopes?: string[] | null;
   githubScopeError?: string | null;
@@ -713,6 +715,15 @@ export function getSettingsPage(user: {
               </select>
             </div>
           </div>
+          ${user.askgkTimeoutSetting ? `<div class="info-item">
+            <span class="info-label">askgkの待ち時間（全利用者共通）</span>
+            <div class="setting-control">
+              <input type="number" id="askgkTimeoutSeconds" min="1" max="${MAX_ASKGK_TIMEOUT_SECONDS}" step="1" value="${user.askgkTimeoutSetting.timeoutSeconds}" data-revision="${user.askgkTimeoutSetting.revision}" aria-label="askgkの待ち時間（秒）">
+              <button type="button" id="askgkTimeoutSave" onclick="saveAskgkTimeout()">保存</button>
+              <button type="button" onclick="resetAskgkTimeout()">既定値${DEFAULT_ASKGK_TIMEOUT_SECONDS}秒に戻す</button>
+              <span id="askgkTimeoutStatus" role="status">1〜300秒。次の要求から適用します。</span>
+            </div>
+          </div>` : ''}
           <div class="info-item">
             <span class="info-label">新規検索キーワードの分類対象</span>
             <div class="setting-control">
@@ -1774,6 +1785,23 @@ export function getSettingsPage(user: {
         cb.checked = !cb.checked;
         label.textContent = cb.checked ? 'ON' : 'OFF';
       }
+    }
+
+    function resetAskgkTimeout() { document.getElementById('askgkTimeoutSeconds').value = '${DEFAULT_ASKGK_TIMEOUT_SECONDS}'; return saveAskgkTimeout(); }
+    async function saveAskgkTimeout() {
+      var input = document.getElementById('askgkTimeoutSeconds');
+      var status = document.getElementById('askgkTimeoutStatus');
+      var button = document.getElementById('askgkTimeoutSave');
+      if (!input.reportValidity()) return;
+      button.disabled = true;
+      try {
+        var response = await fetch('/api/settings/askgk-timeout', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timeoutSeconds: Number(input.value), revision: Number(input.dataset.revision) }) });
+        var result = await response.json();
+        if (!response.ok) throw new Error(result.error || '保存に失敗しました');
+        input.value = String(result.timeoutSeconds); input.dataset.revision = String(result.revision);
+        status.textContent = '保存しました。次の要求から適用します。';
+      } catch (error) { status.textContent = error.message || '保存に失敗しました'; }
+      finally { button.disabled = false; }
     }
 
     async function onAichatPreferMoondreamChange() {

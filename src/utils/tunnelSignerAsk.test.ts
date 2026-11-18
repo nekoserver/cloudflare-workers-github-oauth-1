@@ -10,7 +10,7 @@ function sendResultResponse(body: unknown, init?: ResponseInit) {
 }
 
 describe('askTunnelSigner', () => {
-  it.each(['https://mygw.nekomaneki.work/lib/api/tunnels', 'https://mynw.nekomaneki.work/lib/api/tunnels', 'https://stream.test.cfc.nekomaneki.work/lib/api/tunnels'])('設定した%sへ質問を送信する', async (url) => {
+  it.each(['https://r9.nekomaneki.work/lib/api/tunnels', 'https://mygw.nekomaneki.work/lib/api/tunnels', 'https://mynw.nekomaneki.work/lib/api/tunnels', 'https://stream.test.cfc.nekomaneki.work/lib/api/tunnels'])('設定した%sへ質問を送信する', async (url) => {
     const fetcher = makeFetcher(async (_input, init) => {
       const sent = JSON.parse(String(init?.body));
       expect(sent.url).toBe(url);
@@ -19,6 +19,21 @@ describe('askTunnelSigner', () => {
     });
     await askTunnelSigner(fetcher, 'codex_prompt="質問"', url);
     expect(fetcher.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('muse_prompt="..."のask_idを照会して回答まで待つ', async () => {
+    const askId = 'muse-12345678-1234-1234-1234-123456789abc';
+    const sent: Record<string, unknown>[] = [];
+    const fetcher = makeFetcher(async (_input, init) => {
+      const payload = JSON.parse(JSON.parse(String(init?.body)).body);
+      sent.push(payload);
+      const body = sent.length === 1 ? { ask_status: 'pending', ask_id: askId } : { ask_status: 'done', ask_id: askId, reply: '六日', llm_model: 'muse-1' };
+      return sendResultResponse({ ok: true, status: 200, body: JSON.stringify(body) });
+    });
+    const result = await askTunnelSigner(fetcher, 'muse_prompt="今日は何日？"');
+    expect(result).toMatchObject({ reply: '六日', llmModel: 'muse-1' });
+    expect(sent[0].message).toBe('muse_prompt="今日は何日？"');
+    expect(sent[1]).toEqual({ format: 'json', ask_id: askId });
   });
 
   it('tunnels応答のreplyフィールドをそのまま返す', async () => {
@@ -79,7 +94,7 @@ describe('askTunnelSigner', () => {
     const fetcher = makeFetcher(async (input, init) => {
       expect(String(input)).toContain('/tunnel-signer/send');
       const sentBody = JSON.parse(String(init?.body));
-      expect(sentBody.url).toBe('https://mygw.nekomaneki.work/lib/api/tunnels');
+      expect(sentBody.url).toBe('https://r9.nekomaneki.work/lib/api/tunnels');
       expect(sentBody.contentType).toBe('application/json');
       const innerPayload = JSON.parse(sentBody.body);
       expect(innerPayload.message).toBe('元気？');

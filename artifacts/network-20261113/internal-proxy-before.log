@@ -1,0 +1,14 @@
+F
+======================================================================
+FAIL: test_origin_and_private_listener (__main__.InternalProxyTest.test_origin_and_private_listener)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_internal_proxy_test.py", line 9, in test_origin_and_private_listener
+    self.assertIn('ProxyPreserveHost On',text)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'ProxyPreserveHost On' not found in '# lib(nekoserver/lib)のSSIを127.0.0.1のみで処理する内部専用VirtualHost。\n# 外部(cloudflaredのnekorootトンネル、apache-demo.confの8443)には出さない(8443側は/libを拒否する)。\n# server.js(ポート8080、/cf-containers/proxy/*の認証済み管理プロキシの着地点)が\n# /lib をそのままこのポートへ内部的にプロキシする。Worker側の認証\n# (authMiddleware + cfDashboardAdminMiddleware)を経由した場合のみ到達できる(ユーザー指定、2026-11-11「管理者だけ」)。\n#\n# /var/www/html/lib は entrypoint.sh が /root/lib をbind mountして用意する。無ければ404になる。\n# SSI(#execを含む)とCGI(.cgi)の許可は、このVirtualHostの中で明示する(container_setup.pyのcontainer-ssi.confはSSIだけ)。\nListen 127.0.0.1:8445\n\n<VirtualHost 127.0.0.1:8445>\n    ServerName localhost\n    DocumentRoot /var/www/html\n\n    <Directory /var/www/html>\n        Require all denied\n    </Directory>\n\n    <Directory /var/www/html/lib>\n        # SSIの#exec(lib/museのダッシュボードなど)とCGI(.cgi)を実行できるようにする。\n        Options +Includes +ExecCGI -Indexes -MultiViews\n        AllowOverride None\n        AddType text/html .shtml .shtm\n        AddOutputFilter INCLUDES .shtml .shtm\n        AddHandler cgi-script .cgi\n        Require local\n    </Directory>\n\n    ErrorLog /var/log/apache2/lib-error.log\n    CustomLog /var/log/apache2/lib-access.log common\n\n    ProxyPassMatch "^/lib/api/tunnels(?:\\.rb)?$" "!"\n    ScriptAliasMatch "^/lib/api/tunnels(?:\\.rb)?$" "/usr/local/libexec/lib-api/tunnels.cgi"\n    <Directory /usr/local/libexec/lib-api>\n        Options +ExecCGI -Indexes\n        CGIDScriptTimeout 105\n        Require local\n    </Directory>\n    ProxyPass /lib/api/chat/ws ws://127.0.0.1:8091/lib/api/chat/ws retry=0 timeout=600\n    ProxyPass /lib/api/chat/ http://127.0.0.1:8092/lib/api/chat/ retry=0 timeout=600\n    ProxyPass /lib/conversation-embed.html http://127.0.0.1:8092/lib/conversation-embed.html\n    ProxyPass /lib/chat/ http://127.0.0.1:8092/lib/chat/\n    ProxyPass /lib/t/ http://127.0.0.1:8092/lib/t/\n    <LocationMatch "^/lib/(?:ops|test|keys|[.][^/]+)(?:/|$)">\n        Require all denied\n    </LocationMatch>\n    <Directory /var/www/html/lib>\n        <FilesMatch "^(?:[.]|AGENTS|CLAUDE|README|REPORT|SPEC|SETTING)|[.](?:py|sh|md|json|lock|sqlite|env)$">\n            Require all denied\n        </FilesMatch>\n    </Directory>\n\n</VirtualHost>\n'
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)

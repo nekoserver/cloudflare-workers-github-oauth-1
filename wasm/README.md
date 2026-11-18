@@ -422,3 +422,11 @@ npm run sqlc:ir -- \
 Application/Service metadataと組み合わせてAPI IRを作る責務とし、DB operation IRを
 直接OpenAPIへ変換しない。またCRUD、read/write set、column lineage、WHEREの有無など
 ASTが必要な情報も推測せず、将来sqlc AST用adapterを追加するまで未定義のまま扱う。
+
+## Rust 1.100.0での再ビルド（2026-11-13）
+
+リポジトリ直下のrust-toolchain.tomlでRust 1.100.0とwasm32-unknown-unknownを固定する。配信済みWASMはコンパイラの更新だけでは変わらない。Go/Ruby/外部配布のWASMはこのRustツールチェーンの対象外。
+
+この3ビルドスクリプトではwasm-bindgen CLIをCargo.lockのcrateリリース版にそろえる運用とする。互換性の必要条件はSCHEMA_VERSIONの一致であり、crate 0.2.129とCLI 0.2.128のように版が違っても互換な組もある。現在tree/sqlxは0.2.127、msbは0.2.128。依存更新時はCLIのチェックとscripts/wasm-build-contract.test.mjsも確認し、テスト・ビルドで--lockedを使用する。既存のpublic/wasmのJSとWASMは組として扱い、片方だけを差し替えない。
+
+Cargo 1.100で変わったのは中間成果物の配置。今回の3スクリプトが参照するtarget/wasm32-unknown-unknown/release/<crate>.wasmは最終cdylibであり、その変更の対象外。never型の推論変更などは実コンパイルで検証し、既存editionは2021を維持する。詳細はREPORT.cloudflare-workers-github-oauth-1.RUST-1.100.20261113.md。

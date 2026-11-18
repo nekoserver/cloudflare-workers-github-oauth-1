@@ -1,0 +1,11 @@
+✔ actual stream form handles HTTP 200 accepted=true error=undefined (2.801326ms)
+✔ actual stream form handles HTTP 409 accepted=undefined error=console_in_use (0.724508ms)
+✔ actual stream form handles HTTP 200 accepted=false error=undefined (0.563716ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 85.906602

@@ -59,7 +59,7 @@ for l in lines:
 lines = out
 open(p, 'w', encoding='utf-8').write('\n'.join(lines))
 EOF2
-  BUILD_ARGS=(--network host)
+  BUILD_ARGS+=(--network host)
   echo "INFO: サンドボックスのプロキシ経由で本番と同じダウンロード込みのビルドを行う"
 fi
 docker build -q "${BUILD_ARGS[@]}" -t "$IMAGE" "$CTX" >/dev/null
@@ -92,11 +92,13 @@ docker run --rm --entrypoint bash "$IMAGE" -c '
   node --version >/dev/null
   gh --version
   ip -V >/dev/null; ss -V >/dev/null; ping -V >/dev/null; dig -v >/dev/null 2>&1
-  node --check /usr/local/bin/cf
+  node --check /usr/local/bin/cf-api
+  cf --version
   node --check /app/server.js
   for c in netstat top whois dig ping; do command -v $c >/dev/null || { echo "NG: $c が入っていない"; exit 1; }; done
   command -v codex >/dev/null || { echo "NG: codex CLIが入っていない"; exit 1; }
   codex --version
+  t3 --version
   claude --version
   node -e "if (parseInt(process.versions.node) < 22) process.exit(1)"
   test -x /opt/node22/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host

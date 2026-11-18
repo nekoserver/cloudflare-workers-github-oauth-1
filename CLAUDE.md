@@ -2,6 +2,25 @@
 
 設定・状態を扱う機能拡張では、[AGENTS.md「機能拡張の前提となる整合性と復元可能性」](AGENTS.md#機能拡張の前提となる整合性と復元可能性) を共通の最低品質として適用する。
 
+OpenSSH・sshdの版や設定を変えるとき（`containers/demo`のDockerfile、`entrypoint.sh`、`sshd-hardening.conf`、`packages/openssh-*`）は、先に[NOTICE.openssh-update.20261106.md](NOTICE.openssh-update.20261106.md)を読む。
+
+SSHとTailscaleの設定や鍵を変えるときは、[SSHのポリシー](POLICY.cloudflare-workers-github-oauth-1.security-ssh.20261106.md)と[Tailscaleのポリシー](POLICY.cloudflare-workers-github-oauth-1.security-tailscale.20261106.md)に従う。
+
+`/aichat`の言語モデルの選択や、`/askmuse`・`◯_prompt=`の経路を変えるときは、[AGENTS.md「AIチャットの言語モデルスイッチとプレフィックス」](AGENTS.md#aiチャットの言語モデルスイッチとプレフィックス)に従う。
+
+## コンテナビルドのルール
+
+ユーザー指定（2026-11-06）: すべてのDockerfileとコンテナビルドに適用する。musevmで見つかった、取得元の404、失敗の隠蔽、効いていない設定の書き換え、実行ユーザーの権限不足を繰り返さないためのルール。
+
+1. **固定した版が消える取得元に依存しない。** 最新版しか置かない配布先（例: `downloads.apache.org`）は、恒久的に残るアーカイブへのフォールバックを付けるか、リポジトリに保管した成果物を使う。
+2. **外部から取得する物は版とハッシュで固定する。** ハッシュは上流が公開する値（リリースのdigest、チェックサムファイル）と照合する。ダウンロードした物から計算しただけの値を正としない。`curl | tar`のように検証なしで展開しない。
+3. **版やURLを変えるときは、ビルドの前に取得できることを確かめる。** 変更したすべてのURLを`curl -fsSIL`で確認し、取得先と公開ハッシュの一致を確かめる。
+4. **失敗を隠す書き方をしない。** `a && b || c && d`は、`a`や`b`の失敗後も後続を実行して成功扱いになる。`||`が必要な処理は`set -eu`の下に分けて書き、`if`で分岐する。`set -e`は`! cmd`の失敗では止まらない。
+5. **設定の書き換えは結果を検査する。** `sed`は一致しなくても成功する。上流の実ファイルで一致を確かめ、書き換えの直後に`grep -q`で結果を検査する。
+6. **実行ユーザーで動くことをビルド中に確かめる。** 非rootで動くサービスには、ログ、PID、ソケットの書き込み先の所有権を設定する。可能なサービスは、ビルド中に実行ユーザーで起動して応答を確認する。
+7. **未実施のビルドを成功と報告しない。** Dockerビルドの実行条件が決まっている環境では、それに従う。実行できない場合は、確認した範囲と未確認であることを報告する。
+8. **このコンテナではソースからビルドしない。** ユーザー指定（2026-11-07）。cf-container（standard-1）はCPUが足りないため、`./configure`・`make`・`cargo build`・`go build`などのコンパイルを、エージェントの作業でもイメージのビルドでも行わない。aptの版が古いなどでソースビルドが必要なものは、十分なCPUのある別のUbuntu 26.04 x86_64でビルドし、成果物を`containers/demo/packages/`に保管して、Dockerfileでは`COPY`とsha256の照合だけを行う（git・OpenSSH・Apacheと同じ方式。手順は`packages/README.md`）。2026-11-07にApache 2.4.70の試験ビルドをこのコンテナで行ったのが最後で、今後は行わない。
+
 ## ワークフロー: cloudflare-workers-github-oauth プロビジョニング
 
 本リポジトリはワークフロー **「cloudflare-workers-github-oauth プロビジョニング」** により
@@ -31,11 +50,10 @@
 
 ## Claude Code 環境の制約事項
 
-### GitHub API アクセス不可
-- GitHub APIトークンが存在しない
-- gitプロキシ（127.0.0.1:39093）は **gitプロトコルのみ** 対応。REST APIは通らない
-- `gh` CLIはインストール可能だが認証トークンがないためAPI操作不可
-- **PRはブラウザから手動作成する**。push後にcompareリンクを提示:
+### GitHub API アクセス（環境によって違う）
+- `gh` が使えるかどうかは環境によって違う。PRを作る前に `gh auth status` で確かめる
+- **`gh` が認証済みの環境**（`GH_TOKEN` があるコンテナなど。2026-11-07 にこのコンテナで確認し、`gh pr create` で PR #2539 を作成できた）: `gh pr create` でPRを作成し、PRのURLを提示する
+- **`gh` が認証されていない環境**（GitHub APIトークンが無い環境）: gitプロキシ（127.0.0.1:39093）は **gitプロトコルのみ** 対応で、REST APIは通らない。PRはブラウザから手動作成する。push後にcompareリンクを提示:
   `https://github.com/{OWNER}/{REPO}/compare/{base}...{head}`
 
 ### Cloudflare Workers デプロイ不可
@@ -123,8 +141,8 @@
 以下は過去のセッションで繰り返した失敗から導いたルールである。必ず守ること。
 
 1. **できないことを何度も試すな** — ツールやAPIが使えないと判明したら即座にユーザーに伝え、代替手段を提示する。同じ方法のバリエーションを繰り返し試さない
-2. **PRはブラウザで作成** — この環境からGitHub APIは使えない。compareリンクを提示して終わり
-2a. **PRマージ通知を画面に積み上げるな** — `subscribe_pr_activity` / `mcp__github__subscribe_pr_activity` は **絶対に呼ばない**。マージ済みPR通知はClaude Codeのウェブ画面に消せない形で蓄積しユーザー体験を著しく損なう。PRを作成したら比較リンクを提示して終わり。その後の監視・自動マージ・CI追跡はすべてユーザーに委ねる
+2. **PRの作り方は `gh auth status` で決める** — `gh` が認証済みなら `gh pr create` で作成してPRのURLを提示する。認証されていなければ、ブラウザで作成してもらうためcompareリンクを提示して終わり（「Claude Code 環境の制約事項」の「GitHub API アクセス」を参照）
+2a. **PRマージ通知を画面に積み上げるな** — `subscribe_pr_activity` / `mcp__github__subscribe_pr_activity` は **絶対に呼ばない**。マージ済みPR通知はClaude Codeのウェブ画面に消せない形で蓄積しユーザー体験を著しく損なう。PRを作成したらPRのURL（`gh` が使えない環境ではcompareリンク）を提示して終わり。その後の監視・自動マージ・CI追跡はすべてユーザーに委ねる
 3. **デプロイはユーザーに委ねる** — `CLOUDFLARE_API_TOKEN` がないため `wrangler deploy` は不可能。コード修正とpushまでが責務
 4. **秘密情報は `[vars]` に書かない** — `GITHUB_CLIENT_ID`、`GITHUB_CLIENT_SECRET`、`JWT_SECRET` はすべて `wrangler secret` で管理。`wrangler.toml` に平文で書き戻さない
 5. **テンプレートからクローンしたら最初に確認する3項目**:
@@ -207,7 +225,8 @@
     - 既存の静的Bearer方式(`AICHAT_EXTERNAL_SECRET`・`CF_AUTH_WEBHOOK_SECRET`・`NOTIFY_WORKER_SECRET`等、本文を署名対象にせず単純比較のみ)は**後方互換のため残してよいが、新規追加はしない**。既存分の移行は呼び出し元リポジトリ側の送信コードも同時に変更する必要があるため、個別タスクとして計画すること
     - rust-worker-sqlx-d1が自ら署名してtunnels.rbへ送る`ORIGIN_HMAC_SECRET`(本Workerはシークレットを扱わない中継のみ、`src/utils/tunnelSignerAsk.ts`)はこの方針の対象外(他リポジトリの実装に委ねる)
 
-39. **`containers/**`・`src/containers/**`・`src/views/cfContainers.ts`・`wrangler.toml`の`[[containers]]`を変更したら、push前に`bash scripts/check-cf-containers.sh`を必ず実行して`ALL OK`を確認しろ** — Workers BuildsのPRビルド(`wrangler versions upload`)はコンテナイメージをビルドしないため、検証せずにmainへマージすると本番ビルドが一発勝負になる(実例: 2026-10-16〜17、#2389以降の本番ビルド失敗、Apacheが8443で待ち受けていない不具合、ページscriptの構文エラーがいずれもマージ後に発覚した)。このスクリプトは関連テスト・Workerのバンドル(`wrangler deploy --dry-run`)・Dockerfileのビルド・コンテナ起動後の`/health`と8443確認を行う。Claude Codeのクラウドサンドボックスでも、スクリプトがプロキシのCAを注入して本番と同じダウンロード込みでビルドする。`--offline`(ダウンロードを除外)は検証不足なので、使った場合はその旨を報告に明記すること。GitHub Actionsはこのリポジトリでは使っていないので、CIに頼らないこと
+39. **`containers/**`・`src/containers/**`・`src/views/cfContainers.ts`・`wrangler.toml`の`[[containers]]`を変更したら、push前に`bash scripts/check-cf-containers.sh`を必ず実行して`ALL OK`を確認しろ** — Workers BuildsのPRビルド(`wrangler versions upload`)はコンテナイメージをビルドしないため、検証せずにmainへマージすると本番ビルドが一発勝負になる(実例: 2026-10-16〜17、#2389以降の本番ビルド失敗、Apacheが8443で待ち受けていない不具合、ページscriptの構文エラーがいずれもマージ後に発覚した)。このスクリプトは関連テスト・Workerのバンドル(`wrangler deploy --dry-run`)・Dockerfileのビルド・コンテナ起動後の`/health`と8443確認を行う。Claude Codeのクラウドサンドボックスでも、スクリプトがプロキシのCAを注入して本番と同じダウンロード込みでビルドする。`--offline`(ダウンロードを除外)は検証不足なので、使った場合はその旨を報告に明記すること。GitHub Actionsは使わない(ユーザー指定、2026-11-13)。demoコンテナのパッケージ(`demo-packages`)とイメージ(`container-image`)の2つのワークフローは無効にした(経緯と代わりの作り方は`SPEC.cloudflare-workers-github-oauth-1.20261111.container-auto-build.md`の末尾)。テストのCIにも使っていないので、CIに頼らないこと
+    - **Dockerビルドの前提処理(ユーザー指定、2026-10-31)**: ビルドの前に、ルール44の前提処理を必ず通す。(1) ドキュメントだけの変更では、本番のビルドを走らせない。(2) 公式のコンパイル済みのバイナリを使い、ソースビルドは許可の表(`src/cf-containers-source-build-allowlist.test.ts`)にあるものだけにする。(3) 取得物をsha256で照合する。(4) 外部ツールの版と、契約テストの版を一致させる。(2)〜(4)は`npx vitest run src/cf-containers`で検査され、エージェントの`git push`の前に`scripts/claude-push-guard.js`が自動で走らせる。詳細は[`SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md`](SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md)
 
 40. **コンテナイメージは「1レイヤー800MB以下」「イメージ全体がinstance_typeのディスク上限以下」を必ず守り、`scripts/check-cf-containers.sh`のサイズ検査でOKを確認してからpushしろ** — 本番ビルドは**イメージのビルド自体は成功しているのに**、`registry.cloudflare.com`へのレイヤーのアップロードが`net/http: timeout awaiting response headers`で失敗し続けていた(2026-10-16〜17、#2389〜#2398)。原因は、apt・cloudflared・tailscale・npm(Codex/Claude CLI)を`RUN`1つにまとめた**1.9GBの単一レイヤー**で、送り切れるかどうかは毎回変わるため成功と失敗が混在した(#2402でレイヤーを分割して解消。詳細は[`NOTICE.cloudflare-workers-github-oauth-1.20261017.md`](NOTICE.cloudflare-workers-github-oauth-1.20261017.md))。
     - Dockerfileでは、大きなインストール(apt・外部バイナリ・`npm install -g`のパッケージごと)を**別々の`RUN`に分ける**。1つの`RUN`に`&&`で全部つなげない
@@ -216,6 +235,82 @@
     - イメージ全体の上限は`instance_type`のディスク容量(standard-1は8GB)。スクリプトが表示する`image size`を報告に必ず記載する
     - Codex CLIは今回の構成に必須のため削らない。サイズを減らすときは、CLIを外すのではなくレイヤーの分割とキャッシュの削除で対応する。Claude CLIは2026-10-17に外した(理由はNOTICE。Node 22以上が必要・この構成では使わない)。戻す場合はNode 22以上を先に用意すること
     - 本番ビルドの成否はGitHubの表示(後から書き換わる)で判断せず、`/cf-containers`の「最新ビルドのログを取得」で`Failed:`が無いことを確認する
+
+
+41. **確かめていないことを確かめたように報告するな。原因を自分の変更以外に求める前に、まず自分の変更を疑え** — 2026-10-27、`/cf-containers`の作業で次の失敗を1日のうちに何度も繰り返し、ユーザーの時間を大きく奪った。
+    - #2472で`src/views/cfContainers.ts`のtemplate literal内に`lines.join('\n')`と書き(ルール29違反)、ページのscriptが構文エラーで全ボタンが反応しなくなった。それなのに「関連テスト109件が通った」と報告した。そのテストは画面のscriptが実際に動くかを確かめていなかった。
+    - 不具合の報告を受けた後も、`server.js`単体が起動することだけを根拠に「#2472が原因とは考えにくい」と答え、原因を自分の変更以外に求めた。実際の原因は自分が書いたその1行だった。
+    - 「コンテナを起動し直せば入れる」とログで確かめないまま断言し、外れた。画面の「追加しました」が、古いコンテナの200応答を成功と誤認した誤表示だったことにも気づいていなかった。
+    - マージ済みのPRのブランチへpushし(ルール34違反)、修正がmainに入らなかった。
+    
+    守ること:
+    - **報告では「何を確かめたか」と「何を確かめていないか」を分けて書く。** テストが通ったと書くときは、そのテストが何を検証していて、何を検証していないかも書く。テストが通ったことを、テストが見ていない部分の正しさの根拠にしない。
+    - **「〜すれば直る」「〜が原因ではない」と断言しない。** ログ・実行結果で確かめた事実だけを断言し、それ以外は推測だと明記する。
+    - **不具合の報告を受けたら、最初に直前の自分の変更を疑う。** 「直前まで動いていた」なら、まずその間に入った自分の差分を1行ずつ見直す。自分の変更以外を原因として挙げるのは、その確認を終えてから。
+    - **`src/views/*.ts`のページscriptを変更したら、push前に必ず実際の出力で構文を確かめる。** ページ関数(例: `getCfContainersPage()`)が返すHTMLから`<script>`を取り出し、`node --check`で全scriptが通ることを確認する。grepやソースの目視で済ませない。
+    - **成功表示は、処理の結果を確かめてから出す。** HTTPステータスだけで成功と判断しない。応答の中身(例: `ok: true`)を確かめ、確かめられなければ失敗として表示する。
+    - **pushの前に、そのブランチのPRがマージ済みでないかを毎回確認する**(ルール34)。
+
+
+42. **作業の最初にAGENTS.mdを読め。重い検証・ビルドの前に、その差分に必要かを判断せよ。ソースからのビルドが3回失敗したら、ソースビルドしているパッケージ「すべて」にコンパイル済みの手段がないか確かめろ** — 2026-10-30、#2494(T3プロキシの修正)の検証で、次の失敗をした。
+    - AGENTS.md「Dockerビルドの実行条件」(ユーザー指定、2026-10-18)は、Opus 5.5以上のモデルを使うとき以外はDockerビルドをしないと定めている。それを読まないまま、Sonnet 5.5のセッションでDockerデーモンを起動し、`scripts/check-cf-containers.sh`(内部でDockerビルドを行う)と小さなビルドを実行した。ルール39(ビルド必須)とAGENTS.md(ビルドの条件)が食い違う場面で、AGENTS.mdを確認しなかった。
+    - 差分は`.cjs`2つと`COPY`1行だけなのに、Rubyのソースビルドを含むイメージ全体の検証に進み、Docker Hubの429とサンドボックスの403(`cache.ruby-lang.org`)で何度も止まった。触っていないステージのために時間を使った。
+    - ソースからコンパイルしているパッケージに、コンパイル済みの手段があるか確かめなかった。ユーザーに指摘されて、はじめてRubyだけを調べた。指摘は、Rubyに限らず、パッケージのあるものすべてを確かめることだった。このときソースからのビルドは3回以上失敗しており、のちにユーザーが「3回失敗したら適用する」に緩めた。
+
+    守ること:
+    - **同じ作業で修正や検証が3回失敗したら、Sonnetでの作業を止め、ユーザーにOpus(5.5以上)へ戻すよう伝える(ユーザー指定、2026-10-30)。** 失敗に数えるのは、テストの失敗、ビルドや検証スクリプトの失敗(環境の制約による失敗も含む)、直っていないというユーザーの報告。モデルの切り替えはユーザーが行う。詳細はAGENTS.md「Sonnetで3回失敗したらOpusに戻す」。
+    - **コンテナのビルドは、実行する前に、必ずユーザーに許可を求める。許可が出るまで実行しない(ユーザー指定、2026-10-30)。** Dockerビルドの条件を満たす場合も同じ。許可を求めるときは、何のためにビルドするか、差分がビルド工程に触れるか、所要時間の見込みを書く。
+    - **作業の最初にAGENTS.mdを読む。** Dockerビルドの条件を満たさないモデルでは、Dockerデーモンの起動、`docker build`、内部でビルドを行うスクリプト(`scripts/check-cf-containers.sh`など)を実行しない。ルール39と食い違うときは、AGENTS.mdを優先し、フルビルドが未実施であることを報告に書く。
+    - **検証の前に、この差分が何を変えるかを判断する。** 触っていないステージ(例: Rubyのコンパイル)のために、重い検証を走らせない。まず、ビルドを伴わない検証(単体テスト、実際のHTTPサーバーを立てたテスト、`node --check`、`wrangler deploy --dry-run`)で確かめられる範囲を確かめる。フルビルドが要る変更は、条件を満たす環境でやってもらうよう、ユーザーに頼む。
+    - **ソースからビルドする前に、必ず次の調査をして、総合判断を報告に書く。省略しない(ユーザー指定、2026-10-30)。それでもビルドが必要なときだけ、最新のソースをビルドする。** (1) **版の差**: 本番D1の最新スナップショット(`SELECT id, created_at, image_commit, versions_json FROM cf_container_snapshots ORDER BY id DESC LIMIT 1;`)の版と、最新版を比べる。最新版の記録は`cf_container_package_release_status`にある。本番にこのテーブルが無いときは、そのSQLを利用者に示して作ってもらい、無い間は配布元で最新版を調べる。(2) **キャッシュの状況**: `SELECT m.build_created_on, m.build_status, (SELECT COUNT(*) FROM cf_container_build_steps s WHERE s.snapshot_key=m.snapshot_key AND s.state='cached') AS cached_steps FROM cf_container_build_measurements m ORDER BY m.build_created_on DESC LIMIT 8;`と、直近のビルドで時間のかかったステップ(`SELECT label, seconds FROM cf_container_build_steps WHERE snapshot_key=? ORDER BY seconds DESC LIMIT 8;`)。(3) **総合判断**: 版に差があるパッケージだけが、ソースビルドの対象になる。差の無いパッケージのために、ソースビルドを走らせない。判断の根拠(差・キャッシュ・所要時間)を報告に書く。
+    - **2026-10-30の調査結果**: 最新スナップショット154番の版は、Tailscale 1.104.1、gh 2.103.0、Node 26.12.1、cloudflared 2026.10.1、Codex 0.164.0、jj 0.46.0、Ruby 4.0.9。最新版との差があるのは、Tailscale・gh・Node・cloudflared・Codexの5つで、jjとRubyは最新だった。本番ビルドの記録1,318ステップのうち`cached`は0件で、直近8回のビルドもすべて0件。2026-10-29のビルドでは、ソースビルドだけで約2,356秒(jj 875秒、Ruby 780秒、Tailscale 433秒、gh 267秒)かかっていた。「キャッシュが効いていない」のか「記録側が`cached`を拾えていない」のかは、確認できていない。本番D1に`cf_container_package_release_status`(マイグレーション0188)が無かった。
+    - **(ルール44が優先する。公式のコンパイル済みのバイナリを使うのが既定で、ソースからのビルドは許可を得たものだけ。)** **ソースからのビルドが3回失敗したら、そこで初めて、ソースからビルドしているパッケージのすべてについて、コンパイル済みの手段の有無を確かめて報告に書く。**(ユーザー指定、2026-10-30。3回に達するまでは、事前の確認を必須にしない。)「3回」は、同じ作業の中で、ソースからのビルドが失敗した回数を数える。失敗の原因がサンドボックスの制約(429・403)でも、数える。対象は、Dockerfileで`configure`/`make`/`cargo install`/`go install`などを実行しているものすべてで、現在はRuby・Tailscale・gh・jjである。Rubyだけに限らない。確かめる手段は、公式のDockerイメージのタグ、配布元のバイナリ、aptの版である。変えるかどうかは、依頼されていなければ、提案にとどめる。
+    - **3回失敗したときの調べ方は、公式の配布元より先に、このリポジトリの中を調べる。** 過去にビルドした成果物や、ビルドの記録が残っていることがある。(1) `git ls-files`で`.tar`/`.tgz`/`.deb`/`.zip`/`.gz`/`.xz`/`.whl`/`.wasm`/`.so`の成果物と、パッケージ名を含むファイル名を探す。(2) GitHubのリリースを一覧する。(3) `NOTICE.*`・`SPEC.*`・`EVAL.*`・`REPORT.*`をパッケージ名で検索する。(4) Dockerfileの履歴を`git log -S"<取得元のURL>" -- containers/demo/Dockerfile`でたどり、以前の入れ方を確かめる。見つけたものは、そのまま使えるか(ネイティブか、WASMか。版は同じか。コンテナで動くか)を確かめて、報告に書く。
+    - **2026-10-30のリポジトリ内の調査結果**(調べた範囲だけ。「存在しない」とは言えない): (a) GitHubのリリースは0件だった。(b) `public/wasm/*.wasm`は、ブラウザ用にビルドしたWASMで、コンテナのネイティブなパッケージではない。(c) `public/tailscale-connect/1.102.3-3/`は、公式の`@tailscale/connect`(ブラウザ用のWASM)をnpmから取得して配置したもの。SPECに「独自のTailscaleソースビルドやDockerビルドは行っていない」とあり、コンテナの`tailscaled`としては使えない。(d) `NOTICE.cloudflare-workers-github-oauth-1.ruby-4.20260917.md`のRubyは、公式のWASMバイナリ(`@ruby/4.0-wasm-wasi`)をCDNから読み込むもので、コンテナのネイティブなRubyではない。(e) `SPEC.cloudflare-workers-github-oauth-1.Cursor-VM-Ruby.md`のRuby 4.0.7は、別のVM(`/home/box/.rbenv`)に`ruby-build`で入れたもので、リポジトリには成果物がなく、版も4.0.9と違う。(f) Dockerfileの履歴では、Rubyのソースビルドは[`f9bcdf70`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f9bcdf70)(2026-10-23)で入った。Tailscaleの`pkgs.tailscale.com`からの取得は[`970fa36f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/970fa36f)(2026-10-18)の時点にあり、のちにGoのソースビルドに変わった。**調べていない範囲**: 他のリポジトリ(`nekoserver/cf-container`など)、R2やレジストリ、削除済みの成果物の履歴、`gh`と`jj`。
+    - **2026-10-30の実測**: Ruby 4.0.9の公式イメージ(`ruby:4.0.9-slim-trixie`など)は存在した。Ubuntu 26.04のaptのrubyは3.3で、4.0.9より古い。Tailscale・gh・jjは確かめていない。
+    - **落とし穴ごとに、それを捕まえるテストを書く。** Dockerfileの`COPY`の入れ忘れのように、実行時にしか分からない失敗は、テストでソースの対応関係を検査する。
+    - **サンドボックスの制約(Dockerビルドの条件を満たす環境で作業するときの参考)**: Docker Hubが429のときは`mirror.gcr.io/library/<名前>`から取得して`docker.io/library/<名前>`のタグを付ける。Dockerデーモンが無ければ、古い`/var/run/docker.sock`を消して`dockerd`を起動する。拒否されたホストは`curl "$HTTPS_PROXY/__agentproxy/status"`で分かる。許可ドメインの設定は、動いているセッションには反映されないことがあった(理由は未確認)。
+    - **思い出せないことを前提に、実行前にこの項目とAGENTS.mdを読む。**
+
+
+43. **テストファーストを常識にしろ。外部のツール(T3・Codex・Tailscaleなど)に頼る挙動は「契約テスト」に書き、版を上げる前にテストを先に直せ** — 2026-10-28〜31の3日間、T3のPWAの引き継ぎで、T3の実際の挙動を確かめないまま推測で直しては外す、を繰り返した(例: 認証失敗時に401が返ると決めつけたが、実際は200の`authenticated:false`だった。ペアリングの資格情報の期限が5分だと知らずに、期限切れのトークンを使わせた。引き継ぎを有効にする設定ファイルを作る処理が無く、本番ではずっと無効だった)。どれも、先にテストを書いていれば、実装の前に気づけた。ユーザー指定(2026-10-31): 「テストファーストじゃないと、今後のバージョンアップ時の仕様変更にも対処不能だから、常識化してくれ」。
+
+    守ること:
+    - **コードを変える前に、新しい仕様を表すテストを書き、そのテストが失敗することを確かめてから実装する。** 仕様を変えるときは、古い仕様のテストを先に新しい仕様へ書き換える(古いテストを残したまま実装を合わせない)。
+    - **外部のツールの挙動に頼るときは、その挙動を、根拠(ツールのソースの箇所や公式の文書)と一緒に、契約テストに書く。** 例: `src/cf-containers-t3-contract.test.ts`(T3)。契約テストは、Dockerfileで固定した版と、契約を確かめた版が同じであることも検査する。
+    - **外部のツールの版を上げるときは、テストを先に直す。** 新しい版のソースや文書で、契約の各項目を確かめ直し、契約テストの版を上げてから、Dockerfileの版を上げる。確かめないまま版だけ上げると、契約テストが失敗する。版を上げるときは、そのツールが要求する実行環境(例: Goの版)も確かめる(`src/cf-containers-go-toolchain.test.ts`)。
+    - **推測で直さない。** 外部のツールの挙動は、ソースか、実際の応答か、ログで確かめてから、テストに書く。確かめられないものは、テストにも報告にも「未確認」と書く。
+
+44. **公式のコンパイル済みのバイナリがあるものは、それを使うのが既定。ソースからのビルドは、理由を書いて許可を得たものだけに限る。ドキュメントだけの変更で、コンテナを作り直さない** — 2026-10-31、gh・jjを毎回ソースからコンパイルし、本番のビルドで約19分(jj 875秒・gh 267秒)を使い続けていた。公式のGitHubリリースにコンパイル済みのバイナリがあったのに、2026-10-21に「エージェントのサンドボックスから配布元に届かない」という、本番には関係のない理由でソースビルドへ変えていた(#2508で戻した)。また、ドキュメントだけのPRをマージしても、毎回コンテナのイメージを作り直していた。ユーザー指定(2026-10-31): 指示されなくても毎回適用すること。
+    この方針は、Dockerビルドの前提処理として[`SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md`](SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md)にまとめてある。テスト(`src/cf-containers-source-build-allowlist.test.ts`)と、push前の自動検査(`scripts/claude-push-guard.js`)で強制する。
+
+    守ること(指示されなくても、毎回適用する):
+    - **新しいパッケージを入れるとき、版を上げるとき、Dockerfileを変えるときは、まず公式のコンパイル済みの手段を探す。** 探す順は、配布元のリリース(GitHub Releasesなど)、公式のパッケージ配布(例: pkgs.tailscale.com)、aptの版、公式のDockerイメージ。見つかれば、それを使う。取得物は配布元の値か、取得物から計算した値のsha256で照合する。
+    - **ソースからのビルドを足す・戻すのは、ユーザーの許可を得てからにする。** 許可を得たら、`src/cf-containers-source-build-allowlist.test.ts`の`ALLOWED_SOURCE_BUILDS`に、ステージ名と「コンパイル済みを使えない理由」を書く。表に無いソースビルドは、このテストが失敗させる。理由が解消したら、公式のバイナリへ切り替え、表から消す(残っていてもテストが失敗する)。
+    - **エージェントのサンドボックスから配布元に届かないことは、ソースビルドの理由にならない。** 本番のビルド環境と、サンドボックスは別物である。サンドボックスで確かめられないときは、確かめていないことを報告に書き、本番のビルドで確かめる。
+    - **ソースからビルドしたら、パッケージ(インストール先・成果物)まで作り、ビルド済みのものが読み込めること(`--version`などで動くこと)を確かめた時点で、ソースツリーとビルドのキャッシュを捨てる(ユーザー指定、2026-10-31)。** Dockerfileでは、同じ`RUN`の中で「インストール → 動作の確認 → 削除(例: `rm -rf /tmp/<名前>-src`・`go clean -modcache -cache`)」まで行う。許可したソースビルドごとに、`src/cf-containers-source-build-allowlist.test.ts`の`CLEANUP`に確認と削除の手順を書く(無ければテストが失敗する)。エージェントの手元(スクラッチパッドなど)で取得・展開したソースツリーや配布物の展開先も、成果物の確認が済んだら消す。ビルド済みのパッケージのキャッシュ(保存先は未決定)を導入したときは、キャッシュから読み込めることを確かめてから、ソースツリーを消す。
+    - **ソースを捨てる前に、キャッシュの効果を測って、ビルドのたびにD1に記録する(ユーザー指定、2026-10-31)。** ソースからのコンパイル時間、パッケージ(キャッシュ)からのインストール時間、ソースアーカイブとパッケージのバイト数を、Dockerfileが`CACHE_EFFECT`の行としてビルドログに出し、ビルドログの取り込みが`cf_container_build_cache_effects`(マイグレーション0191)に保存する。新しくソースビルドを許可したときは、この行も必ず出す(無ければ`src/cf-containers-source-build-allowlist.test.ts`が失敗する)。
+    - **ドキュメント(`*.md`)だけの変更で、本番のビルドを走らせない。** Workers Buildsの「Build watch paths」(Cloudflareのダッシュボード → Workers → Settings → Builds)で`*.md`を除外する。これはダッシュボードの設定で、エージェントからは変えられない。設定されているかを確かめられないときは、ドキュメントだけの変更を、コードの変更と同じPRにまとめる。ドキュメントだけのPRを、単独で立て続けにマージさせない。
+45. **`ORIGIN_HMAC_SECRET`(旧名`HMAC_SECRET`)は影響範囲が広いので、部分変更をするな。全体を見通せるまでは調査だけを行い、一括で修正できるところまで見えてから実施する**(ユーザー指定、2026-11-04) — この鍵はWorker、コンテナ、`lib`、`cf-container`、`rust-worker-sqlx-d1`などのリポジトリをまたいで使われており、一部だけを変えると署名の検証が食い違う。
+    - **対象の変更**: 鍵の値の変更・再発行、配布経路(`demoContainer.ts`の`envVars`、`ALLOWED_SECRET_NAMES`、`entrypoint.sh`、`/etc/lib-hmac.env`)の変更、署名と検証の処理の変更、旧名`HMAC_SECRET`の廃止。
+    - **扱い**: この鍵の改修は、変更の大きさに関わらずすべて大規模改修とする(ルール46)。鍵の解決順序には`ORIGIN_HMAC_SECRET`→`HMAC_SECRET`→保存値や`REDMINE_HMAC_SECRET`というフォールバックがある。
+    - **実施の条件**: (1) 鍵を使う全サービスと全リポジトリの一覧がそろっている、(2) 各所の現在の値が一致しているかを確かめた、(3) 全箇所を切り替える順序と、切り戻しの手順が決まっている、(4) 影響するテストの一覧がある、(5) 今後増えるコンテナにも同じ手順で適用できる。5つがそろったら、[`SUGGEST.cloudflare-workers-github-oauth-1.20261104.md`](SUGGEST.cloudflare-workers-github-oauth-1.20261104.md)に記録し、ユーザーの承認を得てから一括で実施する。
+    - **保留中に行ってよいこと**: 読み取りだけの調査と、一覧の記録。この鍵の扱いを変えない、ほかのトークンの修正。
+    - **新しいコンテナやWorkerを追加するとき**: この鍵を使うなら、SUGGESTの台帳に追記する。一覧が古くならないようにするためである。
+    - ユーザーが明示的に指示した場合は、この限りではない。
+46. **テストの不合格からフォールバックの適用までを確認しなければならない変更は、すべて大規模改修として扱え**(ユーザー指定、2026-11-04) — 変更の行数やファイル数では判断しない。1行の修正でも、失敗時に別の値・別の経路へ切り替わる動作に関わるなら大規模改修である。
+    - **確認すること**: 通常の経路だけでなく、テストで失敗を起こし、不合格になることを確かめ、フォールバックが適用されるところまで確かめる。
+    - **報告に書くこと**: 大規模改修に当たるかどうかと、確かめたフォールバックの経路。確かめていない経路があれば、それも書く。
+    - **該当する例**: `ORIGIN_HMAC_SECRET`の解決順序(ルール45)、`setup-network.py`の`merge_settings`、`refresh-lib-tunnels`の環境変数と保存値の優先順位。
+47. **プルリクエストには、コンテナの再ビルドと再起動が必要かどうかを毎回書け**(ユーザー指定、2026-11-07) — PRを読んだ人が、マージ後にコンテナのイメージを作り直すべきか、起動中のコンテナを再起動すべきかを、差分を読まずに判断できるようにする。2026-11-07、Worker側だけの変更のPRで、再ビルドが要るかを聞かれ、さらに前回の作業の報告にあった「イメージに未反映」を確かめずに引き継いで誤答した(実際は本番のイメージに反映済みだった)。
+    - **書く場所**: PR本文に`## コンテナ`の節を設け、次の2行を必ず書く。ドキュメントだけのPRでも省略しない。`.github/PULL_REQUEST_TEMPLATE.md`に同じ欄がある。
+      - `再ビルド: 必要` か `再ビルド: 不要`、と根拠
+      - `再起動: 必要` か `再起動: 不要`、と根拠
+    - **再ビルドの判断**: 差分が`containers/**`(イメージのビルドの文脈は`containers/demo/`で、DockerfileはここのファイルだけをCOPYする)、`src/containers/**`、`wrangler.toml`の`[[containers]]`に触れていれば必要。`src/`(`src/containers/`を除く)と`public/`(Workerの静的アセット。`wrangler.toml`の`assets`)だけなら不要で、Workerのデプロイで反映される。
+    - **前の変更が本番のイメージに入っているかの判断**: 本番D1の`SELECT id, created_at, image_commit FROM cf_container_snapshots ORDER BY id DESC LIMIT 1;`の`image_commit`を取り、`git merge-base --is-ancestor <確かめたいコミット> <image_commit>`で確かめる。報告や文書の「未反映」をそのまま引き継がない。
+    - **再起動の判断**: イメージが同じでも、コンテナが起動時に読む値を変えたら再起動が要る。例: Workerがコンテナへ渡す環境変数(`demoContainer.ts`の`envVars`、`ALLOWED_SECRET_NAMES`)、secretの値(`TAILSCALE_AUTHKEY`、`ORIGIN_HMAC_SECRET`など)。再ビルドが必要なら、新しいイメージで動かすための再起動も必要と書く。Worker側だけの変更なら不要。
+    - **確かめられないときは「未確認」と書く。** 推測で「不要」と書かない(ルール41)。
+    - コンテナのビルドを実行するかどうかは、別にルール42とAGENTS.md「Dockerビルドの実行条件」に従う。このルールは、PRに要否を書くことだけを定める。
 
 ---
 
@@ -342,6 +437,9 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md`](NOTICE.cloudflare-workers-github-oauth-1.rust-WASM.md)
 - PWA(ホーム画面追加・standalone表示・アドレスバー表示不具合):
   [`NOTICE.cloudflare-workers-github-oauth-1.pwa.md`](NOTICE.cloudflare-workers-github-oauth-1.pwa.md)
+- T3 CodeのログインとPWA化(ペアリングの契約・Invalid/Timed outの違い・X-Forwarded-Host・iframeの中のクッキー・PWAはクッキーを共有しない・自動承認):
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261031.md`](NOTICE.cloudflare-workers-github-oauth-1.20261031.md)
+  [`SPEC.cloudflare-workers-github-oauth-1.T3-PWA.20261031.md`](SPEC.cloudflare-workers-github-oauth-1.T3-PWA.20261031.md)
 - gitのshallow clone(コミット履歴を根拠にした調査が壊れる・`git fetch --unshallow`での対処):
   [`NOTICE.cloudflare-workers-github-oauth-1.20260906.md`](NOTICE.cloudflare-workers-github-oauth-1.20260906.md)
 - GitHub webhook → Slack/外部Worker(Altワーカー)通知パイプライン(経路A/B/Cの区別・write-onlyデータストア事故・Slack app_mentionのbot判定):
@@ -354,6 +452,21 @@ NOTICE.<リポジトリ名>.<YYYYMMDD>.md
   [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md)
 - /cf-containers(Cloudflare Containers)・Workers Builds(PRビルドはイメージをビルドしない・イメージ失敗でもWorkerだけ出る・結果表示の上書き・Builds APIの権限・トークンの使い分け・サンドボックスでのフルビルド):
   [`NOTICE.cloudflare-workers-github-oauth-1.20261017.md`](NOTICE.cloudflare-workers-github-oauth-1.20261017.md)
+- `node_modules`が自分自身を指すシンボリックリンクとして登録されていた事故(`.gitignore`の末尾スラッシュ)、push前のガードが止まったときの見分け方、`/root`で起動するとhookが効かないこと、Chromiumの要否、「いちいち質問しない」のhook:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261115.md`](NOTICE.cloudflare-workers-github-oauth-1.20261115.md)
+- `/muse-status`のNix一覧、Museとの問い合わせの進め方、本番反映の承認、D1`agent-inquiries`:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.20261107.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md)
+- demoコンテナのイメージをdigestで固定した経緯(Workers BuildsのDockerビルドが`runc ... mounting "proc" ... operation not permitted`で落ちる)と、コンテナを変えるときの手順(`image.lock.json`):
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261111.md`](NOTICE.cloudflare-workers-github-oauth-1.20261111.md)
+- demoコンテナを`@cloudflare/containers`(非推奨)からDurable Object Container API(`this.ctx.container`)へ移した経緯、旧クラスが裏でしていたこと(ポートの待ち・インターネット許可・アラームで起こし続けるループ)、停止の記録とスナップショットの制約:
+  [`SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md`](SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md)
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261111.md`](NOTICE.cloudflare-workers-github-oauth-1.20261111.md)の後半
+- Worker由来のTailscaleノード(`main-worker-muse`・`muse-monitor`)の所在と状態の保存先、ブラウザをノードにすると毎回ログインが要る理由、Museへの要望の2つの仕組み(`bridge_jobs`は手動・`MuseAgentJobs`は自動)と`failed`の理由:
+  [`NOTICE.cloudflare-workers-github-oauth-1.20261110.md`](NOTICE.cloudflare-workers-github-oauth-1.20261110.md)
+- `/muse-status`のTailscale WASM経由の取得(`@tailscale/connect`の`fetch`の制約・ルートのCSP・`/health`の性質・このコンテナでの検証の注意・再ビルドの判断):
+  [`NOTICE.cloudflare-workers-github-oauth-1.muse-status-wasm.20261107.md`](NOTICE.cloudflare-workers-github-oauth-1.muse-status-wasm.20261107.md)
 - コミットとファイルの関連付け(`commit_file_changes`テーブル。「どのコミットがどのファイルを変更したか」の汎用記録。push webhook経由の自動蓄積が主経路、dynamicneko `/api/tree-view/commit-files`からの"ついで書き込み"による段階的バックフィルが補助経路。関連する既存の`ai_summary_files`はPR/push単位でしかファイルを持たず個別コミットに紐付かない点に注意)。この関係の実装・調査をする際は、必ず先にこのSPECを読むこと:
   [`cloudflare-workers-github-oauth-1` PR #2371](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2371)（`commit_file_changes`新設・push webhook自動蓄積・`POST /api/commit-file-latest-external`）
   [`cloudflare-workers-github-oauth-1` PR #2372](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/pull/2372)（書き込み用`POST /api/commit-file-changes-external`）

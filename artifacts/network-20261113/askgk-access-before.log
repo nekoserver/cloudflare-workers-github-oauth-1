@@ -1,0 +1,37 @@
+test_other_lib_paths_stay_private (__main__.AskgkAccessTest.test_other_lib_paths_stay_private) ... ok
+test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) ... 
+  test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels') ... FAIL
+  test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels.rb') ... FAIL
+test_unsigned_and_invalid_signature_denied (__main__.AskgkAccessTest.test_unsigned_and_invalid_signature_denied) ... FAIL
+
+======================================================================
+FAIL: test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_askgk_access_test.py", line 18, in test_signed_worker_api_reaches_cgi
+    status,body=self.request(path);self.assertEqual(status,200);self.assertIn('uptime',json.loads(body))
+                                   ~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: 403 != 200
+
+======================================================================
+FAIL: test_signed_worker_api_reaches_cgi (__main__.AskgkAccessTest.test_signed_worker_api_reaches_cgi) (path='/lib/api/tunnels.rb')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_askgk_access_test.py", line 18, in test_signed_worker_api_reaches_cgi
+    status,body=self.request(path);self.assertEqual(status,200);self.assertIn('uptime',json.loads(body))
+                                   ~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+AssertionError: 403 != 200
+
+======================================================================
+FAIL: test_unsigned_and_invalid_signature_denied (__main__.AskgkAccessTest.test_unsigned_and_invalid_signature_denied)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/cf-container/ops/test/network_askgk_access_test.py", line 21, in test_unsigned_and_invalid_signature_denied
+    self.assertEqual(self.request('/lib/api/tunnels',signature='invalid')[0],401)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 403 != 401
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.047s
+
+FAILED (failures=3)

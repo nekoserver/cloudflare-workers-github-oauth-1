@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { aichatJobResponse, clearAichatPendingJobs } from './aichat-job-fetch.test-helper';
 import { getAiChatPage } from './views/aichat';
 import { formatAichatNekoCsearchResults } from './utils/aichatSlashCommand';
 
@@ -69,8 +70,10 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
         }),
       });
     }
+    const jobResponse = aichatJobResponse(u, apiResponse);
+    if (jobResponse) return Promise.resolve(jobResponse);
     if (u.includes('/api/aichat')) {
-      return Promise.resolve({ json: () => Promise.resolve(apiResponse) });
+      return Promise.resolve({ headers: new Headers({ 'content-type': 'application/json' }), json: () => Promise.resolve(apiResponse) });
     }
     return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
   });
@@ -78,6 +81,7 @@ async function setupChatSubmitTest(apiResponse: Record<string, unknown>) {
 
   const scriptSrc = html.slice(html.lastIndexOf('<script>') + 8, html.lastIndexOf('</script>'));
   // eslint-disable-next-line no-new-func
+  clearAichatPendingJobs();
   new Function(scriptSrc)();
 
   const chatInput = document.getElementById('chatInput') as HTMLTextAreaElement;

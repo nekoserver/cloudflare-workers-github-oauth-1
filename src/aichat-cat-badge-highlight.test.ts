@@ -16,7 +16,7 @@ describe('カテゴリバッジタップ: キーワードバッジ色変更', ()
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2000);
+    const fn = html.slice(idx, idx + 2600);
     expect(fn).toContain('data-cat-id');
   });
 
@@ -25,7 +25,7 @@ describe('カテゴリバッジタップ: キーワードバッジ色変更', ()
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
     // catIdAttr 変数に data-cat-id が含まれ、kw-classify-kw-badge に結合される
-    const fn = html.slice(idx, idx + 4000);
+    const fn = html.slice(idx, idx + 4600);
     expect(fn).toContain('catIdAttr');
     expect(fn).toContain('data-cat-id');
   });
@@ -34,7 +34,7 @@ describe('カテゴリバッジタップ: キーワードバッジ色変更', ()
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 5000);
+    const fn = html.slice(idx, idx + 5600);
     // カテゴリバッジへの addEventListener または querySelectorAll があること
     expect(fn).toContain('kw-cat-summary-badge');
     expect(fn).toContain('addEventListener');

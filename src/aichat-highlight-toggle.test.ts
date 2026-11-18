@@ -58,7 +58,7 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     const html = buildPage();
     const idx = html.indexOf('function updateHighlightToggleBtn');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 600);
+    const fn = html.slice(idx, idx + 1600);
     expect(fn).toContain('historyModalHighlightActive');
   });
 
@@ -89,13 +89,13 @@ describe('詳細プレビューモーダル: ハイライトトグルボタン �
     expect(fn).toContain('click');
   });
 
-  it('クリック時に historyModalHighlightActive を反転する', () => {
+  it('クリック時に historyModalHighlightActive を3段階の切り替え結果に更新する', () => {
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
-    expect(fn).toContain('historyModalHighlightActive');
-    expect(fn).toContain('!historyModalHighlightActive');
+    const fn = html.slice(idx, idx + 1600);
+    expect(fn).toContain('historyModalHighlightActive = nextView.highlightActive');
+    expect(fn).toContain('nextKeywordToggleMode(');
   });
 
   it('クリック時に highlights-hidden クラスをトグルする', () => {

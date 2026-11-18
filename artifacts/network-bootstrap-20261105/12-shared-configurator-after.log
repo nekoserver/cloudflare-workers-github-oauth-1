@@ -1,0 +1,28 @@
+test_boot_hook_precedes_apache_and_docker_installs_code (__main__.PostInstallTest.test_boot_hook_precedes_apache_and_docker_installs_code) ... ok
+test_build_check_passes_the_pinned_lib_revision (__main__.PostInstallTest.test_build_check_passes_the_pinned_lib_revision) ... ok
+test_changed_settings_restart_existing_streams_but_identical_settings_do_not (__main__.PostInstallTest.test_changed_settings_restart_existing_streams_but_identical_settings_do_not) ... ok
+test_concurrent_configurations_use_process_lock (__main__.PostInstallTest.test_concurrent_configurations_use_process_lock) ... ok
+test_credentials_are_copied_privately_and_never_into_webroot (__main__.PostInstallTest.test_credentials_are_copied_privately_and_never_into_webroot) ... ok
+test_current_env_wins_and_management_values_are_not_chat_settings (__main__.PostInstallTest.test_current_env_wins_and_management_values_are_not_chat_settings) ... ok
+test_explicit_current_thread_beats_saved_target (__main__.PostInstallTest.test_explicit_current_thread_beats_saved_target) ... ok
+test_failed_verification_keeps_previous_source_and_reports_not_ready (__main__.PostInstallTest.test_failed_verification_keeps_previous_source_and_reports_not_ready) ... ok
+test_image_install_uses_external_source_and_excludes_state_and_tests (__main__.PostInstallTest.test_image_install_uses_external_source_and_excludes_state_and_tests) ... ok
+test_image_preparation_can_be_repeated (__main__.PostInstallTest.test_image_preparation_can_be_repeated) ... ok
+test_invalid_fixed_thread_and_origin_are_rejected (__main__.PostInstallTest.test_invalid_fixed_thread_and_origin_are_rejected) ... ok
+test_launcher_success_alone_is_not_reported_as_ready (__main__.PostInstallTest.test_launcher_success_alone_is_not_reported_as_ready) ... ok
+test_legacy_current_key_wins_over_saved_primary (__main__.PostInstallTest.test_legacy_current_key_wins_over_saved_primary) ... ok
+test_legacy_start_uses_the_same_container_configurator (__main__.PostInstallTest.test_legacy_start_uses_the_same_container_configurator) ... ok
+test_lib_is_an_external_dependency_not_a_vendored_snapshot (__main__.PostInstallTest.test_lib_is_an_external_dependency_not_a_vendored_snapshot) ... ok
+test_missing_dependency_is_detected_before_installation (__main__.PostInstallTest.test_missing_dependency_is_detected_before_installation) ... ok
+test_missing_secret_does_not_generate_one_or_start_services (__main__.PostInstallTest.test_missing_secret_does_not_generate_one_or_start_services) ... ok
+test_no_new_worker_or_binding_dependency (__main__.PostInstallTest.test_no_new_worker_or_binding_dependency) ... ok
+test_private_configuration_and_repeatability (__main__.PostInstallTest.test_private_configuration_and_repeatability) ... ok
+test_source_failure_does_not_start_observer_with_old_target (__main__.PostInstallTest.test_source_failure_does_not_start_observer_with_old_target) ... ok
+test_startup_without_history_does_not_fork_or_submit (__main__.PostInstallTest.test_startup_without_history_does_not_fork_or_submit) ... ok
+test_symlink_configuration_is_not_followed (__main__.PostInstallTest.test_symlink_configuration_is_not_followed) ... ok
+test_verifier_only_reads_the_fixed_thread (__main__.PostInstallTest.test_verifier_only_reads_the_fixed_thread) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 0.215s
+
+OK

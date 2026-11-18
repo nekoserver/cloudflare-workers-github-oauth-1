@@ -263,6 +263,7 @@ export function getWasmModulesPage(username: string, initialViewMode: 'panel' | 
         <button type="button" class="mode-btn${isInitialPanel ? '' : ' active'}" id="modeListBtn" data-mode="list">📋 リスト表示</button>
       </div>
     </div>
+    <p><a href="/fx-wasm">fx WASM コーディングエージェントのサンプル</a></p>
     <div id="moduleList"></div>
     <div class="wasm-table-wrap" id="wasmTableWrap" style="display:none;">
       <table class="wasm-table">

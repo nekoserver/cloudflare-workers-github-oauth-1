@@ -1,5 +1,19 @@
 # コード・稼働環境・ユーザー指定の差分
 
+## 2026-11-07: /muse-inquiriesの固定ヘッダ・状態表示・完了履歴・Markdown・提案者集計（本番未反映）
+
+ヘッダに「すべて（初期選択）・協議中・採否待ち・完了」の件数付きボタンを追加し、縦スクロールでもヘッダ全体を上端へ固定する。カードの種類と状態を全件に明示し、同じ判定をラベル・件数・絞り込みに使う。回答済み・失敗の問い合わせ、完了・不採用の提案は終了した記録として「完了」に含め、回答済み/失敗/不採用の結果ラベルを別に出す。採否待ちの提案は「採否待ち」、未解決の論点・未送信/回答待ちの問い合わせ・採用実施中は「協議中」。ケース選択と併用でき、再読み込みボタンでは両方の選択を維持する。
+
+同一ケース・種類・IDの二重表示のみを防ぎ、別IDの似た内容や会話の流れは残す。ケース一覧はリスト形式を初期選択にし、リスト／パネルのトグルで選べる。一覧全体は別の開閉ボタンで折りたため、表示形式と開閉は独立する。再読み込みボタンでは表示形式・開閉状態を維持し、ページを開き直すと初期リストへ戻る。各カードに同じ長いケース名を繰り返さずケースIDで示す。D1の確認時点では同一ケース・状態・見出し/本文の完全一致重複や空の見出しはなく、データの削除・状態変更はしていない。
+
+完了カードはボードに残し、末尾にも補助表「完了履歴」を追加。記録日時（UTC）の新しい順で、種類・結果・内容・元の会話リンク・ケースを示す。正確な完了日時は保存されていないため、完了日時とは表示しない。補助表はヘッダの件数に重ねて数えず、ケース選択を共有し「すべて」「完了」で表示する。既存のentry_idから元の問い合わせの番号・見出しへ結び、未関連のものは推測せず「関連付けなし」と表示する。
+
+ヘッダ直下に提案者別の「提案（全件）・協議中（採用実施中）・完了（不採用を含む終了分）」のバッジ・数字を並べる。ケース選択内の全提案を集計し、状態フィルタを変えても比較用の母数を維持する。Muse/museなど既知エージェントの大文字小文字の表記揺れを統合し、提案者未設定は明示する。同じIDや完了表への再掲は重ねて数えない。
+
+詳細の質問・回答・提案・論点・要約を既存共有パーサーでMarkdown表示。生HTMLはエスケープし、コードと危険なリンクの扱いを確認する。カード一覧は文字として表示する。DBスキーマ・データは変更しない。
+
+関連3ファイル50テスト（生成HTML内の全scriptのnode --checkを含む）成功。D1の読み取りスナップショットを使うローカルChromeで1440px/390px・ライト/ダークのラベル、全フィルタ、ヘッダ固定、完了表の降順と元会話リンク、Markdown詳細、提案者別集計、ケース一覧のリスト／パネル切替と開閉・キーボード操作・詳細表示・再読み込み時の選択維持、横はみ出しなしを確認。本番の認証付き画面は未確認。全体テスト・Dockerビルド・Workerデプロイは未実施。変更はWorkerの画面と読み取り処理なので、コンテナ再ビルド・再起動は不要。
+
 最終確認日: 2026-10-22（UTC）。この作業セッションで確認できた範囲を記載する。本番への反映済み一覧ではない。
 
 「実装済み」「ローカルで適用済み」「本番で確認済み」を区別する。確認していない本番の設定・デプロイ・DB状態は推測で埋めない。
@@ -128,3 +142,243 @@ SecureMine用HMACゲートウェイと接続先マップはr9へ適用済み。�
 ## 2026-10-24 MoonBitサンプルページ
 
 認証後 `/moonbit-sample` を開くと、本体Worker内の生成済みMoonBit BuildKitログ解析へ例を渡し、完了秒数・キャッシュ・エラー・未完了の解析結果を表示する。コンテナ構成プランナーにもリンクを追加。ソース追加のみで、テスト・Workerデプロイ・ブラウザ表示は未確認。
+
+
+## 2026-10-26 15:48 UTC: askgk HTTP530/1033 継続障害
+
+公開mygw `/lib/api/tunnels` はHTTP530・`error code: 1033`。Cloudflare APIの実測ではnekorootはdown・接続0件。本体 `cloudflare-workers-github-oauth-1-democontainer` の既存demoインスタンスはinactive、状態更新日時は2026-10-26T15:15:12Z。現在のRedmineコンテナで動くcfc-tunnelはhealthyであり、nekorootの代替ではない。同日のNETWORK REPORTにある両トンネルhealthy・公開API200は以前の測定結果で、現在の復旧を示さない。
+
+既存の管理API `/api/cf-containers/action` にstartを要求したがHTTP401「認証が必要です」で起動できなかった。現環境のCloudflare管理トークンによる状態参照は成功したが、本体管理画面の管理者セッションはなく、起動の成功は未確認。管理者が本体の `/cf-containers` から既存コンテナを起動し、nekorootの接続・公開API・askgkを再確認する必要がある。DNS、トンネルの転送先・トークン、Worker、イメージは変更していない。
+
+
+## 2026-10-26: askgkの本体停止からの独立と経路台帳
+
+ユーザー指示により、本番本体WorkerのASKGK_TUNNELS_URLをmygwから `https://r9.nekomaneki.work/lib/api/tunnels` へ設定APIで変更し、他50 bindingsの維持を確認。独立Redmine Worker経由APIはHMAC GET200、rust-worker-sqlx-d1の署名付きPOSTでCodex done・`INDEPENDENT_CODEX_OK` を確認。本体停止中の成功。チャット画面自体からの認証付き操作は未実施。
+
+推論処理内の固定ホストを除き、JSON経路台帳、設定による追加・削除・無効化・ID選択、チャット/Slack/cron共通の経路解決を実装。関連5ファイル67テスト成功。台帳実装はソースのみで未デプロイ。本番反映済みなのは既存単一URL設定。一般askgkのPOSTで検出した要求記録ディレクトリ欠落を現環境とRedmine起動ソースで修正。既存のobserver変更は保持。詳細と切替・復元方法は [経路仕様](SPEC.cloudflare-workers-github-oauth-1.askgk-routes.20261026.md)。Dockerビルド・イメージ更新は未実施。
+
+
+## 2026-10-26: 独立側askgkのCGI 504修正
+
+16:02:15 UTCのApacheログに `Script timed out before returning headers: tunnels.cgi`。独立Redmine側CGIの既定60秒が、tunnels.rbの90秒同期待機より短かった。直近のCodex要求2件は62.1秒・70.3秒でdoneになっており、CGIが切れた後もジョブ自体は完了していた。
+
+`redmine/config/lib-httpd.conf` と稼働 `/opt/httpd/conf/lib-httpd.conf` のCGI専用Directoryに `CGIDScriptTimeout 105` を追加。API待機90秒＋内部ソケット待機5秒を確保し、呼出元120秒以内とした。Apache構文確認後graceful reload済み。既存ジョブを再送せず、署名Worker経由のask_id照会でHTTP200・done・保存済み回答の存在を確認。ソースと現コンテナへ適用済み、Dockerビルド・イメージ更新・再作成後確認は未実施。
+
+
+## 2026-10-26: 設定ページの待ち時間保存と経路台帳を本番配備
+
+Workerバージョン `c4886118-6819-42be-96a0-b718349b0c7f` を配備。D1に0189の新規テーブルと既定120秒のrevision=1を適用し、上限300秒の管理者設定API・設定ページ・共通送信処理を実装した。チャット/Slack/cronは各要求の開始時に保存値を参照。POSTは一度だけ送信し、同一ask_idを短い通信で照会する。経路台帳も同時に配備し、ASKGK_ROUTE_ID=independentを確認。設定API未認証401、配備済みソースに設定APIと非同期待機があること、本番DBの保存値、共通送信処理から本番署名Worker・独立コンテナへのCodex実回答 `TIMEOUT_SETTINGS_OK` を確認した。実利用者のログインセッションによる設定画面操作は未実施。
+
+既存50 bindingsは配備前後で一致、新規ASKGK_ROUTE_IDのみ追加。Dockerfileを参照しない一時配備設定から、APIで確認した既存レジストリイメージb225cc9aを再利用し、Dockerビルドは行っていない。Wranglerはコンテナアプリケーションの宣言イメージ62758c7d→b225cc9aの更新も適用したため、再配置がなかったとは報告しない。復旧用の配備前Worker本体・settings・deploymentsはroot専用 `/root/.local/state/neko-independent/` に保存。
+
+関連10ファイル122テスト、Ruby17件70 assertions、実Apacheの65秒遅延テストを含む2件、Apache構成4件が成功。追加の300秒設定で120秒を超えて待つテストも実装。リポジトリ全体typecheckは既存の無関係な型エラーで失敗しており、全体成功とは扱わない。独立側tunnels_lib.rbのwait_seconds対応とApache105秒設定は現環境・ソースに適用済みだが、Redmineイメージの更新・再作成後検証は未実施。詳細は経路仕様の「保存する待ち時間」。
+
+
+## 2026-10-26: API/WASMを選べるコンテナ監視を本番配備
+
+本体 `/container-monitor` と管理者専用 `/api/container-monitor/providers`・`/snapshot` を配備。最終Workerバージョン `ed80b713-ea19-4eb0-8df2-86db630a926f`。APIトークンがなければTailscale WASM、設定済みなら対応APIも選択できる。取得方式・資格情報判定・正規化を共通台帳へ分離。対象ホスト一覧のハードコードはなく、Cloudflare全アプリケーション/インスタンスのページ送りと部分失敗を処理する。監視取得ではコンテナを起動しない。
+
+公式Tailscale Connectの配布済みJS/WASMをintegrity・SHA256照合して再利用。Docker/Goのソースビルドは行わず、同じ既存コンテナイメージを指定してWorkerを配備。Wranglerはコンテナアプリケーション変更なしを確認。既存52 bindingsの一致、未ログインAPI401、本番配信UIとローカルの一致を確認した。
+
+ローカルでは11件の機能/APIテスト、実Cloudflare一覧取得1件、UIの注入・切替・トークン削除・古い接続表示を含む3件、Chromiumの公式WASM初期化が成功。追加モジュールの型チェックとdiff whitespaceも成功。実配信でgzipファイルとHTTP圧縮の二重扱いによるWASMヘッダ異常を検出し、読み込み側でファイルgzipを明示展開してBlobへ渡す処理に修正した。本番URLからChromiumでrun/login/fetchの初期化成功を再確認済み。
+
+Tailscale APIの実トークンによる照会、実利用者のTailnetログイン後の端末到達性は未検証。WASMはブラウザ実行で、参照範囲はログインユーザーの権限に従う。tree-viewの既存全コンテナ検出との接続は未実施。確認したdynamicneko main/配備版は利用者別Sandboxの経路であり、別の検出経路は特定できていない。共通APIは他画面から再利用できる形としたが、tree-view側で利用済みとは報告しない。
+
+復旧用Worker本体・settings・deploymentsはroot専用 `/root/.local/state/tailscale-wasm/` に保存し、Gitへ含めない。再取得可能なSDKキャッシュと、配布に必要なpublicアセット・ライセンス・出典/チェックサム・復元スクリプトは区別する。仕様は [コンテナ監視SPEC](SPEC.cloudflare-workers-github-oauth-1.container-monitor.md)。
+
+
+## 2026-10-28: tree-view T3 Codeの本体demo起動・停止（実装済み・本番未反映）
+
+T3 Codeタブの再接続の直前に起動/停止ボタンを追加する変更。本体のdemo DO状態を正として読み取り、CF-Worker/HMACと短寿命userTokenで新APIへ中継する。start/stopを明示し既存管理操作と同じDOロックで状態判定・実行をまとめる。状態不明・停止中はiframeを読み込まない。操作履歴を既存テーブルに保存し、no-opと停止処理中は完了と区別する。
+
+Cloudflare settingsのメタデータで、mainのDYNAMICNEKO_WORKER_HMAC_SECRET、dynamicnekoのCF_WORKER_SECRET_MAINとTREE_VIEW_CONTAINER_ORIGINは未設定と確認。AICHAT_USER_TOKEN_SECRET、MAIN_WORKER、DEMO_CONTAINER、DBの設定名は存在する。秘密値の照合・設定変更は行っていない。main API/DOとdynamicnekoの両反映、および共有鍵とT3 HTTPS originの設定が必要。Dockerビルド・Worker配備・本番コンテナ操作は未実施。仕様はSPEC.cloudflare-workers-github-oauth-1.tree-view-t3-power.mdを参照。
+
+対象API/DOの11件、既存管理等43件、dynamicnekoブラウザ9件・中継等Node検証は成功。全体テストは1178件成功後に既存heritageJourneyの国旗付与テストが20秒タイムアウト。単独実行は18.18秒で成功したが全件成功ではない。ユーザーから失敗を明記したドラフトPR作成の例外承認を得た。詳細はREPORT.cloudflare-workers-github-oauth-1.T3-POWER.20261028.md。
+
+## 2026-11-04 ネットワーク再配置
+
+現コンテナへlib API・WebSocket/SSE/NDJSON/JSON-seq・固定会話observer・SSIを適用し、公開mygwから実会話とCodex実生成を確認。既存ENV優先。Tunnel一覧は現在トークンの権限不足、stream/r9は初回530/502、最終APIは200だがSSIはRedmineの404となり、stream配信経路に外部条件が残る。Workerデプロイ・イメージ再ビルド・パッケージ更新は未実施。詳細と復元境界は [NETWORK REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261104.md)。
+
+
+## 2026-11-04: askgkを本体コンテナへ一時切替
+
+ユーザー指示で本番ASKGK_ROUTE_IDをindependentからmainへ変更。他53 bindingsは変更前後で一致。署名付きCodex実要求でdone・ASKGK_MAIN_READYを確認。wrangler設定もmainへ変更。独立側の認証エラーは未解決。Slack画面からの実行と自動フェイルオーバーは未検証・未実装。詳細は [切替REPORT](REPORT.cloudflare-workers-github-oauth-1.ASKGK-MAIN.20261104.md)。Dockerビルド・イメージ更新なし。
+
+
+## 2026-11-04: 閉じたストリームの自動アクセスを停止
+
+Worker `267061d1-7b3a-454b-b7c3-c697141e9167` を本番反映。閉じたパネル・非表示タブでpoll/iframeを停止し、自動候補をmygw限定、他候補は手動選択へ変更。関連39テスト・出力script構文確認成功。APIで54 bindings・既存コンテナ構成とversion 93の維持、配備済みソースを確認。Dockerビルドなし。既存画面は再読み込みが必要。実利用者のログイン済み画面の通信観察は未実施。詳細は [REPORT](REPORT.cloudflare-workers-github-oauth-1.STREAM-IDLE.20261104.md)。
+
+
+## 2026-11-04: mygwストリーム投稿はSSH会話のwriter競合で未復旧
+
+投稿許可200・console POST503を再現。履歴閲覧用App ServerでnotLoadedのため投稿時のみresumeする修正後、SSH Codexが同一会話を使用中でactive writer拒否を確認。ロックは保持し、HTTP409 console_in_useとして理由を返す改善を現コンテナへ反映。投稿先の専用会話化またはSSH会話維持をユーザーへ確認中。Python48テスト成功、Nodeは38/40（未変更sessionテスト2件location未定義）、生成script構文成功。Worker・イメージ更新なし。詳細は /root/lib/REPORT.console-post.20261104.md。
+
+
+## 2026-11-04: mygw投稿専用会話によるアドホック復旧
+
+ユーザー承認で元SSH会話の履歴をthread/forkし、mygw observerを投稿用会話へ原子的に切替。公開console POST200 accepted=trueとobserverでCONSOLE_POST_OKの回答を確認。元SSH会話のロックは維持、分岐後の履歴同期なし。別会話であることを表示名に明示しブラウザで表示。ユーザー指示により /root/lib/SPEC.lib.20261104.console-stream-adhoc.md にアドホック対応・恒久設計・移行条件を記録。イメージ更新・再作成後確認・利用者ブラウザの手動投稿確認は未実施。
+
+
+## 2026-11-04: ストリーム投稿復旧・初期設定検証をmain workerとcontainer docsへ記録
+
+mygw投稿用のfork threadへ切替後、公開POST200 accepted=trueとobserver上のCONSOLE_POST_OKを確認したため一旦解決。元SSH会話とは同期しない。初期設定確認をこのリポジトリの`NETWORK-STREAM-SETUP.md`とコンテナ内`/root/lib/ops/CHAT_WEBSOCKET.md`に記録。セットアップごとにtunnels.rb、WebSocket/SSE、observer、投稿後の実応答を確認し、REPORTへ残す。詳細は [CONSOLE STREAM REPORT](REPORT.cloudflare-workers-github-oauth-1.CONSOLE-STREAM.20261104.md) と [lib SPEC](../../lib/SPEC.lib.20261104.console-stream-adhoc.md)。Dockerイメージ更新・コンテナ再作成後検証は未実施。
+
+
+## 2026-11-05: fx公式WASMのサンプルページ（本番未反映）
+
+本体Workerに認証付き `/fx-wasm` を追加し、WASM一覧からリンク。公式libfx 0.0.16の配布済みWASMをSHA256照合して同梱し、模擬モデルの仮想ファイル読み書きを実Chromiumで確認。利用者のAI Gatewayキーによる実モデル接続も用意したが実通信は未検証。対象テスト7件とNode4件成功。Dockerビルド・CLI導入・Workerデプロイなし。詳細は [FX-WASM REPORT](REPORT.cloudflare-workers-github-oauth-1.FX-WASM.20261105.md)。
+
+## 2026-11-05: 現コンテナのネットワーク再配置と会話一本化
+
+現在ENVの会話と依頼本文を照合してobserverを設定。新しいforkは作らず、writer競合時は同じ会話のnative queueへ投稿する経路を現libへ反映。公開POST accepted=true/queued=trueと同じ会話に入力1件の保存を確認したが、writer取り込み・実応答は未確認。mygwの各配信/SSIとCodex/Claude実応答を確認。自動テスト138件成功。Cloudflare一覧権限不足、stream530/r9 502は残る。更新候補ca-certificates 1件を記録し、最終検証後にfirewall/nftログを取得。イメージ更新・Workerデプロイ・再作成後検証は未実施。詳細は [NETWORK REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261105.md)。
+
+### 同一会話投稿の後続検証で確認済み
+
+2026-11-05、キューへ投入したテスト投稿を同じ会話で実受信し、assistantがSTREAM_POST_OK_20261105を返答。公開mygwの認証済みストリームでも投稿と応答を確認し、native queueの該当件数0を確認。前項の「writer取り込み・実応答は未確認」は解消。fork・追加投稿・対象会話切替なし。実ブラウザ操作と外部トンネル障害の境界は変わらない。41-single-thread-delivery.logを参照。
+
+## 2026-11-05: コンテナ専用のインストール後設定関数（イメージ未反映）
+
+containers/demo/lib-network/post_install.pyへ設定関数を分割し、Dockerfileの配置処理とentrypoint/cronからの再適用を接続。libは独立checkoutのまま、ビルド時に公開済みLIB_NETWORK_REVISIONを必須指定する。Workerコード・bindings・wranglerの設定変更なし。コンテナ再作成後の同一会話は履歴・認証の復元が前提で、不在なら待機する。集約窓口による157件と既存コンテナ32件の計189件成功。Dockerビルド・配備は未実施。lib側の未公開修正の公開と、ビルド呼出側の固定リビジョン指定が必要。詳細は [CONTAINER POST-INSTALL REPORT](REPORT.cloudflare-workers-github-oauth-1.CONTAINER-POST-INSTALL.20261105.md)。
+
+## 2026-11-05: 次回イメージのpreprint追加・4ツール更新（未ビルド/未配備）
+
+preprint 0.1.2とChrome、cloudflared 2026.10.7、Tailscale公式バイナリ1.104.5、Claude Code 2.1.318、jj 0.47.1をDockerfileへ反映。jj配布物はpackages配下へ退避しCOPY再利用。preprint/T3 Codeの最新版チェックとapt自身の候補版の行を追加。T3の導入版0.1.3は変更なし。関連272件成功・1件スキップ、実CLI13チェック成功。Dockerビルド・Worker配備・実ブラウザ操作は未実施。自動Dockerfile反映はSPEC/PLANのみ作成し、他コンテナとの対応確認まで実装保留。詳細は [CONTAINER TOOLS REPORT](REPORT.cloudflare-workers-github-oauth-1.CONTAINER-TOOLS.20261105.md)。
+
+## 2026-11-06: /askmuseの直接経路（未反映）
+
+`/askmuse prompt="◯"`を実装した。経路は本体Worker → `DEMO_CONTAINER` → `server.js` → `tailscale nc` → muse-vm。ブランチ`feat/askmuse-direct-20261106`のソースのみで、未デプロイ。反映にはWorkerのsecret`MUSE_API_KEY`の設定とコンテナイメージの更新が要る。手順と未確認の項目は[仕様](SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md)。Dockerビルドは未実施。
+
+## 2026-11-06: Museの死活確認と入力窓の枠色（未反映）
+
+`/aichat`でスイッチが`muse`かつシグナル送信がONのとき、`GET /api/aichat/muse-health`で送信間隔（既定600秒）ごとに確認し、稼働中なら入力窓の枠をMuseの色にする。設定はMuseの行の⚙から開くモーダルで変え、Cookie`aichat_muse_signal`に保存する。ソースのみで、未デプロイ。`containers/demo/server.js`に`GET /muse/health`を追加したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。イメージが古い間は確認が失敗し、枠は既定の色のままになる。詳細は[SPEC](SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md)の「死活確認と入力窓の枠色」。
+
+## 2026-11-06: /muse-status（未反映）
+
+tailnet上の`muse`・`muse-vm`の起動状況、Nixのパッケージ、シグナル送信のページ`/muse-status`を実装した。ソースのみで、未デプロイ。`containers/demo/server.js`を変更したので、反映にはWorkerのデプロイとコンテナイメージの更新が要る。Nixの一覧の表示に要るノード側の`GET /nix/packages`は、2026-11-07に`muse-vm`へ追加した。`server.js`の中継がオフラインのノードで落ちる不具合の修正を含む。詳細は[仕様](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。
+
+
+## 2026-11-07: Museの投稿前Tailscale確認と枠色・警告（未反映）
+
+通常のMuse投稿と`/neko askgk muse_prompt`に、Runningかつmuse-vm onlineを必要とする接続ゲートを追加。確認不可なら中継以降を呼ばない。枠色healthも同じ判定を使用し、投稿時に古い結果を無効化、未接続では色を解除して「Tailscaleの接続状況を確認してください」を一度表示。HTTP失敗とunsupported_engine等の表示を区別。ソースのみで、Dockerビルド・Workerデプロイ未実施。検証と境界は[REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-CONNECTIVITY.20261107.md)。
+
+## 2026-11-07: Museのtunnelsフォールバックは初期OFF（本番未反映）
+
+通常Muse入力の/askmuse変換を除去。Tailscale接続不可/確認不可かつtunnels明示ONの場合だけaskgkへ変換し、それ以外は直接Museか送信停止。Museの設定モーダルに初期OFFの切替を追加、Cookie保存とAPI明示値の優先を統一。直接送信後の実行失敗では中継へ再送しない。関連6ファイル273テスト成功、生成scriptのnode --check成功。Worker未配備。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-TUNNELS-FALLBACK.20261107.md)。
+
+## 2026-11-07: 現コンテナのネットワーク復元
+
+現在 ENV を優先して lib の observer/LLM/WebSocket/SSE/NDJSON/JSON-seq、Apache SSI/CGI と制限ソケットを配置。mygw の実会話配信、Codex/Claude の実応答、Chrome のストリーム画面投稿受付を確認。投稿は現在 ENV の同一会話の native queue に1件待機し、応答は未観測。Tunnel一覧権限、別ホストの配信、Muse/Nemotron未対応等は残る。apt更新候補0。最終検査後にファイアウォールログを採取。ローカル稼働への適用であり、Worker/イメージの更新ではない。詳細は [NETWORK REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261107.md)。
+
+### 2026-11-07 後続: ストリーム投稿の配信完了
+
+同じ会話で実ブラウザ投稿を受信し、assistantのマーカー応答と実ユーザー投稿を公開mygwのobserverで確認。native queueの該当待機0件。直前の「応答未観測」は解消した。外部経路・未対応エンジン・本体親画面の検査は未完了。NETWORK REPORTと後続検証JSONを参照。
+
+## 2026-11-07: muse-statusのブリッジ接続先を修正（本番未反映）
+
+museは外向き専用なのでTailscaleの状態表示だけとし、health/Nix取得をmuse-vmへ限定。画面の初回・定期・手動操作、Worker共通処理、コンテナ中継でmuse:8080への接続を抑止。関連5ファイル124テストと生成scriptのnode --check成功。修正した中継を使って現コンテナから実muse-vmの/health HTTP200/status=okを確認。本番Worker・常駐server.js・イメージには未反映。詳細は [MUSE STATUS REPORT](REPORT.cloudflare-workers-github-oauth-1.MUSE-STATUS-BRIDGE.20261107.md)。
+
+## 2026-11-07: スイッチがMuseのときのスラッシュコマンド（本番未反映）
+
+スイッチが`muse`の`/usage`は、従来も本体Worker → `DEMO_CONTAINER` → `server.js` → `tailscale nc` → muse-vmのapi-bridgeへ届き、先方が推論せずに実行していた。問題はWorker側で、結果を通常のAI回答として保存し、`./usage`を別名として解決していなかった。応答の`bridge_command`があるときは`ai_chat_shares`へ保存せず`local/neko`として返し、`./usage`は`/usage`へ置き換えて送る。`/help`・`/status`・`/ping`・`/models`も同じ扱いで、`/Usage`のような大文字小文字の揺れは5コマンドに限って吸収する。`/ping`には本体Workerで測った往復時間を添え、api-bridgeの503は`muse_command_failed`として伝える。Tailscale停止・muse-vmオフラインでは従来どおり送らず、tunnelsへも切り替えない。muse-vm側の変更はなし。
+
+このコンテナの`server.js`経由で実muse-vmへ5コマンドと未対応の`/nope`を送り、すべてHTTP200と`bridge_command`を確認した。本番Workerと`/aichat`の画面からの確認は未実施。
+
+## 2026-11-07: /muse-statusを本体コンテナの停止中もTailscale WASMで取得（未反映）
+
+本体コンテナが停止中のとき、ページの「Tailscaleへ接続」で公式`@tailscale/connect`のWASMがブラウザからtailnetへ参加し、muse・muse-vmの状態（netmap）とmuse-vmの`/health`シグナルを取得する。コンテナが使えるときは従来どおりコンテナ経由。Nixの一覧は`MUSE_API_KEY`をブラウザへ渡さないためWASMでは取らない。`/muse-status`にWASMとTailscaleへの接続を許すCSPを設定し、WASMの読み込みを`public/tailscale-wasm-client.mjs`へ共通化した（`/container-monitor`も使用）。`/health`が認証不要であることはMuseへの問い合わせ（D1`agent-inquiries`の`muse-status-wasm-20261107`）で得た、ソース上の回答で稼働版は未確認。ページのテストと実Chromeでの公式WASMの初期化（`NeedsLogin`まで、外部通信は遮断）を確認。実tailnetへのログインとmuse-vmへの到達、本番反映は未確認。Dockerビルド・Workerデプロイなし。詳細は[muse-statusのSPEC](SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md)。
+
+
+## 2026-11-08: 現コンテナのlibネットワーク再配置
+
+現在ENVを優先してApacheのSSI/CGI・observer/App Server/LLM用ソケット・WebSocket/SSE/NDJSON/JSON-seqを現コンテナへ配置。公開mygwで実会話配信とCodexの引用符付きprompt実応答を確認。Chromeで公開embed投稿フォームから現在会話のキューへ1件投入済み、実回答は未確認。Cloudflare現トークンの権限不足、Claude未認証、MuseのLLM worker未対応、stream接続不能、r9 502は未解消。現entrypointとcronへ復帰経路を配置したが、イメージ再作成後は未確認。Dockerビルド・Workerデプロイなし。詳細はREPORT.cloudflare-workers-github-oauth-1.NETWORK.20261108.md。
+
+2026-11-08後続確認: 同一会話のパネル投稿を実受信しSTREAM_POST_OK_20261108を返答。native queue待機0と公開observerでの投稿・assistant応答を確認。投稿の応答配信は確認済みに更新。詳細は上記NETWORK REPORTの後続ターン節。
+
+
+## 2026-11-08: Muse通常入力の実稼働判定（本番未反映）
+
+DemoContainer.getStateの保存状態をctx.container.runningと照合し、保存状態stoppedだが実行中のときMuse投稿がTailscale確認前に止まるケースを修正。逆方向の古いhealthyも停止として扱い、stoppingを維持する。関連134テストと実APIハンドラーを通す2テスト成功、元実装では後者2件失敗を再現。現server.jsからmuse-vmの実推論成功。本番DOでの状態不一致と本番UIは未確認。全体typecheckの診断は元実装と同一。Dockerビルド・Workerデプロイなし。詳細はREPORT.cloudflare-workers-github-oauth-1.MUSE-LIVE-STATE.20261108.md。
+
+
+## 2026-11-08: Worker内wasm-tailscale（本番未反映）
+
+2026-11-08追記: 独立したローカルworkerdの実WASMからmuse-vm:8080/v1/chat/completionsへBearer認証付きPOSTを1回送り、HTTP200と指定文字列の実回答を確認した。Gadgetsペアリング・Bluetooth不使用。検証ノードはログアウト済み。現在の/tailscale-wasmページはGadgets専用経路のままで、この直接APIへの接続変更と本番反映は未実施。詳細はREPORT.cloudflare-workers-github-oauth-1.WASM-BRIDGE-POST.20261108.md。以下の未確認記述のうち「WASM経由muse-vm実応答」はこのローカル検証で更新する。本番の実応答は引き続き未確認。
+
+@ai-ecoverse/wasm-tailscale 1.104.1-13、専用TailscaleWasm DO、管理画面/tailscale-wasmと管理APIを追加。MUSE_TRANSPORT=wasmでMuse通常入力・/askmuseの直通をWorker内WASMへ固定し、未指定では従来のコンテナ直通を維持。2経路同時送信/自動fallbackなし、投稿の直列化ロックはなし。現workerdの実WASM・実DOでNeedsLoginまで成功。本番デプロイ・ログイン・WASM経由muse-vm実応答は未確認。配布サイズは上限に近く、本番計測が必要。詳細はREPORT.cloudflare-workers-github-oauth-1.WASM-TAILSCALE.20261108.md。
+
+### 2026-11-08後続: Worker→Muse本線、コスト・全コンテナ・T3引き継ぎ（本番未反映）
+
+実Durable Objectを含むWorker→Tailscale WASM→muse-vm POSTがHTTP200・指定応答一致。prefixなしMuseと`/askmuse`はWorkerを既定、旧コンテナ直通は設定モーダルで選ぶ構成へ変更。tailscale-wasmページに永続Job/同じJobへの返信、次回Codex/Claude問い合わせ時のMuse結果引き継ぎ、T3確認と`/cf-containers`共通の一回限りログインリンク生成、Worker/DOおよび全コンテナの費用・状態ウィジェットを実装。費用はAnalyticsと台帳ベースの集計・概算で請求書ではない。コンテナ停止時の自動起動なし。関連テスト群、実Chrome UI、実DO POSTに成功。Worker dry-runは圧縮後約9.83MiBで通過、コンテナrolloutなし。Production binding/migrationを伴う公開は未実施。詳細は[WASM→Muse SPEC](SPEC.cloudflare-workers-github-oauth-1.wasm-muse-bridge.20261108.md)。
+
+入力窓相当のPOSTを`/api/aichat/jobs`へ実際に1回送り、202でJobを作成し終端まで追跡したが、全Worker bundle内のTailscale WASM起動時に`syscall/js os.Getpid` panicとなりMuseへ到達せず、実回答マーカーは不一致。再送なし。実DOだけのPOST成功とは区別し、AIチャット入力窓の実応答は未確認に更新。障害結果は[artifact](artifacts/wasm-tailscale-20261108/aichat-live-e2e-result.jsonl)。通常のAIチャットでのCodex/Claude投稿は既存AICHAT_JOB経由でタブ切替後も継続し、`/tailscale-wasm`の補助tunnels問い合わせは別経路である。
+
+
+## 2026-11-08 現セッションのネットワーク再配置
+
+現ENV優先でApache SSI/CGIとApp Server/observer/LLM・WS/SSEを復元。限定ソケット・公開会話受信・Codex実応答成功。Tunnel一覧権限不足、stream530、r9 API502、Claude未認証、Muse未対応が残る。Chromeは認証ページでフォームに到達せず3回失敗、投稿未実施。AGENTSの停止指定に従い追加検証を停止。Worker/イメージ未更新。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK-CURRENT.20261108.md)。
+
+
+## 2026-11-08: dynamicneko tree-viewのMuse切り替え（2026-11-09に配備）
+
+⚙️モーダルの排他的checkboxと接続先一覧にmuse-vmを追加し、既存ワーカーiframeと会話を保持して切り替える。owner/Origin/HMAC/userToken認証の専用中継を本体Workerへ追加し、既存コンテナの固定Tailscale bridgeへ履歴付きPOST。本体65テスト・Chrome11テスト・dynamicneko型検査/relay検査成功。新本体ルートから実muse-vmへの1回の推論と履歴トークン回答を確認。本番Worker/新UI未配備。現コンテナのframe親サイト許可のみ適用済みで、dynamicnekoオリジンのfixtureから実認証フォーム可視を確認。詳細は[TREE VIEW MUSE REPORT](REPORT.cloudflare-workers-github-oauth-1.TREE-VIEW-MUSE.20261108.md)。
+
+
+## 2026-11-09: tree-viewチャットのウィンドウ/キーボードとMuse接続先設定（未配備）
+
+dynamicneko/lib側でAIチャット全体のフローティング化、サイズ変更、タイトルバー操作、tree-view Muse接続先の切り替えを実装。本体の署名付き専用ルートでもcontainer/workerの選択に従う。既定はcontainer、fallbackなし。AIチャット固有のミニキーボードは後続指定で撤去し、OSソフトウェアキーボードを使う。パネル右下⬜︎のみ表示し、浮動窓では下部⬜︎を表示しない。履歴・プレビュー・日付結果・TerminalSurfaceを共通リサイズ関数へ統一。main-worker-muse-1の状態に依存しない推論成功は未確認。関連ブラウザ19件、本体17件、lib 57件、Apache設定13件成功。dynamicneko全体npm testは既存ページブラウザテストの複数失敗とsandbox iframe初期化timeoutを含む。詳細はdynamicneko/REPORT.dynamicneko.20261109.chat-window-keyboard.md。
+
+
+## 2026-11-09: 再テスト・Worker履歴ブリッジとtheme修正（未配備）
+
+Workerブリッジの単一入力制限を入口と共通の履歴検証に修正。単体/統合は成功したが、コンテナ実推論110秒timeout、Workerの初期health503・再検査はhealth200後に推論timeout。通信復旧とは扱わない。tailscale-wasm上部へ共通theme切替追加、関連7テスト成功。libのqueue受付表示もAI未受信を明示する文言へ修正。push/配備なし。詳細は[再テストREPORT](REPORT.cloudflare-workers-github-oauth-1.CHAT-RETEST.20261109.md)。
+
+
+## 2026-11-09 後続: UIを公開反映（コンテナ更新なし）
+
+本体Worker ca303d16-b1e6-4276-91d8-13f50ec41390、dynamicneko 7fd593e7-53d5-4606-b6f0-7b029e58661cをcontainers-rollout none/keep-varsで公開。公開JSはローカル本番ビルドとSHA256一致し、パネル⬜︎、chat固有キーボード撤去、共通リサイズ処理を含む。tailscale-wasmのthemeも配備済み。現libにはqueue件数配信/更新表示とトークンURL露出防止を配置し、observer/HTTP streamを再起動。公開conversation entry HTTP200で、チケット遷移にトークンフラグメントがないことを確認。iPhone実機PWAとログイン済み本番UI操作、Muse実推論は未確認。Git pushなし。詳細は[UI PUBLISH REPORT](REPORT.cloudflare-workers-github-oauth-1.UI-PUBLISH.20261109.md)とdynamicneko/REPORT.dynamicneko.20261109.chat-window-keyboard.md、lib/REPORT.lib.20261109.pwa-session-url.md。
+
+
+## 2026-11-13: 現コンテナのネットワーク配置・実検証
+
+現ENV優先でSSI/CGI、observer/LLM/WS・HTTP配信を配置。現在会話のread API照合、全4配信方式の実受信、Codex/Claude/Museの引用符付きprompt実回答を確認。内部ApacheのHost継承不備を回帰テスト後に修正。実Chromeの内部パネル投稿は同一会話queueへ1件受付、assistant応答は未確認。外部/libの管理者限定拒否を維持。Tunnel一覧権限不足、stream530/r9障害、Nemotron未対応、本体認証画面からの終端未検証が残る。entrypoint/cronの復帰経路を配置、再作成後は未検証。Chrome更新候補1件をREPORTに記載、更新未実施。最終ファイアウォールを再採取。Worker/イメージ未更新。詳細は [REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261113.md)。
+
+2026-11-13後続: パネル投稿を同一会話で実受信しSTREAM_POST_OK_20261113を返答。一致する待機queue0件とobserverのuser投稿を確認。利用者ブラウザでのassistant描画は未確認。詳細はNETWORK.20261113 REPORTの後続ターン節。
+
+2026-11-13後続修正: /neko askgkが利用する公開/lib/api/tunnelsまで一括拒否される403を修正。完全一致APIだけHMAC認証CGIへ接続し、他/libは拒否を維持。実公開URLで本体同形式のPOST登録・照会からCodex/Muse実回答成功、回帰18件成功。本体service binding/ログイン済みUI経由の再確認は未実施。Worker/イメージ更新なし。詳細はNETWORK.20261113 REPORT末尾。
+
+## 2026-11-13: 詳細プレビュー全画面時の本文幅（本番未反映）
+
+AIチャット詳細プレビューの⬜︎でモーダルだけが広がり、短い本文の吹き出しが内容幅のまま残る問題を修正。全画面モーダル内のchat-bubbleへwidth/max-width 100%とborder-boxを指定し、本文領域の横幅いっぱいに広げる。通常表示のサイズは維持。
+
+実際に生成したページをローカルChromeで開き、詳細プレビュー表示→⬜︎→🔲を操作。修正前は1440px画面で本文63pxのまま、修正後は本文領域1404pxまで拡張。390px画面でも354pxまで拡張し、横スクロールなし、通常表示への復帰を確認。APIはfixtureを使用し、本番の認証済み画面操作ではない。関連8テストと生成inline script4本のnode --check成功。根拠はartifacts/preview-width-20261113/。既存node_modulesの自己参照symlinkを避け、既存グローバルVitest 5.0.5を一時設定で使用（lockfile既定4系での実行ではない）。Workerデプロイ・Dockerビルド・git pushなし。
+
+## 2026-11-13: tree-view ワーカータブの会話中継（後続でWorkerのみ反映）
+
+公開mygwの `/lib/conversation-embed.html` が403、内部8445が200であることを確認。dynamicnekoの既定mygw埋め込みを所有者認証付きの同一origin中継へ変更し、本体 `/api/tree-view/conversation-stream-external/lib/*` にWorker署名・本人確認・パス制限付きの受信ルートを追加した。公開Apacheの拒否は維持する。
+
+ローカル実libと両中継実装を通すChrome試験で認証・依存資産・SSE・現在会話表示に成功。セッション保存先とユーザー照会はfixtureで、本番のログイン・service binding・WebSocket 101は未検証。push・デプロイ・コンテナビルドなし。本体Worker→dynamicnekoの順に反映して本番画面を確認する必要がある。経緯はdynamicnekoの `NOTICE.20261113.tree-view-worker-stream.md`。
+
+Muse経路の既存SPECに `/tailscale-wasm` ページを追加した。これは経路整理の文書更新であり、新しい経路IDの実装・推論送信・本番反映ではない。
+
+### 同日17:52 UTCの後続反映
+
+Wranglerのhelpと実装でコンテナ変更を省略する `--containers-rollout none` を確認し、`--keep-vars` と併用して本体→dynamicnekoを反映した。本体 `fe1c9bd8-908e-4e86-a175-bc326789a6e0`、dynamicneko `7ee55793-dc75-41d4-a719-9c6fa4f3425a`。Dockerビルド・コンテナ更新なし。指定されたMuseウィンドウ内のワーカー切替テスト、PWA限定パス補正、公開の認証境界とフロントエンドJSハッシュ一致を確認済み。本番の利用者ログインによる終端表示・WebSocket 101は未確認。上記の「未デプロイ」は初回ローカル検証時点の履歴。
+
+## 2026-11-13: Codexの日本語応答hookと起動時復元
+
+リポジトリの `containers/demo/codex-harness/` に定義・実体・復元スクリプトを保存し、DockerfileのCOPYとentrypointの毎回復元を追加した。現コンテナの同ディレクトリ、/root/.codex/hooks.json、起動entrypointにも適用。6テスト、既存設定保持・冪等性・壊れた設定の保護、隔離した起動ブロックの2回復元、shell構文、Codex strict-configの検証成功。
+
+hookの利用者信頼確認は変更していない。現在会話での自動発火、実再起動、イメージ再作成後の復元は未確認。Dockerビルド・Workerデプロイ・Git pushは今回のhook復元では行わない。rootの明示CODEX_HOMEまたは~/.codexが対象で、codex-webへは自動適用しない。手順と制約は `containers/demo/codex-harness/README.md`。
+
+## 2026-11-13: 本体DockerfileのCodex/Cloudflare CLI
+
+Codexの固定版をnpm latestで確認した0.169.0へ更新。公式cfのlatestは既存と同じ1.0.0-beta.31なので維持し、cloudflare別名のSSH用リンクとCodex/cfの導入版照合を追加した。隔離prefixでCodexの版・app-server・hooks機能を確認し、CLI関連12テスト成功。現コンテナのグローバルCLI・本番イメージは更新していない。再ビルドと再起動が必要で、この環境では実施しない。詳細は `REPORT.cloudflare-workers-github-oauth-1.CODEX-CF-CLI.20261113.md`。
+
+## 2026-11-14: ネットワーク復元とMuseタブのコンテナ依存除去（Worker未反映）
+
+現コンテナへENV優先のSSI/CGI・ソケット・observer・配信を配置。Codex/Museトンネル実回答、実Chromeパネル投稿の現在会話queue1件を確認。トンネル一覧は権限不足、Claude未認証、Nemotron未対応で全体degraded。
+
+本番配備コードのtree-view既定containerとコンテナ用事前検査、health外側20秒/内側28秒、投稿外側310秒/内側600秒を確認。両WorkerのMuseタブをWorker直通だけに修正し、コンテナ指定拒否と旧Cookie無効化を実装。本体63件、dynamicneko7件、実Chrome、両中継→実workerd WASM→Museのhealthと/ping成功（コンテナ参照0、投稿1、本人認証fixture）。Workerは未反映。詳細は[REPORT](REPORT.cloudflare-workers-github-oauth-1.NETWORK-MUSE.20261114.md)。
+
+2026-11-14後続: STREAM_POST_OK_20261114を含むパネル試験投稿を同一会話で実受信し識別子を返答。モデルへの入力到達を確認。ブラウザでの返答描画は未確認。両Workerの公開は承認待ちのまま。

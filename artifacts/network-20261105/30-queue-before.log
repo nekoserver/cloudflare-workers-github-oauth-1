@@ -1,0 +1,32 @@
+test_invalid_queue_ack_is_not_accepted (__main__.QueueInputTest.test_invalid_queue_ack_is_not_accepted) ... ok
+test_observation_cannot_enqueue (__main__.QueueInputTest.test_observation_cannot_enqueue) ... ok
+test_owned_thread_queues_once_to_same_thread (__main__.QueueInputTest.test_owned_thread_queues_once_to_same_thread) ... ERROR
+test_queue_failure_is_not_accepted_or_retried (__main__.QueueInputTest.test_queue_failure_is_not_accepted_or_retried) ... ok
+
+======================================================================
+ERROR: test_owned_thread_queues_once_to_same_thread (__main__.QueueInputTest.test_owned_thread_queues_once_to_same_thread)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/usr/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/root/lib/test/chat_console_queue_test.py", line 44, in test_owned_thread_queues_once_to_same_thread
+    outcome,calls=await self.exercise()
+                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/lib/test/chat_console_queue_test.py", line 38, in exercise
+    else:outcome=await observer.send_to_console(tmp+'/app.sock','fixed-thread','hello')
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/lib/ops/chat_observer.py", line 110, in send_to_console
+    resumed = await client.request('thread/resume', {'threadId': thread_id, 'excludeTurns': True})
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/lib/ops/chat_observer.py", line 94, in request
+    raise ConsoleInputError('console_in_use')
+chat_observer.ConsoleInputError: console_in_use
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.088s
+
+FAILED (errors=1)

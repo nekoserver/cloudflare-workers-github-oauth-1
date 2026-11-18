@@ -1,0 +1,32 @@
+{
+  "automated_tests": {
+    "passed": 138,
+    "suites": {
+      "ssi_template": 1,
+      "network_environment_cache": 8,
+      "installed_runtime": 4,
+      "python_chat_observer_queue": 52,
+      "llm_worker": 21,
+      "ruby_prompt": 16,
+      "node_stream_form": 36
+    }
+  },
+  "live": {
+    "mygw_websocket": "pass",
+    "mygw_sse": "pass",
+    "mygw_ndjson": "pass",
+    "mygw_jsonseq": "pass",
+    "codex_quoted_prompt": "pass_exact_reply",
+    "claude_quoted_prompt": "pass_exact_reply_after_binary_restore",
+    "single_thread_post": "pass_accepted_consumed_same_thread",
+    "single_thread_assistant_reply": "pass_actual_receipt_and_public_observer_acknowledgement",
+    "cloudflare_listing": "blocked_current_env_token_scope",
+    "stream_host": "http_530",
+    "r9_host": "http_502",
+    "real_browser_panel": "not_run"
+  },
+  "firewall": "captured_after_validation",
+  "security_update_candidates": 1,
+  "security_upgrades_applied": false,
+  "new_thread_forks": 0
+}

@@ -29,3 +29,7 @@ iframe CSP・postMessageのOriginを揃える。旧mygw / mynwも手動候補と
 コードのビルド成功、トンネル接続正常、公開ストリーム受信成功を別々に記録する。
 Dockerビルドはこのコンテナでは実行しない。
 MCP化は後続作業とし、この接続修正の前提にしない。
+
+## 2026-11-04: mygw投稿のアドホック対応
+
+SSHのCodexが所有する会話を別App Serverからresumeできなかったため、ユーザー承認で履歴を分岐した投稿用会話をmygwに作成し、observerの選択先を切り替えた。元のSSH会話とは以後同期しない。これは恒久設計ではなく暫定対応。仕様・制約・共通実行サーバーへの移行条件はlibリポジトリの `SPEC.lib.20261104.console-stream-adhoc.md` に記録。公開投稿200・accepted=trueとAI回答CONSOLE_POST_OKを確認済み。

@@ -14,8 +14,9 @@ function setup() {
   sql.exec(`CREATE TABLE user_sessions (user_id TEXT PRIMARY KEY);
     INSERT INTO user_sessions VALUES ('alice'), ('bob');
     CREATE TABLE countdown_events (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, label TEXT, target_at TEXT, group_id TEXT, created_at TEXT, created_by TEXT, creation_reason TEXT, deleted_at TEXT, deleted_by TEXT, deletion_reason TEXT);`);
+  sql.exec(readFileSync('migrations/0189_create_askgk_timeout_settings.sql', 'utf8'));
   const db = {
-    prepare: (query: string) => ({ bind: (...args: Array<string | null>) => ({ query, args }) }),
+    prepare: (query: string) => ({ first: async () => sql.prepare(query).get() ?? null, bind: (...args: Array<string | null>) => ({ query, args }) }),
     batch: async (statements: Array<{ query: string; args: Array<string | null> }>) => {
       sql.exec('BEGIN');
       try {
@@ -90,7 +91,7 @@ describe('Codex five-hour reset countdown', () => {
     await registerCodexResetCountdown(db, reply, now);
     await expect(registerCodexResetCountdown(db, 'リセット 不明', now)).rejects.toThrow();
     const fetcher = { fetch: vi.fn().mockRejectedValue(new Error('network failed')) };
-    await expect(runCodexResetCountdownCron({ DB: db, RUST_WORKER: fetcher as unknown as Fetcher })).rejects.toThrow('network failed');
+    await expect(runCodexResetCountdownCron({ DB: db, RUST_WORKER: fetcher as unknown as Fetcher })).rejects.toThrow('中継Worker(rust-worker-sqlx-d1)との通信に失敗しました');
     expect(sql.prepare('SELECT * FROM countdown_events').all()).toHaveLength(2);
   });
   it('rolls back logical deletion if inserting the replacement fails', async () => {

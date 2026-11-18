@@ -79,7 +79,7 @@ export function getThreadTrackerPage(username: string, assignedModelColors: Reco
     applyScoreVisibility();
     showJevScoreToggle.addEventListener('change',function(){document.cookie=SHOW_JEV_COOKIE+'='+(showJevScoreToggle.checked?'on':'off')+'; Path=/; Max-Age=31536000; SameSite=Lax; Secure';applyScoreVisibility();});
     showClefScoreToggle.addEventListener('change',function(){document.cookie=SHOW_CLEF_COOKIE+'='+(showClefScoreToggle.checked?'on':'off')+'; Path=/; Max-Age=31536000; SameSite=Lax; Secure';applyScoreVisibility();});
-    var FIXED_MODEL_DOT_COLORS={claude:'#f97316'};
+    var FIXED_MODEL_DOT_COLORS={claude:'#f97316',muse:'#2563eb'};
     function getModelDotColor(modelId){return FIXED_MODEL_DOT_COLORS[modelId]||(MODEL_COLORS&&MODEL_COLORS[modelId])||'';}
     function esc(value){var d=document.createElement('div');d.textContent=String(value==null?'':value);return d.innerHTML;}
     function fmt(value){try{return new Intl.DateTimeFormat('ja-JP',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));}catch(_){return value||'';}}

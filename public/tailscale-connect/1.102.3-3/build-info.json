@@ -1,0 +1,9 @@
+{
+  "package": "@tailscale/connect@1.102.3-3-tb31d8a75a-g5e651e16f",
+  "upstream": "https://github.com/tailscale/tailscale/tree/b31d8a75af15/cmd/tsconnect",
+  "integrity": "sha512-O7im3aW8KgQzyJ8M6csL5P85dubvUJvLIqCH1lAUx8OkMWR/CxS8bmoHfDjljm6xxGQIoqcbyQnU/9iKOwo/tw==",
+  "files": {
+    "pkg.js": "318a91bdbc32d4aa57a7ffa554368d390e96bf7128419b4561f98001e86e3795",
+    "main.wasm.gz": "fbf631187d2314c2406186a5acc22a53555f129ae6d0e2b95d443a3d7097af52"
+  }
+}

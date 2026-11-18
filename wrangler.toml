@@ -33,8 +33,15 @@ NOTIFY_TARGET = "worker"
 # 本体nekorootはmygwを維持。CFC用Tunnel・Secretとは分離する。
 # src/utils/containerEndpoints.tsと同じ接続先を使用する。
 NEKOROOT_HOSTNAME = "mygw.nekomaneki.work"
-# askgk転送先。会話配信と同じ稼働中トンネルへ送る。
-ASKGK_TUNNELS_URL = "https://mygw.nekomaneki.work/lib/api/tunnels"
+# 起動オプション(ユーザー指定、2026-11-13): "1" のときだけ、demoコンテナの起動時の lib の復元
+# (nekoserver/lib の restore-claude-host.sh)が、libを管理者専用のまま、経路ID(via)のある要求に
+# チャットの経路を通す。"0" では lib は一律に管理者専用。変えたらコンテナの再起動で反映される。
+LIB_ROUTE_ACCESS_CONTROL = "1"
+# askgkは独立側のCodex認証復旧まで、本体コンテナ(mygw)へ一時的に送る。
+# 経路一覧はsrc/data/askgk-routes.json。ASKGK_ROUTESのJSON設定で上書きできる。
+ASKGK_ROUTE_ID = "main"
+# Independent Gadgets page; API token is the MUSE_GADGET_SDK_TOKEN secret.
+MUSE_GADGET_RELAY_URL = "http://cf-demo-container:8766"
 
 # 必要なシークレット（wrangler secret putで設定）:
 #   wrangler secret put GITHUB_CLIENT_ID
@@ -118,6 +125,13 @@ binding = "DB"
 database_name = "workers-github-oauth"
 database_id = "abbe590b-f7ff-4b98-b61c-17c8cb18c8cf"
 
+# Museとの協議の記録(エージェントへの問い合わせ)。/muse-inquiriesのカンバンが読むだけで、書き込みはClaude Codeが
+# 問い合わせのたびに行う。人の問答集(ai_chat_shares)とは別のデータベース(ユーザー指定)。スキーマはmigrations-agent-inquiries/。
+[[d1_databases]]
+binding = "INQUIRY_DB"
+database_name = "agent-inquiries"
+database_id = "ab65ff96-6333-4673-9ad4-4324be622184"
+
 # Workers AI バインディング（PR要約に使用）
 [ai]
 binding = "AI"
@@ -132,8 +146,10 @@ binding = "AI"
 # ようにしているが、起動したまま放置しないよう運用で注意する。
 [[containers]]
 class_name = "DemoContainer"
+# Workers Builds の本番のデプロイ(npx wrangler deploy)で、Dockerfile からイメージを作る(ユーザー指定、2026-11-13。GitHub Actions は使わない)。
+# 2026-11-11〜13 はビルド済みのイメージをdigestで固定していた(Workers Builds の Docker ビルドが runc の /proc で落ちたため)。
+# 最後に動いたイメージは containers/demo/image.lock.json に記録してあり、ビルドが落ちたときはそのdigestをここに書けば戻せる。
 image = "./containers/demo/Dockerfile"
-# Purpose-specific bundle: Docker is optional; keep the development tools currently used.
 image_vars = { INSTALL_DOCKER = "false", INSTALL_VITEST = "true", INSTALL_TYPESCRIPT = "true", INSTALL_WRANGLER = "true" }
 max_instances = 1
 # standard-1(1/2 vCPU・4GiBメモリ・8GBディスク)。既定のlite(1/16 vCPU・
@@ -156,6 +172,27 @@ class_name = "DemoContainer"
 tag = "v1"
 new_sqlite_classes = ["DemoContainer"]
 
+# AIチャットのジョブ(src/durable/aichatJob.ts)。送信後にタブを閉じたり別ウィンドウへ移ったりしても、
+# 応答とその後のログ保存を最後まで行う(ユーザー指定、2026-11-07)。1回の質問ごとに1つのオブジェクトを
+# 使い、完了から24時間でデータを消す。DOのリクエスト数・実行時間・ストレージの使用量課金が発生する。
+[[durable_objects.bindings]]
+name = "AICHAT_JOB"
+class_name = "AichatJob"
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["AichatJob"]
+
+# Independent server-side WASM tailnet node for /tailscale-wasm.
+# No container image build is needed for this class.
+[[durable_objects.bindings]]
+name = "TAILSCALE_WASM"
+class_name = "TailscaleWasm"
+
+[[migrations]]
+tag = "v3-tailscale-wasm"
+new_sqlite_classes = ["TailscaleWasm"]
+
 # dynamicneko（Cloudflare Dynamic Worker Loader使用）への直接呼び出し。/neko hellodwが
 # 起動確認pingを送る。公開URLへの通常fetch()は*.workers.dev同士だとCloudflareに
 # HTTP 404 error code: 1042で拒否される（実際に本番で発生し確認済み）ため、
@@ -176,6 +213,13 @@ service = "rust-worker-sqlx-d1"
 [[services]]
 binding = "CF_AUTH"
 service = "cf-auth"
+
+# muse-monitor(読み取り専用のMuseシステムモニタ、別デプロイのWorker)への呼び出し。
+# /api/muse-monitor/:sectionがHMAC署名(MONITOR_HMAC_SECRET)付きで/api/hmac/*を呼ぶ。
+# 上と同じ理由(1042)でService Binding経由にする。
+[[services]]
+binding = "MUSE_MONITOR"
+service = "muse-monitor"
 
 # オブザーバビリティ設定
 [observability]

@@ -1,0 +1,57 @@
+npm notice run cloudflare-workers-github-oauth@1.0.0 npx
+npm notice run 'vitest' run src/aichat-askmuse-integration.test.ts src/views/aichatMuseHealth.test.ts --maxWorkers=1
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/views/aichatMuseHealth.test.ts (42 tests | 1 failed) 901ms
+     × tunnelsフォールバックは既定OFFで、保存・再表示・初期化できる 18ms
+ ❯ src/aichat-askmuse-integration.test.ts (25 tests | 1 failed) 371ms
+     × 初期モデルMuseかつTailscale未接続かつONの場合だけtunnelsへ変換する 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/aichat-askmuse-integration.test.ts > POST /api/aichat の /askmuse > 初期モデルMuseかつTailscale未接続かつONの場合だけtunnelsへ変換する
+AssertionError: expected { …(8) } to match object { usedModel: 'muse', …(2) }
+(6 matching properties omitted from actual)
+
+- Expected
++ Received
+
+  {
+-   "fallbackUsed": true,
+-   "response": "tunnelsの回答",
+-   "usedModel": "muse",
++   "response": "❌ /askmuse でエラーが発生しました: Muse投稿を停止しました。Tailscaleが停止中または未接続です。Museへは送信していません。",
++   "usedModel": "local/neko",
+  }
+
+ ❯ src/aichat-askmuse-integration.test.ts:138:35
+    136|     const message = '質問 "そのまま"\n次の行 “△”';
+    137|     const response = await post({ message, model: 'muse', museTunnelsF…
+    138|     expect(await response.json()).toMatchObject({ usedModel: 'muse', r…
+       |                                   ^
+    139|     expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable…
+    140|     expect(RUST_WORKER.fetch).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/views/aichatMuseHealth.test.ts > シグナル送信のモーダル > tunnelsフォールバックは既定OFFで、保存・再表示・初期化できる
+AssertionError: expected null not to be null
+ ❯ src/views/aichatMuseHealth.test.ts:244:26
+    242|     let view = open();
+    243|     const fallback = view.overlay.querySelector<HTMLInputElement>('[da…
+    244|     expect(fallback).not.toBeNull();
+       |                          ^
+    245|     expect(fallback!.checked).toBe(false);
+    246|     fallback!.click();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 65 passed (67)
+   Start at  00:37:45
+   Duration  12.99s (transform 8.03s, setup 127ms, import 9.37s, tests 1.27s, environment 1.50s)

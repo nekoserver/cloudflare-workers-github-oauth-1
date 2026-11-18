@@ -2,20 +2,48 @@
 
 **対象**: このリポジトリでRustをWASM化してWorker/ブラウザ上で実行する一連の実装(`/sha256-wasm`、`/neko 256`、`/wasm-modules`、`/file-deps`)で得た知見・落とし穴・忘れると損する手順をまとめる。今後同様のRust/WASM機能を追加するときに最初に読むこと。
 
+## モジュール一覧と数え方（2026-11-13）
+
+本体の自前Rustクレートは9件。次表のCLI版は今回の隔離検証で生成に使用した版、バイナリの有無はローカルcheckoutの`public/wasm/`を対象とする。本番Workerのアップロード数・現在の配信内容を表すものではない。
+
+| クレート | 主な処理 | 検証時CLI | 保存済みバイナリ |
+|---|---|---|---|
+| `dig-wasm` | DNSパケット生成・解析（通信はJS側） | 0.2.127 | `dig_bg.wasm` |
+| `factor-wasm` | 素因数分解 | 0.2.127 | `factor_bg.wasm` |
+| `gh-wasm` | GitHubリポジトリ検証・PR等の整形 | 0.2.127 | `gh_bg.wasm` |
+| `jev-wasm` | 評価計画・API要求生成・応答解析 | 0.2.128 | `jev_bg.wasm` |
+| `ls-wasm` | 仮想一覧の整形 | 0.2.127 | `ls_bg.wasm` |
+| `msb-wasm` | コマンドヘルプ・ツリー表示 | 0.2.128 | `msb_bg.wasm` |
+| `sha256-wasm` | SHA-256計算 | 0.2.127 | `sha256_bg.wasm` |
+| `sqlx-wasm` | INSERT文・パラメータの生成 | 0.2.127 | `sqlx_bg.wasm` |
+| `tree-wasm` | TSV一覧からツリー整形 | 0.2.127 | なし（検証用生成物は別領域） |
+
+保存済み8バイナリのproducersにはrustc **1.94.1**が記録されている。今回のRust 1.100.0による生成物とは区別する。サイズ・SHA256・producersの採取結果は[current-public-wasm.json](artifacts/rust-1.100-20261113/current-public-wasm.json)、CLI生成結果は[bindgen-results.json](artifacts/rust-1.100-20261113/bindgen-results.json)に保存している。
+
+Rust以外では`public/wasm/`にGo製の`go-diff.wasm`・`gh-attach.wasm`・`gron.wasm`・`sqlc.wasm`と対応するGoランタイムJSがある。外部配布のRuby WASM、Tailscale WASM、ast-grep/tree-sitter等も別の依存であり、ルートのRustツールチェーン固定で再生成される対象ではない。Tailscaleの運用は[専用NOTICE](NOTICE.cloudflare-workers-github-oauth-1.muse-status-wasm.20261107.md)を参照する。
+
+「ソースのクレート数」「静的アセットのファイル数」「Workerに同梱するWASMモジュール数」「外部から実行時に取得するWASM」は分けて数える。[2026-09-29の棚卸し](NOTICE.cloudflare-workers-github-oauth-1.cloudflare-wasm-inventory.20260929.md)の8個は当時のWranglerバンドルの実測値であり、現在の個数として転記しない。今回は本番バンドルの再採取をしていない。
+
+## Rust 1.100.0対応で確認したこと
+
+- MSBのロックは0.2.128、旧ビルドスクリプトのCLIは0.2.127で、実生成時のスキーマ不一致を再現。スクリプトを0.2.128へ修正した。
+- 本体9クレートのネイティブテストは合計54件成功（factor/sha256は各0件）、全9件のWASM releaseビルド・JS生成が成功。Node・Chrome・workerdで全9モジュールの実関数結果も確認した。
+- 別リポジトリの`rust-worker-sqlx-d1`はネイティブ150件、WASM release、workerdの`/ping`を確認。本体の9モジュールには数えない。
+- 本体9件と別Workerの計10ロックファイルはハッシュ不変。アプリのRustソース、既存の配信用JS/WASMは変更していない。
+
+以上は保存済みレポート・ログに記録された隔離検証の結果で、今回のNOTICE編集時にコンパイルを再実行した結果ではない。本番デプロイ、認証済み本番画面、実D1問い合わせ、別Workerの公開ビルド工程全体は未検証。再生成時にはJSとWASMを必ず同じ生成物の組で扱う。
+
 ---
 
-## 1. この環境のRustツールチェーン
+## 1. Rustツールチェーンとビルド条件（2026-11-13更新）
 
-- `cargo`/`rustc` はプリインストール済み(バージョンは都度 `rustc --version` で確認)。
-- `wasm32-unknown-unknown` ターゲットは未インストール状態からでも追加できる:
-  ```bash
-  rustup target add wasm32-unknown-unknown
-  ```
-- crates.io からの依存取得・ビルドはネットワーク的に問題なく通る。
-- `wasm-bindgen-cli` は `cargo install` で入る。**インストールするバージョンは、依存する `wasm-bindgen` crateのバージョンと一致させること**(不一致だとJSグルーコード生成時にエラーになる)。
-  ```bash
-  cargo install wasm-bindgen-cli --version 0.2.127
-  ```
+`rust-toolchain.toml`はRust **1.100.0**、`minimal`、`wasm32-unknown-unknown`を指定する。既存クレートのeditionは2021のまま。コンパイラを更新しても、保存済み・本番配信中のWASMが自動で更新されるわけではない。
+
+- 公式のコンパイル済みツールチェーン・CLIを使い、取得物は上流のSHA256と照合する。外部ツールのソースインストールを既定にしない。
+- wasm-bindgenの互換条件は**SCHEMA_VERSIONの一致**。通常はCargo.lockのcrate版とCLI版をそろえる。リリース番号だけで非互換とは判断しない（末尾の互換性節を参照）。
+- tree/msb/sqlxのビルドスクリプトは、テストとビルドの両方で`--locked`を指定する。依存更新時にはロックとCLI指定を一緒に確認する。
+- Cargoの中間成果物配置と、最終cdylibの`target/wasm32-unknown-unknown/release/<crate>.wasm`を区別する。`CARGO_TARGET_DIR`を指定する場合はスクリプトの参照先も別途確認する。
+- このコンテナではソースのコンパイル・Dockerビルドを実行しない。以下のビルド例は対応する別環境での手順であり、実行条件は[AGENTS.md](AGENTS.md)・[AGENT.md](AGENT.md)を優先する。過去のネットワーク疎通やビルド成功を、現在の実行許可・環境保証として扱わない。
 
 ## 2. 純Rustクレート(Cのコード生成を含まない)はwasm32ビルドが通る
 
@@ -28,7 +56,7 @@ wasm-bindgen --target web --out-dir ../../public/wasm --out-name sha256 \
   target/wasm32-unknown-unknown/release/sha256_wasm.wasm
 ```
 
-## 3. C言語のコード生成を含むクレートはこの環境ではwasm32ビルドできない(重要な制約)
+## 3. C言語のコード生成を含むクレートで遭遇した制約（過去の検証）
 
 `tree-sitter-typescript` のような、tree-sitterのパーサーがC言語で生成されているクレートを `wasm32-unknown-unknown` 向けにビルドしようとすると、C toolchain側で失敗する:
 
@@ -36,7 +64,7 @@ wasm-bindgen --target web --out-dir ../../public/wasm --out-name sha256 \
 fatal error: 'stdlib.h' file not found
 ```
 
-原因は、wasm32向けのCヘッダー一式(WASI SDK等の`wasm32`向けsysroot)がこの環境に存在せず、`apt-get`でのインストールも制限されているため追加できないこと。
+当時の環境にはwasm32向けのCヘッダー一式（WASI SDK等のsysroot）がなく、追加導入も制限されていた。これは当時の構成に対する結果であり、Cを含むすべてのクレートが原理的にWASM化できないという意味ではない。現在の作業では第1節の実行条件に従う。
 
 **この制約により、「ast-grepを自前のRustクレートとして書いてWASM化する」計画は断念した。** tree-sitter文法(パーサー)を自前でwasm32ビルドする必要がある機能は、この環境では実現できない。
 
@@ -159,7 +187,7 @@ app.get('/sha256-wasm', authMiddleware, async (c) => {
 
 `/wasm-modules`ページでWASMモジュールの起動時読み込みON/OFFをD1に保存できるようにしたが、Cloudflare Workersには「今すぐ再起動する」という明示的な操作が無い。設定は次にWorker isolateが新規に立ち上がったタイミング(次回のコールドスタート)から反映される。この制約はUIに明記しておくこと(ユーザーが「設定を保存したのに反映されない」と混乱するのを防ぐため)。
 
-## 10. vitest(Node)環境では`wasm-bindgen --target web`出力を実際に実行できない(既存の全モジュールで共通の制約)
+## 10. 既存のVite/vitest設定でWASMの静的importが失敗する場合
 
 `sha256WasmServer.ts`/`factorWasmServer.ts`/`digWasmServer.ts`/`lsWasmServer.ts`のように、
 `public/wasm/<name>.js`から`initSync`を呼び`.wasm`を静的importするサーバー側実装を、
@@ -180,21 +208,15 @@ Cannot find module './factor_bg.js' imported from .../public/wasm/factor_bg.wasm
 バイナリの宣言済みimportをNodeの実モジュール解決にかけてしまい、実在しない
 `<name>_bg.js`を本当に`import`しようとしてエラーになる。
 
-**結論・対処**: この制約により、**このリポジトリのvitestテストではRust/WASM機能の
-「実際の計算結果」をNode経由で検証できない**。既存のsha256/factor/digも同様の理由で、
-統合テスト側は次の2点だけを検証し、実行結果の正しさの検証はRust側の`cargo test`
-(`wasm/<name>-wasm/src/lib.rs`内の`#[cfg(test)] mod tests`、JsValueに依存しない
-`_impl`関数を経由してネイティブでもテスト可能にする)に完全に委ねる設計にしている:
-  1. `index.ts`が対象モジュールをdynamic importで正しく配線しているか(ソース文字列検索)
-  2. `/wasm-modules`ページでの無効化設定が尊重され、無効時はWASMを一切実行せずに
-     エラーメッセージを返すか
+**対処と検証範囲**: 既存のVite/vitest統合テストでは、dynamic importの配線と無効化設定を確認する。計算ロジックはRustのネイティブテストでも確認できるが、これだけでWASMバイナリやJSグルーの実行成功まで保証しない。
 
-新しいWASMモジュールを追加するときも、TSの統合テストで「実際にWASMを実行して結果を
-検証する」テストを書こうとして原因不明のエラーに時間を溶かさないよう、最初から
-上記2点(配線・無効化)のみをTS側でテストし、計算ロジック自体はRustの`cargo test`で
-テストすること。
+Node自体で実行できないわけではない。2026-11-13の隔離検証では、JSグルーへ対応するバイナリを明示的に渡すハーネスで、本体9モジュールの実関数結果をNode・Chrome・workerdそれぞれで確認した。Viteの静的importを通す統合テストとは別の検証経路である。実行ハーネスと結果は[調査レポート](REPORT.cloudflare-workers-github-oauth-1.RUST-1.100.20261113.md)および[根拠ログ](artifacts/rust-1.100-20261113/)を参照。
 
 ## 関連ドキュメント
 
 - [`wasm/README.md`](wasm/README.md) — WASMモジュールのビルド手順、サーバー側での再利用方法
 - 関連PR: #1353(陸地タップ判定、WASM本題とは無関係だが同期間の作業)、#1354(CSP修正)、#1355(`/neko 256`)、#1356(`/wasm-modules`)、#1357(`/file-deps`)
+
+## 2026-11-13補足: リリース版とスキーマ版の区別
+
+wasm-bindgenのcrate/CLIのリリース版番号だけでは互換性は断定できない。0.2.129のwasm-bindgen-sharedはSCHEMA_VERSION="0.2.128"を使い、CLI 0.2.128でも実生成・workerdの/pingが成功した。一方MSBのschema 0.2.128とCLI 0.2.127は実際にエラーになる。版をそろえる運用を基本にしつつ、例外は上流定数と実処理で確認する。根拠: https://github.com/wasm-bindgen/wasm-bindgen/blob/0.2.129/crates/shared/src/lib.rs 。今回のRust 1.100検証結果はREPORT.cloudflare-workers-github-oauth-1.RUST-1.100.20261113.md。

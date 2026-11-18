@@ -106,11 +106,12 @@ describe('🔑ボタン全キーワードハイライト修正: クリックハ�
     expect(fn).toContain('marks.length === 0');
   });
 
-  it('marks がある場合は historyModalHighlightActive を反転する', () => {
+  it('marks がある場合は現在の段階から次の段階(3段階)へ進める', () => {
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
-    const fn = html.slice(idx, idx + 1000);
-    expect(fn).toContain('!historyModalHighlightActive');
+    const fn = html.slice(idx, idx + 1600);
+    expect(fn).toContain('currentKeywordToggleMode(historyModalHighlightActive');
+    expect(fn).toContain('nextKeywordToggleMode(');
   });
 });
 

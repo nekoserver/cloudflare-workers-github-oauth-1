@@ -1,5 +1,6 @@
 import { prepareImageRecord } from './containerImageRecords';
 import { analyzeBuildLog } from './moonbitBuildLog';
+import { parseCacheEffects } from './containerBuildCacheEffects';
 export interface BuildTimingStep { id: number; label: string; state: 'running' | 'done' | 'cached' | 'error' | 'canceled'; seconds: number | null }
 export interface BuildTimingRecord { snapshotKey: string; buildUuid: string; createdOn: string | null; status: string | null; logComplete: boolean; collectedAt: string; steps: BuildTimingStep[] }
 
@@ -33,6 +34,8 @@ export async function storeBuildTimings(db: D1Database, build: {buildUuid:string
   const statements = [db.prepare(`INSERT OR IGNORE INTO cf_container_build_measurements
     (snapshot_key,build_uuid,build_created_on,build_status,log_complete,step_count,terminal_count) VALUES (?,?,?,?,?,?,?)`)
     .bind(snapshotKey,build.buildUuid,build.createdOn ?? null,build.status,Number(complete),steps.length,steps.filter(s=>s.state !== 'running').length)];
+  // ソースからのコンパイル時間とキャッシュからのインストール時間(Dockerfileが出すCACHE_EFFECTの行)。ビルドのたびに記録する。
+  for (const effect of parseCacheEffects(build.log)) statements.push(db.prepare(`INSERT OR IGNORE INTO cf_container_build_cache_effects (snapshot_key,build_uuid,package_name,version,compile_seconds,install_seconds,saved_seconds,source_bytes,package_bytes) VALUES (?,?,?,?,?,?,?,?,?)`).bind(snapshotKey,build.buildUuid,effect.packageName,effect.version,effect.compileSeconds,effect.installSeconds,effect.savedSeconds,effect.sourceBytes,effect.packageBytes));
   for (const step of steps) statements.push(db.prepare(`INSERT OR IGNORE INTO cf_container_build_steps (snapshot_key,step_id,label,state,seconds) VALUES (?,?,?,?,?)`).bind(snapshotKey,step.id,step.label,step.state,step.seconds));
   const imageRecord = await prepareImageRecord(db,{
     schemaVersion:1,kind:'build-timing',build:{buildUuid:build.buildUuid,status:build.status,createdOn:build.createdOn ?? null},

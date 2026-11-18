@@ -1,11 +1,10 @@
-import { CONTAINER_ENDPOINTS } from './containerEndpoints';
+import { askgkEngine, resolveAskgkRoute, type AskgkRouteSettings } from './askgkRoutes';
+import { DEFAULT_ASKGK_TIMEOUT_SECONDS, readAskgkTimeoutSetting } from './askgkTimeoutSettings';
+type AskSettings = AskgkRouteSettings & { DB?: D1Database };
 
 // Service Bindingのfetch()に渡すパスのホストは、リクエストがCloudflareの
 // 内部ネットワークを通り外へ出ないため任意の値でよい(dynamicWorkerPing.tsと同じ)。
 const SEND_PATH = 'https://internal/tunnel-signer/send';
-
-/** 署名付きPOSTは会話配信と同じ稼働中トンネルへ送る。環境設定で上書き可能。 */
-const DEFAULT_TUNNELS_URL = CONTAINER_ENDPOINTS.tunnels;
 
 export type AskFetcher = Pick<Fetcher, 'fetch'>;
 
@@ -68,13 +67,53 @@ export function resolveAskgkCommand(input: string): string {
  * 質問と区別しているため(2026-10-04、接頭語を剥がして渡してしまい先方の
  * 判定が効かなくなる不具合があった)。
  */
-export async function askTunnelSigner(fetcher: AskFetcher, message: string, tunnelsUrl?: string): Promise<AskTunnelSignerResult> {
-  const payload = JSON.stringify({ status: 'healthy', format: 'json', message: resolveAskgkCommand(message) });
+export async function askTunnelSigner(fetcher: AskFetcher, message: string, routeSettings?: string | AskSettings): Promise<AskTunnelSignerResult> {
+  const settings: AskSettings | undefined = typeof routeSettings === 'string' ? { ASKGK_TUNNELS_URL: routeSettings } : routeSettings;
+  const url = resolveAskgkRoute(settings, askgkEngine(message));
+  const timeoutSeconds = settings?.DB ? (await readAskgkTimeoutSetting(settings.DB)).timeoutSeconds : DEFAULT_ASKGK_TIMEOUT_SECONDS;
+  const controller = new AbortController();
+  let askId: string | undefined;
+  let timer: ReturnType<typeof setTimeout>;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`askgkがタイムアウトしました(${timeoutSeconds}秒)${askId ? `。処理は継続する場合があります。ask_id: ${askId}` : ''}`));
+      controller.abort();
+    }, timeoutSeconds * 1000);
+  });
+  const execute = async (): Promise<AskTunnelSignerResult> => {
+    // Submit exactly once. Subsequent POSTs only look up the same job ID.
+    let upstream = await sendTunnelRequest(fetcher, url, { status: 'healthy', format: 'json', message: resolveAskgkCommand(message), wait_seconds: 0 }, controller.signal);
+    while (upstream.ask_status === 'pending' || upstream.ask_status === 'running') {
+      if (typeof upstream.ask_id !== 'string' || !/^(?:codex|claude|nemotron|muse)-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(upstream.ask_id)) {
+        throw new Error('tunnelsの処理中応答に有効なask_idがありません');
+      }
+      if (askId && askId !== upstream.ask_id) throw new Error('tunnelsの状態照会でask_idが変わりました');
+      askId = upstream.ask_id;
+      await new Promise<void>(resolve => setTimeout(resolve, 1000));
+      if (controller.signal.aborted) throw new Error('askgkの待機を終了しました');
+      upstream = await sendTunnelRequest(fetcher, url, { format: 'json', ask_id: askId }, controller.signal);
+    }
+    if (upstream.ask_error || upstream.ask_status === 'failed') throw new Error(describeTunnelExecutionError(upstream.ask_error || 'failed', askgkEngine(message)));
+    if (typeof upstream.reply !== 'string' || upstream.reply.length === 0) throw new Error(`tunnelsの応答にreplyが含まれていません`);
+    return {
+      reply: upstream.reply,
+      llmModel: typeof upstream.llm_model === 'string' && upstream.llm_model.length > 0 ? upstream.llm_model : undefined,
+      llmEffort: typeof upstream.llm_effort === 'string' && upstream.llm_effort.length > 0 ? upstream.llm_effort : undefined,
+    };
+  };
+  try { return await Promise.race([execute(), expired]); }
+  finally { clearTimeout(timer!); }
+}
 
+type TunnelResponse = { reply?: string; llm_model?: unknown; llm_effort?: unknown; ask_status?: string; ask_id?: string; ask_error?: string };
+async function sendTunnelRequest(fetcher: AskFetcher, url: string, payload: Record<string, unknown>, signal: AbortSignal): Promise<TunnelResponse> {
   const res = await fetcher.fetch(SEND_PATH, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url: tunnelsUrl?.trim() || DEFAULT_TUNNELS_URL, contentType: 'application/json', body: payload }),
+    body: JSON.stringify({ url, contentType: 'application/json', body: JSON.stringify(payload) }),
+    signal,
+  }).catch(() => {
+    throw new Error('中継Worker(rust-worker-sqlx-d1)との通信に失敗しました。tunnels.rb以降の接続状態は未確認です。');
   });
 
   if (!res.ok) {
@@ -95,23 +134,31 @@ export async function askTunnelSigner(fetcher: AskFetcher, message: string, tunn
   if (typeof sendResult.body !== 'string') {
     throw new Error('rust-worker-sqlx-d1の応答にbodyが含まれていません');
   }
-  if (!sendResult.ok) {
-    throw new Error(`tunnels応答異常: HTTP ${sendResult.status} ${sendResult.body.slice(0, 200)}`);
+  if (!sendResult.ok || typeof sendResult.status !== 'number' || sendResult.status < 200 || sendResult.status >= 300) {
+    throw new Error(`tunnels.rbへの接続・HTTP応答に異常があります: HTTP ${sendResult.status ?? '不明'}。LLM worker・Tailscale・Museへの到達は未確認です。`);
   }
 
-  let upstream: { reply?: string; llm_model?: unknown; llm_effort?: unknown };
+  let upstream: TunnelResponse;
   try {
     upstream = JSON.parse(sendResult.body);
+    if (!upstream || typeof upstream !== 'object' || Array.isArray(upstream)) throw new Error('invalid response');
   } catch {
     throw new Error(`tunnelsの応答がJSONとして解釈できませんでした: ${sendResult.body.slice(0, 200)}`);
   }
 
-  if (typeof upstream.reply !== 'string' || upstream.reply.length === 0) {
-    throw new Error(`tunnelsの応答にreplyが含まれていません: ${sendResult.body.slice(0, 200)}`);
-  }
-  return {
-    reply: upstream.reply,
-    llmModel: typeof upstream.llm_model === 'string' && upstream.llm_model.length > 0 ? upstream.llm_model : undefined,
-    llmEffort: typeof upstream.llm_effort === 'string' && upstream.llm_effort.length > 0 ? upstream.llm_effort : undefined,
+  return upstream;
+}
+
+/** An execution error describes only the stage that actually responded. */
+function describeTunnelExecutionError(code: string, engine?: string): string {
+  const name = engine === 'muse' ? 'Muse' : engine || '指定エンジン';
+  const messages: Record<string, string> = {
+    unsupported_engine: `tunnels.rbの実行先が${name}に対応していません (unsupported_engine)。LLM workerの対応版・送り先設定を確認してください。Tailscale・Museへの接続は未確認です。`,
+    codex_worker_unavailable: 'tunnels.rbからLLM workerに接続できません (codex_worker_unavailable)。実行ソケットとworkerの起動状態を確認してください。Tailscale・Museへの接続は未確認です。',
+    muse_connection_failed: 'Tailscale経由のMuse接続に失敗しました (muse_connection_failed)。Tailscaleの接続状態・宛先ノード・Museの待受を確認してください。この応答だけではTailscaleの切断とは断定できません。',
+    muse_not_authenticated: 'LLM workerのMUSE_API_KEYが未設定です (muse_not_authenticated)。Museへの接続は未確認です。',
+    muse_authentication_failed: 'Museの認証に失敗しました (muse_authentication_failed)。LLM workerのMUSE_API_KEYを確認してください。',
+    llm_timeout: 'LLM実行の応答待ちがタイムアウトしました (llm_timeout)。Tailscaleの切断やエンジン非対応とは断定できません。',
   };
+  return messages[code] ?? `tunnels実行失敗: ${code}。この応答だけでは接続障害の箇所を特定できません。`;
 }

@@ -13,8 +13,16 @@ describe('Codex質問のチャット表示と送信', () => {
     expect(colors.claude).not.toBe(colors.codex);
     expect(html).toContain('<option value="claude"');
     expect(html).toContain('<option value="codex"');
+    expect(list).toContainEqual({ value: 'muse', label: 'muse', commandOnly: true });
+    expect(colors.muse).not.toBe(colors.claude);
+    expect(html).toContain('<option value="muse"');
   });
-  it.each(['codex', 'claude'].flatMap(model => ['"', '“'].map(quote => ({ model, quote }))))('$model: 開始引用符$quoteの質問は本文だけを表示・共有し、送信コマンドは保持する', async ({ model, quote }) => {
+  it('/askmuseの質問は本文だけを表示する', () => {
+    const html = getAiChatPage({ username: 'test', aiChatModel: 'test-model' });
+    const format = new Function('return ' + html.match(/var formatAskgkPromptQuestion = ([\s\S]*?\n\s*\});/)![1])() as (m: string) => string;
+    expect(format('/askmuse prompt="質問本文"')).toBe('質問本文');
+  });
+  it.each(['codex', 'claude', 'muse'].flatMap(model => ['"', '“'].map(quote => ({ model, quote }))))('$model: 開始引用符$quoteの質問は本文だけを表示・共有し、送信コマンドは保持する', async ({ model, quote }) => {
     const question = '◯  詳しく\n"引用"を説明してください';
     const message = '/neko askgk ' + model + '_prompt=' + quote + question + '"';
     const html = getAiChatPage({ username: 'test', aiChatModel: 'test-model' });
@@ -35,8 +43,13 @@ describe('Codex質問のチャット表示と送信', () => {
       clearAttachedImage() {}, chatSendBtn: { disabled: false }, lastModel: 'test-model',
       langModeSelect: { value: 'a' }, currentThreadId: '', aichatStreamToggle: { checked: false },
       AICHAT_TUNABLE_MODEL_CONFIG: {},
-      fetch: async (_url: string, init: { body: string }) => { sent.push(JSON.parse(init.body).message); return {}; },
-      readAichatResponse: async () => ({ response: '回答', usedModel: model, modelColor: '#0ea5e9', shareId: 'share' }),
+      // 2026-11-07: 送信はAIチャットのジョブ(Durable Object)に登録し、結果はrunAichatJobが/api/aichatと同じ形で返す。
+      // Museの枠色の監視へは、ジョブの結果のmuseTailscale(元はX-Muse-Tailscaleヘッダー)を伝える。
+      runAichatJob: async (payload: { message: string }) => { sent.push(payload.message); return { response: '回答', usedModel: model, modelColor: '#0ea5e9', shareId: 'share' }; },
+      museHealthWatch: { beginSubmission() {}, finishSubmission() {} },
+      resumePendingAichatJobs() {},
+      saveAichatDraft() {}, aichatDraftStorage: null,
+      beginAichatPending() {}, endAichatPending() {},
       prepareAichatRubyResponse: (data: unknown) => data,
       extractRespUsage() {}, showAichatSendToast() {}, MODEL_COLORS: {} as Record<string, string>,
       getModelDotColor(modelId: string) { return bindings.MODEL_COLORS[modelId] || ''; },

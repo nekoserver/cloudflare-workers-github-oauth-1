@@ -20,7 +20,7 @@ if [[ "$installed_version" != "$bindgen_version" ]]; then
   exit 1
 fi
 
-cargo test --manifest-path "$crate_dir/Cargo.toml"
+cargo test --locked --manifest-path "$crate_dir/Cargo.toml"
 cargo build --release --locked --target wasm32-unknown-unknown --manifest-path "$crate_dir/Cargo.toml"
 mkdir -p "$out_dir"
 wasm-bindgen \

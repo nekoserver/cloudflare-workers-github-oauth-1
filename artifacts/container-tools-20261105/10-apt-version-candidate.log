@@ -1,0 +1,11 @@
+3.2.1ubuntu0.1
+apt:
+  Installed: 3.2.1ubuntu0.1
+  Candidate: 3.2.1ubuntu0.1
+  Version table:
+ *** 3.2.1ubuntu0.1 500
+        500 http://archive.ubuntu.com/ubuntu resolute-updates/main amd64 Packages
+        500 http://security.ubuntu.com/ubuntu resolute-security/main amd64 Packages
+        100 /var/lib/dpkg/status
+     3.2.0 500
+        500 http://archive.ubuntu.com/ubuntu resolute/main amd64 Packages

@@ -1,0 +1,9 @@
+# T3埋め込みログイン修正の撤回
+
+## 2026-10-29: T3埋め込みCookie利用許可の試行を撤回（PWA問題は未解決）
+
+別タブではT3にログイン済みだが、Tree View PWAの通常埋め込み・切り出しウィンドウの両方でPairingに戻る問題。proxyにStorage Access許可UIと、検証済みの同一native Cookieを非Partitionedとして再設定する明示POSTを追加し、iframe sandboxも更新した。Nodeの認証/拒否系10件、既存配線10件、Chromium表示6件、型チェックと公開HTTPでの隔離native認証試験は成功したが、iOS実機のPWAで成功を確認しないまま操作を依頼した。その後、利用者からPWA化後にボタンを押すと再びPairingになったと報告された。ローカル検証を端末での引き継ぎ成功の根拠にはできず、この手順は撤回した。
+
+反映したDynamicneko version 4040f9eb-489a-48ae-b476-5d20358c7b7aを撤回し、直前のc6349277-f299-46b3-95c8-ae8bba0d6131へ100%ロールバック済み。APIでactive deploymentを確認。/usr/local/libexec/t3-embed-proxy.cjsも退避した変更前ファイルに復元し、中継プロセスを監視ループから再起動した。native T3の既存利用者sessionに対する失効操作はしていない。検証専用sessionは試験後に失効済み。失敗したソース変更は作業ツリーから撤回し、案と試験はroot専用 /root/.local/state/t3-window-restore/20261029T103846Z/ に保存。Dockerビルド、コンテナimage変更、Secret変更、commit/pushは未実施。
+
+PWA内T3の認証引き継ぎは未解決。別タブでログインできること、native sessionの発行、Cookieを明示送信したHTTP認証成功を、PWA iframeで認証が使える証拠として扱わない。Storage Access許可のみでSafari/PWA間の認証状態が移ると案内しない。利用者に再入力・再インストールを繰り返し依頼する段階ではない。

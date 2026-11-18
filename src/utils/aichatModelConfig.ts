@@ -1,5 +1,6 @@
 export const CODEX_ASKGK_MODEL = { value: 'codex', label: 'codex' };
 export const CLAUDE_ASKGK_MODEL = { value: 'claude', label: 'claude' };
+export const MUSE_ASKGK_MODEL = { value: 'muse', label: 'muse' };
 
 export const AICHAT_COLOR_PALETTE: readonly string[] = [
   '#4f46e5', // indigo
@@ -37,6 +38,7 @@ export const AICHAT_COLOR_PALETTE: readonly string[] = [
  */
 const FIXED_MODEL_COLORS: Readonly<Record<string, string>> = {
   claude: '#f97316', // オレンジ
+  muse: '#2563eb', // 青(ユーザー指定、2026-11-06)
   '@cf/deepseek-ai/deepseek-v4.1-flash-1017': '#14b8a6', // ティール
 };
 

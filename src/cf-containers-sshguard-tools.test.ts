@@ -7,15 +7,14 @@ const entrypoint = readFileSync('containers/demo/entrypoint.sh', 'utf8');
 describe('demoコンテナのsshguardと検索ツール', () => {
   it('sshdのログをファイルに出し、sshguardがそれを監視してnftablesで遮断する', () => {
     // sshdは-D -eで標準エラーに出し、時刻を付けて/tmp/sshd.logへ追記する(sshguardが読める形式)
-    expect(entrypoint).toContain('/usr/sbin/sshd -D -e -p 2222 2> >(');
+    expect(entrypoint).toContain('"$SSHD_BIN" -D -e -p 2222 2> >(');
     expect(entrypoint).toContain('done >> /tmp/sshd.log');
     expect(entrypoint).toContain('BACKEND="/usr/libexec/sshguard/sshg-fw-nft-sets"');
     expect(entrypoint).toContain('LOGREADER="LANG=C tail -F -n 0 /tmp/sshd.log"');
     expect(readFileSync('containers/demo/server.js', 'utf8')).toContain("'/tmp/sshguard.log'");
   });
-  it('jjをcrates.ioのソースからビルドしてPATHに置く', () => {
-    expect(dockerfile).toContain('cargo install --locked jj-cli@${JJ_VERSION}');
-    expect(dockerfile).toContain('COPY --from=jj-build /usr/local/cargo/bin/jj /usr/bin/jj');
+  it('jjは公式のリリースのバイナリ(musl)を取得してPATHに置く', () => {
+    expect(dockerfile).toContain('install -m 755 /tmp/jj/jj /usr/bin/jj');
   });
 });
 

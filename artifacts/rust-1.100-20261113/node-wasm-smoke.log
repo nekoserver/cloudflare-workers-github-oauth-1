@@ -1,0 +1,16 @@
+PASS dig: Rust 1.100 release WASM + matching JS bindings, real export result
+PASS factor: Rust 1.100 release WASM + matching JS bindings, real export result
+PASS gh: Rust 1.100 release WASM + matching JS bindings, real export result
+PASS jev: Rust 1.100 release WASM + matching JS bindings, real export result
+PASS ls: Rust 1.100 release WASM + matching JS bindings, real export result
+PASS msb: Rust 1.100 release WASM + matching JS bindings, real export result
+PASS sha256: Rust 1.100 release WASM + matching JS bindings, real export result
+PASS sqlx: Rust 1.100 release WASM + matching JS bindings, real export result
+
+node:internal/modules/run_main:111
+    triggerUncaughtException(
+    ^
+不正なエントリです: foo
+(Use `node --trace-uncaught ...` to show where the exception was thrown)
+
+Node.js v26.13.1

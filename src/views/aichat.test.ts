@@ -1442,7 +1442,9 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const idx = src.indexOf("app.post('/api/aichat'");
     expect(idx).toBeGreaterThan(-1);
     const fn = routeSource(src, "app.post('/api/aichat'");
-    const slashCommandIdx = fn.indexOf('interpretAichatSlashCommand(');
+    // 2026-11-07(1e39355)以降、Muse選択時の分岐を含むinterpretInput(既定はinterpretAichatSlashCommand)で判定する。
+    expect(fn).toContain(': interpretAichatSlashCommand;');
+    const slashCommandIdx = fn.indexOf('await interpretInput(message');
     const aiBindingCheckIdx = fn.indexOf('AI バインディングが未設定です');
     expect(slashCommandIdx).toBeGreaterThan(-1);
     expect(aiBindingCheckIdx).toBeGreaterThan(-1);
@@ -1462,11 +1464,12 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 5000);
-    const guardIdx = fn.indexOf('if (!isLocalCommand) {');
-    const shareBtnIdx = fn.indexOf('appendShareBtn(currentMsg,');
-    expect(guardIdx).toBeGreaterThan(-1);
-    expect(shareBtnIdx).toBeGreaterThan(guardIdx);
+    // Bound by the listener end, not an obsolete character count: the handler
+    // grew beyond 5,000 characters when response rendering was extended.
+    const end = html.indexOf('\n    chatInput.focus();', idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = html.slice(idx, end);
+    expect(fn).toMatch(/if \(!isLocalCommand\) \{\s*appendShareBtn\(currentMsg,/);
   });
 
   it('index.ts の /api/aichat が fetchLatestCommitAgentLog で commit_agent_log の最新行を取得する（/neko clog用）', () => {
@@ -1547,7 +1550,7 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf('function renderAiResultInModal(');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 700);
+    const fn = namedFunctionSource(html, 'function renderAiResultInModal(');
     expect(fn).toContain("var isLocalCommand = usedModel === 'local/neko';");
     const guardIdx = fn.indexOf('if (!isLocalCommand) {');
     const appendRowIdx = fn.indexOf('appendAiResponseRow(box,');
@@ -1560,16 +1563,15 @@ describe('ナビバー モデル選択ドロップダウン', () => {
     expect(html).toContain('>llama-3.3-70b-instruct-fp8-fast<');
   });
 
-  it('llama-3.3-70b-instruct-fp8-fast がデフォルト選択状態になる', () => {
+  // 初期の言語モデルは Muse(ユーザー指定 2026-11-12)。AI_CHAT_MODEL が llama でも選択肢には残り、選択はされない。
+  it('AI_CHAT_MODEL が llama でも、デフォルト選択は muse になる', () => {
     const userWithLlama = {
       username: 'testuser',
       aiChatModel: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     };
     const html = getAiChatPage(userWithLlama);
-    const idx = html.indexOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
-    expect(idx).toBeGreaterThan(-1);
-    const snippet = html.slice(idx - 30, idx + 60);
-    expect(snippet).toContain('selected');
+    expect(html).toContain('value="muse" selected');
+    expect(html).not.toContain('value="@cf/meta/llama-3.3-70b-instruct-fp8-fast" selected');
   });
 
   it('index.ts の /aichat GET fallbackModel が llama-3.3-70b-instruct-fp8-fast', () => {
@@ -2190,7 +2192,9 @@ describe('AIチャット応答の自動保存（auto-save to ai_chat_shares）',
     const html = getAiChatPage(minimalUser);
     const idx = html.indexOf("chatForm.addEventListener('submit'");
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 5000);
-    expect(fn).toContain('data.userHash');
+    const end = html.indexOf('\n    chatInput.focus();', idx);
+    expect(end).toBeGreaterThan(idx);
+    const fn = html.slice(idx, end);
+    expect(fn).toContain('appendShareBtn(currentMsg, responseText, usedModel, data.shareId, data.userHash)');
   });
 });

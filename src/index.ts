@@ -1,4 +1,17 @@
+import {createTreeViewConversationStreamRoutes} from './routes/treeViewConversationStream';
+import { createTreeViewMuseChatRoutes } from './routes/treeViewMuseChat';
+import { renderTailscaleWasmPage } from './views/tailscaleWasm';
+import { fetchWorkerMuseCost } from './utils/workerMuseCost';
+import { extractKeywordsWithFallback, type KeywordExtractionOutcome } from './utils/embeddingKeywordExtraction';
+import { EMBEDDING_PLAIN_COSINE_SCORE_METHOD } from './utils/answerKeywordExtractionStore';
+import { saveAnswerKeywordExtraction } from './utils/answerKeywordExtractionStore';
+import { TailscalePageTools } from './utils/tailscalePageTools';
+import { getWorkerConversationStreamPage } from './views/workerConversationStream';
+import { resolveMuseTransport, resolveMuseTunnelsFallback, museWorkerDep, checkMuseWorkerHealth } from './utils/museWorkerAsk';
+import { requireMuseTailscale, checkMuseTailscale, withMuseTailscalePreflight } from './utils/museTailscalePreflight';
+import { createTreeViewT3PowerRoutes } from './routes/treeViewT3Power';
 import { recordFirewallSnapshot } from './utils/cfContainerFirewallSnapshot';
+import { requestT3PairingHandoff } from './utils/t3PairingHandoff';
 /**
  * Cloudflare Workers GitHub OAuth
  * GitHub OAuthとJWT認証の実装
@@ -18,12 +31,13 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
-import { CONVERSATION_STREAM_FRAME_ORIGINS, CONVERSATION_STREAM_URLS } from './utils/conversationStreamHosts';
+import { conversationStreamFrameOrigins, resolveConversationStreamRoutes, type ConversationStreamRoutes } from './utils/conversationStreamRoutes';
 import { conversationStreamHealthy } from './utils/conversationStreamHealth';
-import { getConversationStreamDirectory, normalizeConversationStreamHost, type ConversationStreamHostRecord } from './utils/conversationStreamHosts';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
+import { collectContainerMonitor, getContainerMonitorProviders } from './utils/containerMonitor';
+import { getContainerMonitorPage } from './views/containerMonitor';
 import { getSettingsPage } from './views/settings';
 import { getApiKeysPage } from './views/apiKeys';
 import { getPublicKeysPage } from './views/publicKeys';
@@ -44,7 +58,11 @@ import { buildCallGraphData, type CallGraphCatalogRow, type CallGraphCallerRow, 
 import { getKwArchitecturePage } from './views/kw-architecture';
 import { getKwDrilldownPage } from './views/kw-drilldown';
 import { getCfDashboardPage } from './views/cf-dashboard';
+import { getWorkerStaticAssetsPage } from './views/workerStaticAssets';
+import { collectWorkerStaticAssets } from './utils/workerStaticAssets';
 import { getCfContainersPage } from './views/cfContainers';
+import { summarizeTailnetHealth, type TailnetBootEvent } from './utils/tailscaleNodeHealth';
+import { buildProxyForwardRequest } from './utils/proxyIdentity';
 import { loadContainerSessions, appendSessionNote } from './utils/cfContainerSessions';
 import { getContainerPlannerPage } from './views/containerPlanner';
 import { loadBuildTimings, storeBuildTimings } from './utils/containerBuildTimings';
@@ -54,10 +72,16 @@ import { resolveContainerAction, formatContainerStatusLabel, isContainerRunning,
 import { recordContainerOperation, getContainerUsageSummary, formatElapsedSinceLastStart, getContainerOperationEvents, diagActionForProxyPath, truncateDiagDetail } from './utils/cfContainerOperationLog';
 import { computeCumulativeConnectedSeconds, computeHourlyRate, estimateCostUsd, CONFIGURED_INSTANCE_SPEC, CONFIGURED_INSTANCE_TYPE } from './utils/cfContainerCost';
 import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
-import { fetchLatestToolVersions } from './utils/latestToolVersions';
+import { fetchLatestToolVersions, type LatestToolVersions, type ToolName } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
-import { fetchLatestBuildLog } from './utils/cfBuildsApi';
+import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
+import { resolveInstalledBaseline, versionsFromHealthPayload, RELEASE_CHECK_SNAPSHOT_USER_ID } from './utils/cfContainerInstalledBaseline';
+import { sendContainerVersionsToMuse } from './utils/containerVersionsForMuse';
+import { fetchBuildActivity, fetchLatestBuildLog } from './utils/cfBuildsApi';
+import { buildBannerState } from './utils/cfContainerBanner';
 import { setWorkerSecret, verifyApiToken, ALLOWED_SECRET_NAMES, type AllowedSecretName } from './utils/cfWorkerSecretApi';
+import { validatePublicKeyLine, hmacInputMatches, resolveOriginHmacSecret, parseAuthorizedKeyResponse } from './utils/authorizedKeyInput';
+import { validateTailscaleLoginServer } from './utils/tailscaleLoginServer';
 import { listCloudflareD1Databases, listCloudflareD1Tables } from './utils/cloudflareD1Api';
 import { listD1TableNames, loadCfDashboardTables } from './utils/cfDashboardD1';
 import { getApisPage } from './views/apis';
@@ -417,6 +441,7 @@ import { getEqualEarthMapPage } from './views/equalEarthMap';
 import { getCountdownPage } from './views/countdown';
 import { TREE_VIEW_REPOSITORY_CRON_ENABLED } from './utils/treeViewCronPolicy';
 import { computeCountdownGroupPosition, findUpcomingCountdownEvents, isValidCountdownLabel, isValidCountdownTargetAt, computeCfAuthDeadlineTargetAt, CF_AUTH_DEADLINE_LABEL, insertCountdownEvent, replaceCountdownEvent, formatCountdownInsertNotice } from './utils/countdown';
+import { getFxWasmPage } from './views/fxWasm';
 import { getWasmModulesPage } from './views/wasmModules';
 import { getFileDepsPage } from './views/fileDeps';
 import { getCheeseSearchPage } from './views/cheeseSearch';
@@ -466,6 +491,16 @@ import { verifyTailscaleWebhookSignature } from './utils/tailscaleWebhook';
 import { extractCfAuthUsername } from './utils/cfAuthAccess';
 import { pingDynamicWorker } from './utils/dynamicWorkerPing';
 import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk';
+import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
+import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
+import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
+import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
+import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
+import { fetchMuseMonitor } from './utils/museMonitor';
+import { isSameOrigin as isSameOriginRequest } from './utils/sshPublicKey';
+import { getMuseInquiriesPage } from './views/museInquiries';
+import { loadInquiryBoard, loadInquiryCase, decideInquiryProposal, INQUIRY_CASE_ID_RE } from './utils/museInquiryBoard';
+import { readAskgkTimeoutSetting, saveAskgkTimeoutSetting, validateAskgkTimeoutSeconds } from './utils/askgkTimeoutSettings';
 
 /**
  * `/neko hellodw` 用のdeps.pingDynamicWorkerを組み立てる。DYNAMICNEKO(Service
@@ -492,10 +527,10 @@ function dwPingDep(env: Bindings): (() => Promise<string>) | undefined {
  * 「現在利用できません」表示にフォールバックする。dwPingDepと同じ理由で
  * ここに切り出す(index.tsのテストの固定文字数ウィンドウ探索を押し出さないため)。
  */
-function askgkDep(env: Bindings): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
+function askgkDep(env: Bindings, onMuseStatus?: (healthy: boolean) => void): ((message: string) => Promise<AskTunnelSignerResult>) | undefined {
   if (!env.RUST_WORKER) return undefined;
   const fetcher = env.RUST_WORKER;
-  return (message: string) => askTunnelSigner(fetcher, message, env.ASKGK_TUNNELS_URL);
+  return withMuseTailscalePreflight((message: string) => askTunnelSigner(fetcher, message, env), () => getDemoContainerStub(env), 4_000, onMuseStatus);
 }
 import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/slack';
 import { sendTestEmailResend } from './utils/emailVerify';
@@ -509,7 +544,7 @@ import { handleSlackInteraction, type SlackAiReplyTask } from './utils/slackInte
 import { handleSlackEvent } from './utils/slackEvent';
 import { handleSlackAppMention } from './utils/slackMentionReply';
 import { SLACK_AI_MODEL, type AiUsage } from './utils/slackAiReply';
-import { buildAichatSourceTotals } from './utils/aichatSourceStats';
+import { buildAichatSourceTotals, countMuseWasmTestRequests } from './utils/aichatSourceStats';
 import { exchangeSlackOAuthCode } from './utils/slackOauth';
 import { executeCreateRepo } from './utils/repoValidation';
 import { validateReturnTo } from './utils/returnTo';
@@ -530,7 +565,7 @@ import { computeConversationHash, computeQuestionHash } from './utils/conversati
 import { addThreadHistoryToAiMessages, buildAiMessages, ALLOWED_MODES, type AiThreadTurn, type SystemPromptMode } from './utils/buildAiMessages';
 import { stripThinkTags } from './utils/stripThinkTags';
 import { isDynamicnekoAichatAllowed, resolveDynamicnekoAichatModel, resolveDynamicnekoAllowedLogin } from './utils/dynamicnekoAichatPermission';
-import { interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
+import { interpretMusePrompt, interpretMuseTunnelsFallback, interpretAichatSlashCommand, formatAichatSourceTotals, buildAichatSourceTotalsSvg, getJstDateYmdHyphen, extractYoutubeLinksFromSearchItems, mapCursorAgentHistoryToCsearchItems, mapAiChatSharesToQsearchItems, formatCursorAgentCreatedAtJst, AICHAT_JEV_KEYWORD_SCORE_LIMIT, type CommitAgentLogRow, type HourlyTokenUsageRow, type UserSessionLoginRow, type TreeViewUpdateLogRow, type MlbTodayGame, type SqlImpactCatalogRow } from './utils/aichatSlashCommand';
 import { findLatestAiChatShareAnswer } from './utils/aichatQsearchLatest';
 import { computeJevEvaluationPlan, callJevApi, attachJevResultFlags, parseLabelCriteria, buildJevRequestBody, type JevLabel } from './utils/jevEvaluation';
 import { extractTableSchemasFromSql, evaluateTable, JUDGMENT_LABELS as QUERY_PATTERN_JUDGMENT_LABELS, type TableSchema as QueryPatternTableSchema } from './utils/queryPatternAnalysis';
@@ -544,7 +579,7 @@ import {
   resolveNextTreeViewSnapshot,
   type TreeViewSnapshotNode,
 } from './utils/treeViewSnapshot';
-import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
+import { AICHAT_MODEL_MAX_TOKENS, getModelRunParams, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL, assignModelColors, resolveAichatRunOverrides } from './utils/aichatModelConfig';
 import { isInstallationPermissionsUpdateAction } from './utils/installationPermissionsAction';
 import { extractAiUsage } from './utils/aiUsage';
 import { validateImageDataUrl, attachImageToLastUserMessage, resolveAichatModelsForRequest, AICHAT_MOONDREAM3_MODEL, buildMoondream3RunParams } from './utils/aichatImage';
@@ -595,6 +630,7 @@ import { RAIL_LINES } from './data/railLines';
 import { AIRPORT_LIST } from './data/airports';
 import { findNearbyStationsAndHeritage, dedupeNearbyPoints, findNearbyHeritageForAirport, diffAirportNearbyHeritage, findNearbyAirports, diffAirportNearbyAirport } from './utils/railLineStations';
 import { questionStartsWithHeritageBracket } from './utils/heritageQuestionMatch';
+import { getDemoContainer } from './containers/demoContainerStub';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -623,6 +659,8 @@ type StatusQueryExample = {
 };
 
 export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
+  { name: 'securemine_sessions', migration: '0168', description: '/securemineのログインセッション(トークンのハッシュ・Redmineの接続先・期限)', syncPolicy: 'manual' },
+  { name: 'securemine_login_history', migration: '0168', description: '/securemineのログイン履歴', syncPolicy: 'manual' },
   { name: 'aichat_keyword_registry', migration: '0167', description: 'キーワード初出台帳・新規切り出し日次統計', syncPolicy: 'manual' },
   { name: 'user_sessions', migration: '0001', description: 'ユーザーセッション・設定', syncPolicy: 'auto' },
   { name: 'installation_permissions', migration: '0004', description: 'GitHub App インストール権限キャッシュ', syncPolicy: 'readonly' },
@@ -662,8 +700,12 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_image_records', migration: '0185', description: 'イメージ・稼働分析・ビルド実測のJSON原本', syncPolicy: 'auto' },
   { name: 'cf_container_build_measurements', migration: '0184', description: 'Dockerビルドログの実測観測記録。再取得・並行収集でも過去観測を保持', syncPolicy: 'auto' },
   { name: 'cf_container_build_steps', migration: '0184', description: 'ビルド観測ごとのBuildKitステップ所要秒・キャッシュ・成否', syncPolicy: 'auto' },
+  { name: 'aichat_model_names', migration: '0192', description: 'AIモデル名の正規化表(1モデル1行)。✂️のキーワード切り出し結果・スコアがモデルIDで参照する', syncPolicy: 'auto' },
+  { name: 'aichat_answer_keyword_extractions', migration: '0192', description: 'AIチャットの✂️の切り出し記録(回答ID・切り出しモデルIDを外部キーに、本文ベクトル・候補数・フォールバックの理由を持つ)', syncPolicy: 'auto' },
+  { name: 'aichat_answer_extracted_keywords', migration: '0192', description: '✂️で切り出したキーワード群(切り出しIDを外部キーに、順位・切り出しモデルでの本文との類似度・出現回数・ベクトル)', syncPolicy: 'auto' },
+  { name: 'aichat_answer_keyword_scores', migration: '0192', description: '✂️のキーワードを切り出しモデル以外(PlaMoなど)で測った本文との類似度。(切り出しID, 順位)とモデルIDを外部キーに持つ', syncPolicy: 'auto' },
+  { name: 'cf_container_build_cache_effects', migration: '0191', description: 'ソースビルドしたパッケージの、コンパイル秒とキャッシュからのインストール秒、ソースアーカイブとパッケージのバイト数(ビルドごと)', syncPolicy: 'auto' },
   { name: 'cf_container_resources', migration: '0187', description: 'プロバイダ・アカウント・アプリ・インスタンスを区別するコンテナ台帳', syncPolicy: 'auto' },
-  { name: 'conversation_stream_hosts', migration: '0188', description: '会話ストリーム接続先の登録・優先順位・有効状態', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_events', migration: '0187', description: 'コンテナ・セッションに紐付く重複取込防止付きイベント原本', syncPolicy: 'auto' },
   { name: 'cf_container_work_targets', migration: '0187', description: '任意の対象物台帳。集計時の入力は必須としない', syncPolicy: 'auto' },
@@ -673,8 +715,14 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_filesystem_policies', migration: '0187', description: 'イメージ・コンテナの書き込み先とread-only設計', syncPolicy: 'auto' },
   { name: 'cf_container_filesystem_observations', migration: '0187', description: 'ユーザー別の書き込み可否・マウント・失敗理由の実測履歴', syncPolicy: 'auto' },
   { name: 'cf_container_session_notes', migration: '0186', description: '起動・再起動を起点とするセッション別の作業内容。追記型の改訂履歴', syncPolicy: 'auto' },
+  { name: 'cf_container_firewall_snapshots', migration: '0180', description: 'コンテナのファイアウォール状態の1時間ごとの記録(コンテナ名×時刻で1件)', syncPolicy: 'auto' },
   { name: 'cf_container_snapshots', migration: '0179', description: '/cf-containersのヘルスチェックごとの記録(接続時間・支出・イメージのコミット・各版)', syncPolicy: 'auto' },
   { name: 'cf_container_snapshot_diffs', migration: '0179', description: 'cf_container_snapshotsの前回の記録との差分(項目・前・後・増分)', syncPolicy: 'auto' },
+  { name: 't3_pwa_handoffs', migration: '0190', description: 'T3 PWA接続要求・端末所持証明ハッシュ・一回限りの承認状態', syncPolicy: 'manual' },
+  { name: 't3_pwa_sessions', migration: '0190', description: 'T3 PWAの発行・ログイン確認・最終認証・ログアウト・失効日時（秘密値を保存しない）', syncPolicy: 'manual' },
+  { name: 't3_pwa_handoff_events', migration: '0190', description: 'T3 PWA承認・認証・失効の追記型監査履歴', syncPolicy: 'manual' },
+  { name: 'askgk_timeout_settings', migration: '0189', description: 'askgkの全利用者共通待ち時間と変更履歴（最大300秒）', syncPolicy: 'auto' },
+  { name: 'cf_container_package_release_status', migration: '0188', description: '/cf-containers表示時に取得したパッケージ別最新版・リリース日時・導入状況', syncPolicy: 'auto' },
   { name: 'table_catalog', migration: '0026', description: 'テーブルカタログ（グループ・メタ情報）', syncPolicy: 'manual' },
   { name: 'table_column_keys', migration: '0026', description: 'カラムキー定義（PK/FK）', syncPolicy: 'manual' },
   { name: 'group_oauth_apps', migration: '0027', description: 'グループ別OAuth App認可状況', syncPolicy: 'manual' },
@@ -3115,22 +3163,6 @@ BEGIN
   ) THEN RAISE(ABORT,'work interval outside runtime session') END;
 END;
 `,
-  '0188': `CREATE TABLE IF NOT EXISTS conversation_stream_hosts (
-  id TEXT PRIMARY KEY NOT NULL,
-  label TEXT NOT NULL,
-  origin TEXT NOT NULL UNIQUE,
-  priority INTEGER NOT NULL DEFAULT 100,
-  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_conversation_stream_hosts_enabled_priority
-  ON conversation_stream_hosts(enabled, priority, id);
-INSERT OR IGNORE INTO conversation_stream_hosts (id,label,origin,priority,enabled,created_at,updated_at) VALUES
-  ('redmine','Redmine','https://r9.nekomaneki.work',10,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z'),
-  ('mygw','mygw','https://mygw.nekomaneki.work',20,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z'),
-  ('mynw','mynw','https://mynw.nekomaneki.work',30,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z'),
-  ('testcfc','Test CFC','https://stream.test.cfc.nekomaneki.work',40,1,'2026-10-26T00:00:00Z','2026-10-26T00:00:00Z');`,
   '0185': `CREATE TABLE IF NOT EXISTS cf_container_image_records (
   record_hash TEXT PRIMARY KEY,
   build_uuid TEXT NOT NULL,
@@ -3159,6 +3191,304 @@ CREATE TABLE IF NOT EXISTS cf_container_session_notes (
   UNIQUE(start_operation_id, revision)
 );
 `,
+  '0168': `CREATE TABLE IF NOT EXISTS securemine_sessions (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  account_name TEXT NOT NULL,
+  api_key_encrypted TEXT NOT NULL,
+  redmine_user_json TEXT NOT NULL,
+  logged_in_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_securemine_session_expiry ON securemine_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS securemine_login_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  base_url TEXT NOT NULL,
+  redmine_user_id INTEGER NOT NULL,
+  logged_in_at TEXT NOT NULL
+);`,
+  '0180': `CREATE TABLE IF NOT EXISTS cf_container_firewall_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  container_name TEXT NOT NULL,
+  hour_utc TEXT NOT NULL,
+  collected_at TEXT NOT NULL,
+  available INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  UNIQUE(container_name, hour_utc)
+);
+CREATE INDEX IF NOT EXISTS idx_firewall_snapshots_time
+  ON cf_container_firewall_snapshots(collected_at);`,
+  '0192': `CREATE TABLE IF NOT EXISTS aichat_model_names (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE TABLE IF NOT EXISTS aichat_answer_keyword_extractions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  share_id TEXT NOT NULL REFERENCES ai_chat_shares(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  model_id INTEGER NOT NULL REFERENCES aichat_model_names(id),
+  dim INTEGER CHECK(dim IS NULL OR dim > 0),
+  document_vector BLOB,
+  candidate_count INTEGER CHECK(candidate_count IS NULL OR candidate_count >= 0),
+  score_method TEXT NOT NULL,
+  fallback_error_code TEXT,
+  fallback_detail TEXT,
+  extracted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  UNIQUE(user_id, share_id, model_id)
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_extractions_share ON aichat_answer_keyword_extractions(share_id);
+CREATE TABLE IF NOT EXISTS aichat_answer_extracted_keywords (
+  extraction_id INTEGER NOT NULL REFERENCES aichat_answer_keyword_extractions(id) ON DELETE CASCADE,
+  rank INTEGER NOT NULL CHECK(rank >= 1),
+  keyword TEXT NOT NULL,
+  score REAL,
+  occurrence_count INTEGER NOT NULL DEFAULT 0 CHECK(occurrence_count >= 0),
+  vector BLOB,
+  PRIMARY KEY(extraction_id, rank),
+  UNIQUE(extraction_id, keyword)
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_extracted_keywords_keyword ON aichat_answer_extracted_keywords(keyword);
+CREATE TABLE IF NOT EXISTS aichat_answer_keyword_scores (
+  extraction_id INTEGER NOT NULL,
+  rank INTEGER NOT NULL,
+  model_id INTEGER NOT NULL REFERENCES aichat_model_names(id),
+  similarity REAL NOT NULL,
+  score_method TEXT NOT NULL,
+  PRIMARY KEY(extraction_id, rank, model_id),
+  FOREIGN KEY(extraction_id, rank) REFERENCES aichat_answer_extracted_keywords(extraction_id, rank) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_aichat_answer_keyword_scores_model ON aichat_answer_keyword_scores(model_id, similarity);
+`,
+  '0191': `CREATE TABLE IF NOT EXISTS cf_container_build_cache_effects (
+  snapshot_key TEXT NOT NULL REFERENCES cf_container_build_measurements(snapshot_key),
+  build_uuid TEXT NOT NULL,
+  package_name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  compile_seconds REAL NOT NULL CHECK(compile_seconds >= 0),
+  install_seconds REAL NOT NULL CHECK(install_seconds >= 0),
+  saved_seconds REAL NOT NULL,
+  source_bytes INTEGER CHECK(source_bytes IS NULL OR source_bytes >= 0),
+  package_bytes INTEGER CHECK(package_bytes IS NULL OR package_bytes >= 0),
+  recorded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  PRIMARY KEY(snapshot_key, package_name)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_build_cache_effects_package ON cf_container_build_cache_effects(package_name, recorded_at DESC);
+`,
+  '0190': `CREATE TABLE IF NOT EXISTS t3_pwa_handoffs (
+  id TEXT PRIMARY KEY NOT NULL CHECK(length(id) BETWEEN 32 AND 128),
+  device_challenge TEXT NOT NULL CHECK(length(device_challenge)=64 AND device_challenge NOT GLOB '*[^0-9a-f]*'),
+  confirmation_code TEXT NOT NULL CHECK(length(confirmation_code)=8 AND confirmation_code NOT GLOB '*[^A-Z2-9]*'),
+  target_origin TEXT NOT NULL CHECK(target_origin GLOB 'https://*' AND length(target_origin) BETWEEN 9 AND 253),
+  target_environment_key TEXT NOT NULL CHECK(length(target_environment_key) BETWEEN 1 AND 128),
+  environment_generation TEXT NOT NULL CHECK(length(environment_generation) BETWEEN 1 AND 128),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected','redeeming','consumed','failed','expired','cancelled')),
+  approved_by TEXT,
+  approved_at INTEGER,
+  approved_scopes TEXT CHECK(approved_scopes IS NULL OR (json_valid(approved_scopes) AND json_type(approved_scopes)='array' AND json_array_length(approved_scopes)>0)),
+  created_at INTEGER NOT NULL CHECK(typeof(created_at)='integer' AND created_at>0),
+  expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at=created_at+300),
+  updated_at INTEGER NOT NULL CHECK(typeof(updated_at)='integer' AND updated_at>=created_at),
+  changed_by TEXT NOT NULL CHECK(length(changed_by) BETWEEN 1 AND 128),
+  change_source TEXT NOT NULL CHECK(change_source IN ('pwa','tree-view','worker','recovery')),
+  attempt_id TEXT UNIQUE CHECK(attempt_id IS NULL OR length(attempt_id) BETWEEN 32 AND 128),
+  claimed_at INTEGER,
+  completed_at INTEGER,
+  failure_code TEXT CHECK(failure_code IS NULL OR (length(failure_code) BETWEEN 1 AND 64 AND failure_code NOT GLOB '*[^a-z0-9_]*')),
+  CHECK((approved_by IS NULL AND approved_at IS NULL AND approved_scopes IS NULL) OR (approved_by IS NOT NULL AND length(trim(approved_by))>0 AND approved_at IS NOT NULL AND typeof(approved_at)='integer' AND approved_at>=created_at AND approved_at<expires_at AND approved_scopes IS NOT NULL)),
+  CHECK(status NOT IN ('approved','redeeming','consumed') OR approved_at IS NOT NULL),
+  CHECK(status<>'pending' OR approved_at IS NULL),
+  CHECK((attempt_id IS NULL AND claimed_at IS NULL) OR (attempt_id IS NOT NULL AND claimed_at IS NOT NULL AND typeof(claimed_at)='integer' AND approved_at IS NOT NULL AND claimed_at>=approved_at AND claimed_at<expires_at)),
+  CHECK((status IN ('redeeming','consumed','failed') AND attempt_id IS NOT NULL) OR (status NOT IN ('redeeming','consumed','failed') AND attempt_id IS NULL)),
+  CHECK((status IN ('consumed','failed') AND completed_at IS NOT NULL AND typeof(completed_at)='integer' AND completed_at>=claimed_at AND updated_at>=completed_at) OR (status NOT IN ('consumed','failed') AND completed_at IS NULL)),
+  CHECK((status='failed' AND failure_code IS NOT NULL) OR (status<>'failed' AND failure_code IS NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_handoffs_expiry ON t3_pwa_handoffs(status,expires_at);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_handoffs_owner ON t3_pwa_handoffs(approved_by,created_at);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_handoffs_recovery ON t3_pwa_handoffs(claimed_at) WHERE status='redeeming';
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_handoffs_retention ON t3_pwa_handoffs(created_at);
+
+CREATE TABLE IF NOT EXISTS t3_pwa_sessions (
+  id TEXT PRIMARY KEY NOT NULL CHECK(length(id) BETWEEN 32 AND 128),
+  handoff_id TEXT NOT NULL UNIQUE REFERENCES t3_pwa_handoffs(id),
+  attempt_id TEXT NOT NULL UNIQUE CHECK(length(attempt_id) BETWEEN 32 AND 128),
+  native_session_id TEXT NOT NULL UNIQUE CHECK(length(native_session_id) BETWEEN 1 AND 256),
+  principal_id TEXT NOT NULL CHECK(length(principal_id) BETWEEN 1 AND 128),
+  target_origin TEXT NOT NULL,
+  target_environment_key TEXT NOT NULL,
+  environment_generation TEXT NOT NULL,
+  scopes TEXT NOT NULL CHECK(json_valid(scopes) AND json_type(scopes)='array' AND json_array_length(scopes)>0),
+  changed_by TEXT NOT NULL CHECK(length(changed_by) BETWEEN 1 AND 128),
+  change_source TEXT NOT NULL CHECK(change_source IN ('pwa','tree-view','worker','recovery')),
+  issued_at INTEGER NOT NULL CHECK(typeof(issued_at)='integer' AND issued_at>0),
+  expires_at INTEGER NOT NULL CHECK(typeof(expires_at)='integer' AND expires_at>issued_at AND expires_at<=issued_at+86400),
+  first_verified_at INTEGER CHECK(first_verified_at IS NULL OR (typeof(first_verified_at)='integer' AND first_verified_at>=issued_at AND first_verified_at<expires_at)),
+  last_authenticated_at INTEGER CHECK(last_authenticated_at IS NULL OR (typeof(last_authenticated_at)='integer' AND first_verified_at IS NOT NULL AND last_authenticated_at>=first_verified_at AND last_authenticated_at<expires_at)),
+  logged_out_at INTEGER CHECK(logged_out_at IS NULL OR (typeof(logged_out_at)='integer' AND logged_out_at>=issued_at)),
+  revoked_at INTEGER CHECK(revoked_at IS NULL OR (typeof(revoked_at)='integer' AND revoked_at>=issued_at)),
+  revocation_reason TEXT CHECK(revocation_reason IS NULL OR (length(revocation_reason) BETWEEN 1 AND 64 AND revocation_reason NOT GLOB '*[^a-z0-9_]*')),
+  CHECK((first_verified_at IS NULL AND last_authenticated_at IS NULL) OR (first_verified_at IS NOT NULL AND last_authenticated_at IS NOT NULL)),
+  CHECK(logged_out_at IS NULL OR last_authenticated_at IS NULL OR logged_out_at>=last_authenticated_at),
+  CHECK(revoked_at IS NULL OR last_authenticated_at IS NULL OR revoked_at>=last_authenticated_at),
+  CHECK((revoked_at IS NULL AND revocation_reason IS NULL) OR (revoked_at IS NOT NULL AND revocation_reason IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_sessions_principal ON t3_pwa_sessions(principal_id,issued_at);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_sessions_expiry ON t3_pwa_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_sessions_verified ON t3_pwa_sessions(last_authenticated_at);
+
+CREATE TABLE IF NOT EXISTS t3_pwa_handoff_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  handoff_id TEXT NOT NULL REFERENCES t3_pwa_handoffs(id),
+  session_id TEXT REFERENCES t3_pwa_sessions(id),
+  target_environment_key TEXT NOT NULL,
+  environment_generation TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('pwa','tree-view','worker','recovery')),
+  event_type TEXT NOT NULL CHECK(event_type IN ('created','state_changed','session_issued','login_verified','session_authenticated','logged_out','revoked')),
+  from_status TEXT CHECK(from_status IS NULL OR from_status IN ('pending','approved','rejected','redeeming','consumed','failed','expired','cancelled')),
+  to_status TEXT CHECK(to_status IS NULL OR to_status IN ('pending','approved','rejected','redeeming','consumed','failed','expired','cancelled')),
+  attempt_id TEXT,
+  result TEXT NOT NULL CHECK(result IN ('success','failure')),
+  failure_code TEXT,
+  occurred_at INTEGER NOT NULL CHECK(typeof(occurred_at)='integer' AND occurred_at>0),
+  recorded_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_handoff_events_request ON t3_pwa_handoff_events(handoff_id,id);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_handoff_events_session ON t3_pwa_handoff_events(session_id,id);
+CREATE INDEX IF NOT EXISTS idx_t3_pwa_handoff_events_retention ON t3_pwa_handoff_events(recorded_at);
+
+CREATE TRIGGER IF NOT EXISTS t3_pwa_handoffs_pending_insert
+BEFORE INSERT ON t3_pwa_handoffs
+WHEN NEW.status<>'pending'
+BEGIN
+  SELECT RAISE(ABORT,'handoff must start pending');
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_handoffs_transition
+BEFORE UPDATE ON t3_pwa_handoffs
+BEGIN
+  SELECT CASE WHEN NEW.id IS NOT OLD.id OR NEW.device_challenge IS NOT OLD.device_challenge OR NEW.confirmation_code IS NOT OLD.confirmation_code OR NEW.target_origin IS NOT OLD.target_origin OR NEW.target_environment_key IS NOT OLD.target_environment_key OR NEW.environment_generation IS NOT OLD.environment_generation OR NEW.created_at IS NOT OLD.created_at OR NEW.expires_at IS NOT OLD.expires_at THEN RAISE(ABORT,'handoff identity is immutable') END;
+  SELECT CASE WHEN NOT ((OLD.status='pending' AND NEW.status IN ('approved','rejected','expired','cancelled')) OR (OLD.status='approved' AND NEW.status IN ('redeeming','expired','cancelled')) OR (OLD.status='redeeming' AND NEW.status IN ('consumed','failed'))) THEN RAISE(ABORT,'invalid handoff transition') END;
+  SELECT CASE WHEN NEW.updated_at<OLD.updated_at THEN RAISE(ABORT,'handoff time cannot move backwards') END;
+  SELECT CASE WHEN OLD.approved_at IS NOT NULL AND (NEW.approved_at IS NOT OLD.approved_at OR NEW.approved_by IS NOT OLD.approved_by OR NEW.approved_scopes IS NOT OLD.approved_scopes) THEN RAISE(ABORT,'approval is immutable') END;
+  SELECT CASE WHEN OLD.attempt_id IS NOT NULL AND (NEW.attempt_id IS NOT OLD.attempt_id OR NEW.claimed_at IS NOT OLD.claimed_at) THEN RAISE(ABORT,'claim is immutable') END;
+  SELECT CASE WHEN NEW.status IN ('approved','redeeming') AND NEW.updated_at>=NEW.expires_at THEN RAISE(ABORT,'handoff expired') END;
+  SELECT CASE WHEN NEW.status='approved' AND NEW.updated_at<NEW.approved_at THEN RAISE(ABORT,'approval time mismatch') END;
+  SELECT CASE WHEN NEW.status='redeeming' AND NEW.updated_at<NEW.claimed_at THEN RAISE(ABORT,'claim time mismatch') END;
+  SELECT CASE WHEN NEW.status='approved' AND EXISTS(SELECT 1 FROM json_each(NEW.approved_scopes) WHERE type<>'text' OR value NOT IN ('orchestration:read','orchestration:operate','settings:write','providers:manage','diagnostics:read','terminal:read','terminal:operate','source-control:write','filesystem:read','filesystem:write','preview:operate')) THEN RAISE(ABORT,'unsupported handoff scope') END;
+  SELECT CASE WHEN NEW.status='consumed' AND NOT EXISTS(SELECT 1 FROM t3_pwa_sessions s WHERE s.handoff_id=NEW.id AND s.attempt_id=NEW.attempt_id AND s.revoked_at IS NULL AND s.logged_out_at IS NULL) THEN RAISE(ABORT,'native session record required') END;
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_handoffs_created_event
+AFTER INSERT ON t3_pwa_handoffs
+BEGIN
+  INSERT INTO t3_pwa_handoff_events(handoff_id,target_environment_key,environment_generation,actor,source,event_type,to_status,result,occurred_at)
+  VALUES(NEW.id,NEW.target_environment_key,NEW.environment_generation,NEW.changed_by,NEW.change_source,'created',NEW.status,'success',NEW.created_at);
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_handoffs_state_event
+AFTER UPDATE ON t3_pwa_handoffs
+BEGIN
+  INSERT INTO t3_pwa_handoff_events(handoff_id,target_environment_key,environment_generation,actor,source,event_type,from_status,to_status,attempt_id,result,failure_code,occurred_at)
+  VALUES(NEW.id,NEW.target_environment_key,NEW.environment_generation,NEW.changed_by,NEW.change_source,'state_changed',OLD.status,NEW.status,NEW.attempt_id,CASE WHEN NEW.status IN ('rejected','failed','expired','cancelled') THEN 'failure' ELSE 'success' END,NEW.failure_code,NEW.updated_at);
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_sessions_match_insert
+BEFORE INSERT ON t3_pwa_sessions
+BEGIN
+  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM t3_pwa_handoffs h WHERE h.id=NEW.handoff_id AND h.status='redeeming' AND h.attempt_id=NEW.attempt_id AND h.approved_by=NEW.principal_id AND h.target_origin=NEW.target_origin AND h.target_environment_key=NEW.target_environment_key AND h.environment_generation=NEW.environment_generation AND h.approved_scopes=NEW.scopes AND NEW.issued_at>=h.claimed_at AND NEW.issued_at<h.claimed_at+60 AND NEW.issued_at<h.expires_at) THEN RAISE(ABORT,'session/handoff mismatch') END;
+  SELECT CASE WHEN NEW.first_verified_at IS NOT NULL OR NEW.last_authenticated_at IS NOT NULL OR NEW.logged_out_at IS NOT NULL OR NEW.revoked_at IS NOT NULL THEN RAISE(ABORT,'session must start unverified') END;
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_sessions_update_guard
+BEFORE UPDATE ON t3_pwa_sessions
+BEGIN
+  SELECT CASE WHEN NEW.id IS NOT OLD.id OR NEW.handoff_id IS NOT OLD.handoff_id OR NEW.attempt_id IS NOT OLD.attempt_id OR NEW.native_session_id IS NOT OLD.native_session_id OR NEW.principal_id IS NOT OLD.principal_id OR NEW.target_origin IS NOT OLD.target_origin OR NEW.target_environment_key IS NOT OLD.target_environment_key OR NEW.environment_generation IS NOT OLD.environment_generation OR NEW.scopes IS NOT OLD.scopes OR NEW.issued_at IS NOT OLD.issued_at OR NEW.expires_at IS NOT OLD.expires_at THEN RAISE(ABORT,'session identity is immutable') END;
+  SELECT CASE WHEN OLD.first_verified_at IS NULL AND NEW.first_verified_at IS NOT NULL AND NEW.first_verified_at<>NEW.last_authenticated_at THEN RAISE(ABORT,'first login time mismatch') END;
+  SELECT CASE WHEN OLD.first_verified_at IS NOT NULL AND NEW.first_verified_at IS NOT OLD.first_verified_at THEN RAISE(ABORT,'first login is immutable') END;
+  SELECT CASE WHEN OLD.last_authenticated_at IS NOT NULL AND (NEW.last_authenticated_at IS NULL OR NEW.last_authenticated_at<OLD.last_authenticated_at) THEN RAISE(ABORT,'authentication time cannot move backwards') END;
+  SELECT CASE WHEN OLD.logged_out_at IS NOT NULL AND NEW.logged_out_at IS NOT OLD.logged_out_at THEN RAISE(ABORT,'logout is immutable') END;
+  SELECT CASE WHEN OLD.revoked_at IS NOT NULL AND (NEW.revoked_at IS NOT OLD.revoked_at OR NEW.revocation_reason IS NOT OLD.revocation_reason) THEN RAISE(ABORT,'revocation is immutable') END;
+  SELECT CASE WHEN (OLD.logged_out_at IS NOT NULL OR OLD.revoked_at IS NOT NULL) AND (NEW.first_verified_at IS NOT OLD.first_verified_at OR NEW.last_authenticated_at IS NOT OLD.last_authenticated_at) THEN RAISE(ABORT,'session is closed') END;
+  SELECT CASE WHEN NEW.last_authenticated_at IS NOT OLD.last_authenticated_at AND NOT EXISTS(SELECT 1 FROM t3_pwa_handoffs h WHERE h.id=NEW.handoff_id AND h.status='consumed') THEN RAISE(ABORT,'handoff must be consumed before login') END;
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_sessions_issued_event
+AFTER INSERT ON t3_pwa_sessions
+BEGIN
+  INSERT INTO t3_pwa_handoff_events(handoff_id,session_id,target_environment_key,environment_generation,actor,source,event_type,attempt_id,result,occurred_at)
+  VALUES(NEW.handoff_id,NEW.id,NEW.target_environment_key,NEW.environment_generation,NEW.changed_by,NEW.change_source,'session_issued',NEW.attempt_id,'success',NEW.issued_at);
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_sessions_login_event
+AFTER UPDATE ON t3_pwa_sessions
+WHEN NEW.last_authenticated_at IS NOT OLD.last_authenticated_at
+BEGIN
+  INSERT INTO t3_pwa_handoff_events(handoff_id,session_id,target_environment_key,environment_generation,actor,source,event_type,attempt_id,result,occurred_at)
+  VALUES(NEW.handoff_id,NEW.id,NEW.target_environment_key,NEW.environment_generation,NEW.changed_by,NEW.change_source,CASE WHEN OLD.first_verified_at IS NULL THEN 'login_verified' ELSE 'session_authenticated' END,NEW.attempt_id,'success',NEW.last_authenticated_at);
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_sessions_logout_event
+AFTER UPDATE ON t3_pwa_sessions
+WHEN OLD.logged_out_at IS NULL AND NEW.logged_out_at IS NOT NULL
+BEGIN
+  INSERT INTO t3_pwa_handoff_events(handoff_id,session_id,target_environment_key,environment_generation,actor,source,event_type,attempt_id,result,occurred_at)
+  VALUES(NEW.handoff_id,NEW.id,NEW.target_environment_key,NEW.environment_generation,NEW.changed_by,NEW.change_source,'logged_out',NEW.attempt_id,'success',NEW.logged_out_at);
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_sessions_revoked_event
+AFTER UPDATE ON t3_pwa_sessions
+WHEN OLD.revoked_at IS NULL AND NEW.revoked_at IS NOT NULL
+BEGIN
+  INSERT INTO t3_pwa_handoff_events(handoff_id,session_id,target_environment_key,environment_generation,actor,source,event_type,attempt_id,result,failure_code,occurred_at)
+  VALUES(NEW.handoff_id,NEW.id,NEW.target_environment_key,NEW.environment_generation,NEW.changed_by,NEW.change_source,'revoked',NEW.attempt_id,'success',NEW.revocation_reason,NEW.revoked_at);
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_handoff_events_append_only
+BEFORE UPDATE ON t3_pwa_handoff_events
+BEGIN
+  SELECT RAISE(ABORT,'handoff events are append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_handoff_events_retention_guard
+BEFORE DELETE ON t3_pwa_handoff_events
+WHEN OLD.recorded_at>=unixepoch()-2592000
+BEGIN
+  SELECT RAISE(ABORT,'handoff events require 30 day retention');
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_sessions_retention_guard
+BEFORE DELETE ON t3_pwa_sessions
+WHEN max(OLD.expires_at,coalesce(OLD.logged_out_at,0),coalesce(OLD.revoked_at,0))>=unixepoch()-2592000
+BEGIN
+  SELECT RAISE(ABORT,'sessions require 30 day retention after closure');
+END;
+CREATE TRIGGER IF NOT EXISTS t3_pwa_handoffs_retention_guard
+BEFORE DELETE ON t3_pwa_handoffs
+WHEN OLD.status NOT IN ('rejected','consumed','failed','expired','cancelled') OR OLD.updated_at>=unixepoch()-2592000
+BEGIN
+  SELECT RAISE(ABORT,'handoffs require terminal state and 30 day retention');
+END;
+`,
+  '0189': `CREATE TABLE IF NOT EXISTS askgk_timeout_settings (
+  revision INTEGER PRIMARY KEY CHECK (revision >= 1),
+  timeout_seconds INTEGER NOT NULL CHECK (timeout_seconds BETWEEN 1 AND 300),
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL
+);
+INSERT OR IGNORE INTO askgk_timeout_settings (revision, timeout_seconds, changed_by, changed_at)
+VALUES (1, 120, 'migration:0189', strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+`,
+  '0188': `-- Current release and installation status for each package shown by /cf-containers.
+CREATE TABLE IF NOT EXISTS cf_container_package_release_status (
+  container_key TEXT NOT NULL,
+  package_name TEXT NOT NULL,
+  installed_version TEXT,
+  installed_status TEXT NOT NULL CHECK(installed_status IN ('installed','not_detected','not_recorded','no_snapshot')),
+  latest_version TEXT,
+  latest_release_at TEXT,
+  current_release_at TEXT,
+  release_status TEXT NOT NULL CHECK(release_status IN ('available','failed','unsupported')),
+  update_status TEXT NOT NULL CHECK(update_status IN ('update_available','current_or_ahead','latest_unavailable','unsupported','not_detected','unknown')),
+  source TEXT,
+  error TEXT,
+  installed_snapshot_id INTEGER REFERENCES cf_container_snapshots(id),
+  installed_snapshot_at TEXT,
+  checked_at TEXT NOT NULL,
+  PRIMARY KEY(container_key, package_name)
+);
+CREATE INDEX IF NOT EXISTS idx_cf_container_package_release_status_checked
+  ON cf_container_package_release_status(checked_at);`,
   '0184': `-- Immutable observations: concurrent/partial fetches cannot overwrite a completed measurement.
 CREATE TABLE IF NOT EXISTS cf_container_build_measurements (
   snapshot_key TEXT PRIMARY KEY,
@@ -3324,6 +3654,30 @@ export interface ColumnKeyInfo {
 }
 
 export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
+  // 2026-11-06 全体テストで見つかった登録漏れ(migrations 0167〜0191)。列の種別はmigrationsのPRIMARY KEY・REFERENCES・UNIQUE・INDEXに合わせる。
+  aichat_keyword_registry: { user_id: 'pk+fk', keyword: 'pk', first_share_id: 'fk', first_source: 'idx', first_added_at: 'idx' },
+  aichat_model_names: { id: 'pk', name: 'uk' },
+  aichat_answer_keyword_extractions: { id: 'pk', share_id: 'uk+fk', user_id: 'uk', model_id: 'uk+fk' },
+  aichat_answer_extracted_keywords: { extraction_id: 'pk+fk', rank: 'pk', keyword: 'uk' },
+  aichat_answer_keyword_scores: { extraction_id: 'pk+fk', rank: 'pk+fk', model_id: 'pk+fk' },
+  securemine_sessions: { token_hash: 'pk', user_id: 'fk', expires_at: 'idx' },
+  securemine_login_history: { id: 'pk', user_id: 'fk' },
+  cf_container_firewall_snapshots: { id: 'pk', container_name: 'uk', hour_utc: 'uk', collected_at: 'idx' },
+  cf_container_build_measurements: { snapshot_key: 'pk', build_uuid: 'idx' },
+  cf_container_build_steps: { snapshot_key: 'pk+fk', step_id: 'pk' },
+  cf_container_build_cache_effects: { snapshot_key: 'pk+fk', package_name: 'pk+idx' },
+  cf_container_image_records: { record_hash: 'pk', build_uuid: 'idx' },
+  cf_container_session_notes: { id: 'pk', start_operation_id: 'uk+fk', revision: 'uk' },
+  cf_container_resources: { container_id: 'pk', parent_container_id: 'fk', provider: 'uk', account_ref: 'uk', application_ref: 'uk', instance_ref: 'uk' },
+  cf_container_runtime_sessions: { session_id: 'pk', container_id: 'fk+idx', image_record_hash: 'fk' },
+  cf_container_runtime_events: { event_id: 'pk', container_id: 'fk+idx', session_id: 'fk', source: 'uk', source_event_id: 'uk' },
+  cf_container_work_targets: { target_id: 'pk', parent_target_id: 'fk' },
+  cf_container_session_targets: { session_id: 'pk+fk', target_id: 'pk+fk' },
+  cf_container_runtime_notes: { note_id: 'pk', session_id: 'uk+fk', entry_key: 'uk', revision: 'uk' },
+  cf_container_cost_observations: { cost_record_id: 'pk', session_id: 'uk+fk', cost_key: 'uk', revision: 'uk', source: 'uk', source_ref: 'uk' },
+  cf_container_filesystem_policies: { policy_id: 'pk', image_record_hash: 'fk', container_id: 'fk' },
+  cf_container_filesystem_observations: { observation_id: 'pk', session_id: 'fk', policy_id: 'fk', source: 'uk', source_ref: 'uk' },
+  askgk_timeout_settings: { revision: 'pk' },
   user_sessions: { id: 'pk', user_id: 'uk', current_workspace_id: 'fk', revoked_at: 'idx' },
   api_keys: { id: 'pk', user_id: 'fk+idx', key_hash: 'uk' },
   user_public_keys: { id: 'pk', user_id: 'fk+idx' },
@@ -3373,11 +3727,15 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   commit_stats_cache: { id: 'pk', owner: 'idx', repo: 'idx', period: 'idx' },
   repo_commit_index: { commit_hash: 'pk', seq_num: 'idx', github_pr_number: 'idx', repo_name: 'idx' },
   commit_file_changes: { id: 'pk', repo_name: 'idx', commit_hash: 'idx', file_path: 'idx' },
-  tree_view_keyword_search_log: { id: 'pk', user_id: 'idx', repo_name: 'idx', query: 'idx', searched_at: 'idx' },
+  tree_view_keyword_search_log: { id: 'pk', user_id: 'fk+idx', repo_name: 'fk+idx', query: 'idx', searched_at: 'idx' },
   tree_view_keyword_search_results: { id: 'pk', search_log_id: 'fk', keyword: 'idx' },
   cf_container_operation_log: { id: 'pk', created_at: 'idx' },
   cf_container_snapshots: { id: 'pk', user_id: 'fk', prev_snapshot_id: 'fk', created_at: 'idx' },
   cf_container_snapshot_diffs: { id: 'pk', snapshot_id: 'fk' },
+  t3_pwa_handoffs: { id: 'pk', status: 'idx', expires_at: 'idx', approved_by: 'idx', created_at: 'idx', claimed_at: 'idx', attempt_id: 'uk' },
+  t3_pwa_sessions: { id: 'pk', handoff_id: 'uk+fk', attempt_id: 'uk', native_session_id: 'uk', principal_id: 'idx', issued_at: 'idx', expires_at: 'idx', last_authenticated_at: 'idx' },
+  t3_pwa_handoff_events: { id: 'pk', handoff_id: 'fk+idx', session_id: 'fk+idx', recorded_at: 'idx' },
+  cf_container_package_release_status: { container_key: 'pk', package_name: 'pk', installed_snapshot_id: 'fk', checked_at: 'idx' },
   ai_chat_shares: { id: 'pk', user_id: 'fk', user_hash: 'idx', conversation_hash: 'uk', question_hash: 'idx', image_id: 'fk' },
   aichat_search_log: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx' },
   aichat_search_history: { id: 'pk', user_id: 'fk', share_id: 'fk', keyword: 'idx', seq_num: 'idx' },
@@ -3537,6 +3895,30 @@ export function getFilterableColumns(tableName: string): string[] {
  * table_catalog がDBに存在しない場合のフォールバック。
  */
 export const TABLE_GROUP_MAP: Record<string, string> = {
+  // 2026-11-06 全体テストで見つかった登録漏れ
+  aichat_keyword_registry: 'ai',
+  aichat_model_names: 'ai',
+  aichat_answer_keyword_extractions: 'ai',
+  aichat_answer_extracted_keywords: 'ai',
+  aichat_answer_keyword_scores: 'ai',
+  securemine_sessions: 'auth',
+  securemine_login_history: 'auth',
+  askgk_timeout_settings: 'config',
+  cf_container_firewall_snapshots: 'system',
+  cf_container_build_measurements: 'system',
+  cf_container_build_steps: 'system',
+  cf_container_build_cache_effects: 'system',
+  cf_container_image_records: 'system',
+  cf_container_session_notes: 'system',
+  cf_container_resources: 'system',
+  cf_container_runtime_sessions: 'system',
+  cf_container_runtime_events: 'system',
+  cf_container_work_targets: 'system',
+  cf_container_session_targets: 'system',
+  cf_container_runtime_notes: 'system',
+  cf_container_cost_observations: 'system',
+  cf_container_filesystem_policies: 'system',
+  cf_container_filesystem_observations: 'system',
   user_sessions: 'auth', teams: 'auth', workspaces: 'auth', team_members: 'auth', api_keys: 'auth',
   user_public_keys: 'auth', public_key_challenges: 'auth', login_history: 'auth', public_key_security_events: 'auth',
   wine_embeddings: 'wine', wine_details: 'wine', wine_metadata: 'wine',
@@ -3550,6 +3932,8 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cf_container_operation_log: 'system',
   cf_container_snapshots: 'system',
   cf_container_snapshot_diffs: 'system',
+  cf_container_package_release_status: 'system',
+  t3_pwa_handoffs: 'auth', t3_pwa_sessions: 'auth', t3_pwa_handoff_events: 'auth',
   ai_summary_log: 'ai', ai_summary_reviews: 'ai', commit_agent_log: 'ai', ai_summary_keywords: 'ai', commit_summary_topics: 'ai', commit_summary_topic_links: 'ai', ai_summary_files: 'ai',
   resend_webhook_sources: 'email', email_send_log: 'email', resend_webhook_log: 'email',
   email_suppression_list: 'email', email_mfa_challenges: 'email', email_audit_anomalies: 'email',
@@ -3743,6 +4127,25 @@ export interface GroupErData {
  * table_column_keys がDBに存在しない場合のフォールバック。
  */
 export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
+  // 2026-11-06 全体テストで見つかった登録漏れ(migrationsのREFERENCESに合わせる)
+  aichat_keyword_registry: { user_id: 'user_sessions', first_share_id: 'ai_chat_shares' },
+  aichat_answer_keyword_extractions: { share_id: 'ai_chat_shares', model_id: 'aichat_model_names' },
+  aichat_answer_extracted_keywords: { extraction_id: 'aichat_answer_keyword_extractions' },
+  aichat_answer_keyword_scores: { extraction_id: 'aichat_answer_extracted_keywords', rank: 'aichat_answer_extracted_keywords', model_id: 'aichat_model_names' },
+  securemine_sessions: { user_id: 'user_sessions' },
+  securemine_login_history: { user_id: 'user_sessions' },
+  cf_container_build_steps: { snapshot_key: 'cf_container_build_measurements' },
+  cf_container_build_cache_effects: { snapshot_key: 'cf_container_build_measurements' },
+  cf_container_session_notes: { start_operation_id: 'cf_container_operation_log' },
+  cf_container_resources: { parent_container_id: 'cf_container_resources' },
+  cf_container_runtime_sessions: { container_id: 'cf_container_resources', image_record_hash: 'cf_container_image_records' },
+  cf_container_runtime_events: { container_id: 'cf_container_resources', session_id: 'cf_container_runtime_sessions' },
+  cf_container_work_targets: { parent_target_id: 'cf_container_work_targets' },
+  cf_container_session_targets: { session_id: 'cf_container_runtime_sessions', target_id: 'cf_container_work_targets' },
+  cf_container_runtime_notes: { session_id: 'cf_container_runtime_sessions' },
+  cf_container_cost_observations: { session_id: 'cf_container_runtime_sessions' },
+  cf_container_filesystem_policies: { image_record_hash: 'cf_container_image_records', container_id: 'cf_container_resources' },
+  cf_container_filesystem_observations: { session_id: 'cf_container_runtime_sessions', policy_id: 'cf_container_filesystem_policies' },
   // ========================================================================
   // 認証・ワークスペース系
   //  user_sessions.user_id (UNIQUE) が実質的な users テーブル。
@@ -3804,9 +4207,14 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_summary_reviews: { summary_request_id: 'ai_summary_log' },
   commit_agent_log: { request_id: 'ai_summary_log' },
   ai_summary_keywords: { summary_log_id: 'ai_summary_log' },
+  tree_view_keyword_search_log: { user_id: 'user_sessions', repo_name: 'installation_permissions' },
   tree_view_keyword_search_results: { search_log_id: 'tree_view_keyword_search_log' },
   cf_container_snapshots: { user_id: 'user_sessions', prev_snapshot_id: 'cf_container_snapshots' },
   cf_container_snapshot_diffs: { snapshot_id: 'cf_container_snapshots' },
+  cf_container_package_release_status: { installed_snapshot_id: 'cf_container_snapshots' },
+  t3_pwa_handoffs: {},
+  t3_pwa_sessions: { handoff_id: 't3_pwa_handoffs' },
+  t3_pwa_handoff_events: { handoff_id: 't3_pwa_handoffs', session_id: 't3_pwa_sessions' },
   commit_summary_topic_links: { topic_id: 'commit_summary_topics', summary_log_id: 'ai_summary_log' },
   ai_summary_files: { summary_log_id: 'ai_summary_log' },
   ai_summary_link_access_log: { request_id: 'ai_summary_log' },
@@ -3924,6 +4332,26 @@ export const USER_PREFERENCE_KEYS: Record<string, { description: string; values:
  * ここに登録がない場合は fromCol と同名のカラムを参照する（同名FK）。
  */
 export const COLUMN_FK_TARGET_COLUMNS: Record<string, string> = {
+  // 参照先がidのもの(migrationsのREFERENCES ... (id)に合わせる)
+  'tree_view_keyword_search_results.search_log_id': 'id',
+  'cf_container_snapshot_diffs.snapshot_id': 'id',
+  'cf_container_package_release_status.installed_snapshot_id': 'id',
+  't3_pwa_sessions.handoff_id': 'id',
+  't3_pwa_handoff_events.handoff_id': 'id',
+  't3_pwa_handoff_events.session_id': 'id',
+  'aichat_keyword_registry.first_share_id': 'id',
+  'aichat_answer_keyword_extractions.share_id': 'id',
+  'aichat_answer_keyword_extractions.model_id': 'id',
+  'aichat_answer_extracted_keywords.extraction_id': 'id',
+  'aichat_answer_keyword_scores.extraction_id': 'extraction_id',
+  'aichat_answer_keyword_scores.rank': 'rank',
+  'aichat_answer_keyword_scores.model_id': 'id',
+  'cf_container_session_notes.start_operation_id': 'id',
+  'cf_container_resources.parent_container_id': 'container_id',
+  'cf_container_runtime_sessions.image_record_hash': 'record_hash',
+  'cf_container_filesystem_policies.image_record_hash': 'record_hash',
+  'cf_container_work_targets.parent_target_id': 'target_id',
+
   // key_id 系 → api_keys.id
   'api_key_endpoint_stats.key_id': 'id',
 
@@ -5648,7 +6076,7 @@ app.use('/*', async (c, next) => {
     );
   }
   headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('X-Frame-Options', 'DENY');
+  headers.set('X-Frame-Options', c.req.path.startsWith('/api/tree-view/conversation-stream-external/') && c.res.ok ? 'SAMEORIGIN' : 'DENY');
   headers.set('Referrer-Policy', 'no-referrer');
   headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
   headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
@@ -6646,92 +7074,56 @@ app.get('/md-preview', (c) => {
   return c.html(getMarkdownPreviewPage());
 });
 
-async function conversationStreamHostRows(db?: D1Database): Promise<ConversationStreamHostRecord[]> {
-  if (!db) return Object.entries(CONVERSATION_STREAM_URLS).map(([id, url], priority) => ({ id, label: id, origin: new URL(url).origin, priority, enabled: true }));
-  const rows = await db.prepare(`SELECT id,label,origin,priority,enabled FROM conversation_stream_hosts ORDER BY priority,id`)
-    .all<{id:string;label:string;origin:string;priority:number;enabled:number}>();
-  return (rows.results ?? []).map(row => ({ ...row, enabled: row.enabled === 1 }));
-}
-
-function conversationStreamMutationOriginAllowed(c: Context): boolean {
-  const origin = c.req.header('Origin');
-  return !origin || origin === new URL(c.req.url).origin;
-}
-
-/** 接続先の確認・編集（読み出しは認証済み利用者、変更は管理者のみ）。 */
-app.get('/api/aichat/conversation-stream/hosts', authMiddleware, async (c) => {
-  c.header('Cache-Control', 'no-store');
-  try {
-    const records = await conversationStreamHostRows(c.env.DB);
-    return c.json({ hosts: records, streams: getConversationStreamDirectory(records) });
-  } catch (error) {
-    logger.warn('Conversation stream host registry unavailable', { error: error instanceof Error ? error.message : String(error) });
-    return c.json({ error: 'ストリーム接続先一覧を読み込めません。DB migration 0188を確認してください。' }, 503);
-  }
-});
-
-app.post('/api/aichat/conversation-stream/hosts', authMiddleware, async (c) => {
-  const user = c.get('user');
-  if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return c.json({ error: '管理者権限が必要です' }, 403);
-  if (!conversationStreamMutationOriginAllowed(c)) return c.json({ error: 'Originが一致しません' }, 403);
-  const body = await c.req.json().catch(() => null);
-  let host: Omit<ConversationStreamHostRecord, 'enabled'>;
-  try { host = normalizeConversationStreamHost(body); } catch (error) { return c.json({ error: error instanceof Error ? error.message : '接続先データが不正です' }, 400); }
-  const enabled = typeof body.enabled === 'boolean' ? body.enabled : true;
-  const now = new Date().toISOString();
-  try {
-    const count = await c.env.DB.prepare('SELECT COUNT(*) AS count FROM conversation_stream_hosts').first<{count:number}>();
-    if ((count?.count ?? 0) >= 50) return c.json({ error: '接続先は50件まで登録できます' }, 409);
-    await c.env.DB.prepare(`INSERT INTO conversation_stream_hosts (id,label,origin,priority,enabled,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?)`).bind(host.id,host.label,host.origin,host.priority,enabled?1:0,now,now).run();
-    return c.json({ host: { ...host, enabled } }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return c.json({ error: /UNIQUE|constraint/i.test(message) ? '接続先IDまたはURLが既に登録されています' : '接続先を保存できませんでした。DB migration 0188を確認してください。' }, /UNIQUE|constraint/i.test(message) ? 409 : 503);
-  }
-});
-
-app.put('/api/aichat/conversation-stream/hosts/:id', authMiddleware, async (c) => {
-  const user = c.get('user');
-  if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return c.json({ error: '管理者権限が必要です' }, 403);
-  if (!conversationStreamMutationOriginAllowed(c)) return c.json({ error: 'Originが一致しません' }, 403);
-  const body = await c.req.json().catch(() => null);
-  if (!body || typeof body !== 'object') return c.json({ error: 'JSON objectが必要です' }, 400);
-  const id = c.req.param('id');
-  let host: Omit<ConversationStreamHostRecord, 'enabled'>;
-  try { host = normalizeConversationStreamHost({ ...(body as Record<string, unknown>), id }); } catch (error) { return c.json({ error: error instanceof Error ? error.message : '接続先データが不正です' }, 400); }
-  const enabled = typeof (body as Record<string, unknown>).enabled === 'boolean' ? (body as Record<string, unknown>).enabled as boolean : true;
-  try {
-    const result = await c.env.DB.prepare(`UPDATE conversation_stream_hosts SET label=?,origin=?,priority=?,enabled=?,updated_at=? WHERE id=?`)
-      .bind(host.label,host.origin,host.priority,enabled?1:0,new Date().toISOString(),id).run();
-    if (!result.meta.changes) return c.json({ error: '接続先が見つかりません' }, 404);
-    return c.json({ host: { ...host, enabled } }, 200, { 'Cache-Control': 'no-store' });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return c.json({ error: /UNIQUE|constraint/i.test(message) ? '接続先URLが既に登録されています' : '接続先を更新できませんでした。DB migration 0188を確認してください。' }, /UNIQUE|constraint/i.test(message) ? 409 : 503);
-  }
-});
-
-app.delete('/api/aichat/conversation-stream/hosts/:id', authMiddleware, async (c) => {
-  const user = c.get('user');
-  if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return c.json({ error: '管理者権限が必要です' }, 403);
-  if (!conversationStreamMutationOriginAllowed(c)) return c.json({ error: 'Originが一致しません' }, 403);
-  try {
-    const result = await c.env.DB.prepare('DELETE FROM conversation_stream_hosts WHERE id=?').bind(c.req.param('id')).run();
-    return result.meta.changes ? c.json({ deleted: true }, 200, { 'Cache-Control': 'no-store' }) : c.json({ error: '接続先が見つかりません' }, 404);
-  } catch { return c.json({ error: '接続先を削除できません。DB migration 0188を確認してください。' }, 503); }
-});
-
 /** 埋め込み先の死活確認（認証が必要）。 */
+app.get('/api/aichat/conversation-stream/worker-health', authMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ healthy: true, service: 'worker-conversation-stream' });
+});
+app.get('/aichat/worker-stream', authMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'self'; base-uri 'none'");
+  return c.html(getWorkerConversationStreamPage());
+});
 app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
+  let routes: ConversationStreamRoutes;
   try {
-    const records = await conversationStreamHostRows(c.env.DB);
-    const availableHosts = await conversationStreamHealthy(records);
-    return c.json({ healthy: availableHosts.length > 0, availableHosts, streams: getConversationStreamDirectory(records) });
+    routes = resolveConversationStreamRoutes();
   } catch (error) {
-    logger.warn('Conversation stream health registry unavailable', { error: error instanceof Error ? error.message : String(error) });
-    return c.json({ healthy: false, availableHosts: [], streams: [], error: 'ストリーム接続先を確認できません。DB migration 0188を確認してください。' }, 503);
+    // 台帳(src/data/conversation-stream-routes.json)が不正なら、理由を返す。
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Conversation stream routes are invalid', { error: message });
+    return c.json({ healthy: false, availableHosts: [], error: message }, 500);
+  }
+  const availableHosts = await conversationStreamHealthy(routes);
+  return c.json({ healthy: availableHosts.length > 0, availableHosts });
+});
+
+/** /aichatの入力窓の枠色に使うMuseの死活確認（認証が必要）。停止中のコンテナは起動しない。 */
+app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  // 既定は直送(Worker内WASM、コンテナを通さない)。旧コンテナ直通は⚙で選んだときだけ。停止中のコンテナは起動しない。
+  // AIチャットの Muse はいつも直送(⚙・Cookie の旧コンテナ直通の設定は使わない。ユーザー指定 2026-11-13)。
+  const transport = 'worker' as const;
+  if (transport === 'worker') return c.json({ healthy: await checkMuseWorkerHealth(c.env), transport });
+  const stub = c.env.DEMO_CONTAINER ? await getDemoContainerStub(c.env) : null;
+  const connected = await checkMuseTailscale(async () => stub);
+  return c.json({ healthy: connected && stub ? await checkMuseHealth(stub, c.env.MUSE_API_KEY) : false, transport });
+});
+
+/**
+ * 会話ストリームの接続先の台帳をdynamicneko(tree-view)へ渡す(サービスバインディング経由、AICHAT_EXTERNAL_SECRETで認証)。
+ * 接続先を台帳1か所で切り替えられるよう、tree-viewのiframeの接続先とCSPのframe-srcはこの応答から作る。
+ */
+app.get('/api/tree-view/conversation-stream-routes-external', (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  try {
+    const { routes, autoPriority } = resolveConversationStreamRoutes();
+    return jsonUtf8({ routes: routes.map(({ id, origin, label }) => ({ id, origin, label })), autoPriority });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Conversation stream routes are invalid', { error: message });
+    return jsonUtf8({ error: message }, 500);
   }
 });
 
@@ -6770,7 +7162,7 @@ app.get('/aichat', authMiddleware, async (c) => {
       logger.warn('aichat_model_colors query failed, using empty map');
     }
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]);
   modelColors = merged;
   if (c.env.DB) {
     const db = c.env.DB;
@@ -6783,22 +7175,26 @@ app.get('/aichat', authMiddleware, async (c) => {
       );
     }
   }
-  let streamFrameOrigins = CONVERSATION_STREAM_FRAME_ORIGINS;
+  // 会話ストリームの接続先は台帳(src/data/conversation-stream-routes.json)で決まる。
+  // 台帳が不正なら、埋め込みを許可しない(frame-src 'none')うえで画面に理由を出す。
+  let streamRoutes: ConversationStreamRoutes | null = null;
+  let streamRoutesError: string | undefined;
   try {
-    const streamHosts = await conversationStreamHostRows(c.env.DB);
-    const origins = streamHosts.filter(host => host.enabled).map(host => host.origin);
-    if (origins.length) streamFrameOrigins = [...new Set(origins)].join(' ');
+    streamRoutes = resolveConversationStreamRoutes();
   } catch (error) {
-    logger.warn('Conversation stream frame origins unavailable; using compiled defaults', { error: error instanceof Error ? error.message : String(error) });
+    streamRoutesError = error instanceof Error ? error.message : String(error);
+    logger.error('Conversation stream routes are invalid', { error: streamRoutesError });
   }
   c.header(
     'Content-Security-Policy',
-    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src ${streamFrameOrigins}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+    `default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.sh; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://esm.sh https://cdn.jsdelivr.net; frame-src 'self' ${streamRoutes ? conversationStreamFrameOrigins(streamRoutes) : ''}; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
   );
   const containerRunning = await getAichatContainerRunning(c.env, isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS));
   return c.html(getAiChatPage({
     name: user.name,
     containerRunning,
+    conversationStreamRoutes: streamRoutes,
+    conversationStreamRoutesError: streamRoutesError,
     username: user.sub,
     aiChatModel,
     aiChatModelConfigured: !!configuredModel,
@@ -6895,6 +7291,72 @@ async function fetchSqlImpactCatalog(db: NonNullable<Bindings['DB']>, tableName:
 }
 
 // 接続元IPにはクライアント指定可能なX-Forwarded-ForでなくCloudflareヘッダーだけを使う。
+// AIチャットのジョブ(ユーザー指定、2026-11-07)。送信をDurable Object(AICHAT_JOB)に登録してすぐ返し、
+// 生成とログ保存はDOのalarmで最後まで行う。ブラウザは下のGETで途中経過を取りに来るだけなので、
+// タブを閉じたり別ウィンドウへ移ったりしても応答が途切れない。中身は /api/aichat をそのまま使う。
+const AICHAT_JOB_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** /api/aichat へ渡すときに引き継ぐヘッダー。認証(Cookie・APIキー)と本文の形式だけ。 */
+const AICHAT_JOB_FORWARD_HEADERS = ['cookie', 'authorization', 'content-type', 'user-agent', 'accept-language'];
+/** 生成系フォームの共通Durable Object受付。内部APIの宛先は呼び出し側が固定値で指定する。 */
+async function enqueueAichatJob(env: Bindings, owner: string, request: Request, endpoint: '/api/aichat' | '/api/tailscale-wasm/bridge-chat' | '/api/tailscale-wasm/agent-ask', body: string, museTransport?: 'worker' | 'container'): Promise<Response> {
+  if (!env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  for (const name of AICHAT_JOB_FORWARD_HEADERS) {
+    const value = request.headers.get(name);
+    if (value) headers[name] = value;
+  }
+  if (museTransport) {
+    const cookies = (headers.cookie || '').split(';').map(value => value.trim()).filter(Boolean);
+    const index = cookies.findIndex(value => value.startsWith('aichat_muse_signal='));
+    let settings: Record<string, unknown> = {};
+    if (index >= 0) {
+      try { settings = JSON.parse(decodeURIComponent(cookies[index].slice('aichat_muse_signal='.length))) || {}; } catch { settings = {}; }
+      cookies.splice(index, 1);
+    }
+    cookies.push('aichat_muse_signal=' + encodeURIComponent(JSON.stringify({ ...settings, transport: museTransport })));
+    headers.cookie = cookies.join('; ');
+  }
+  const jobId = crypto.randomUUID();
+  const stub = env.AICHAT_JOB.get(env.AICHAT_JOB.idFromName(jobId));
+  const res = await stub.fetch('https://aichat-job/start', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner, request: { url: new URL(endpoint, request.url).toString(), headers, body } }),
+  });
+  if (res.status !== 202) {
+    logger.warn('AI chat durable task start failed', { user: owner, status: res.status, endpoint });
+    return jsonUtf8({ error: '処理をジョブとして登録できませんでした (HTTP ' + res.status + ')' }, 502);
+  }
+  return jsonUtf8({ jobId }, 202);
+}
+app.post('/api/aichat/jobs', aichatAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  const body = await c.req.text();
+  try { JSON.parse(body); } catch { return jsonUtf8({ error: 'リクエスト形式が不正です' }, 400); }
+  return enqueueAichatJob(c.env, user.sub, c.req.raw, '/api/aichat', body);
+});
+// 送信中のジョブを止める(ユーザー指定 2026-11-12。Museの返事が来ないとき、毎回5分待たされないようにする)。送信者だけが止められる。
+app.post('/api/aichat/jobs/:jobId/cancel', aichatAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return jsonUtf8({ error: 'cross_origin_forbidden' }, 403);
+  if (!c.env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
+  const jobId = c.req.param('jobId') ?? '';
+  if (!AICHAT_JOB_ID_RE.test(jobId)) return jsonUtf8({ error: 'not_found' }, 404);
+  const stub = c.env.AICHAT_JOB.get(c.env.AICHAT_JOB.idFromName(jobId));
+  const res = await stub.fetch('https://aichat-job/cancel?' + new URLSearchParams({ owner: user.sub }).toString(), { method: 'POST' });
+  return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+});
+app.get('/api/aichat/jobs/:jobId', aichatAuthMiddleware, async (c) => {
+  const user = c.get('user');
+  if (!c.env.AICHAT_JOB) return jsonUtf8({ error: 'AIチャットのジョブを使えません(AICHAT_JOBが未設定)' }, 503);
+  const jobId = c.req.param('jobId') ?? '';
+  if (!AICHAT_JOB_ID_RE.test(jobId)) return jsonUtf8({ error: 'not_found' }, 404);
+  const offset = Math.max(0, Number(c.req.query('offset')) || 0);
+  const stub = c.env.AICHAT_JOB.get(c.env.AICHAT_JOB.idFromName(jobId));
+  const params = new URLSearchParams({ owner: user.sub, offset: String(offset) });
+  const res = await stub.fetch('https://aichat-job/status?' + params.toString());
+  return new Response(res.body, { status: res.status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
+});
+
 app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
   const user = c.get('user');
   let body: AichatRequestBody;
@@ -6914,8 +7376,25 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       return jsonUtf8({ error: imageValidation.reason }, 400);
     }
   }
-  // 色丸で選択したCodex/Claudeへの通常の質問は、Workers AIではなくaskgkへ送る。
-  if ((body.model === 'codex' || body.model === 'claude') && message && !/^\/neko\b/i.test(message)) {
+  // 明示プレフィックスを優先し、prefixなしのMuse入力はWorker内Tailscale WASMを既定経路にする。
+  // 旧コンテナ直通はユーザーが設定モーダルで選んだときのみ使い、失敗時にtunnelsへは送らない。
+  // (AGENTS.md「AIチャットの言語モデルスイッチとプレフィックス」: 2つの経路を互いの代替にしない)。
+  const selectedModelInput = !!message && !/^\/(?:neko\b|(?:askmuse|askmgs)(?:\s|$))/i.test(message);
+  const selectedMuseInput = body.model === 'muse' && selectedModelInput;
+  // 既定は直送(Worker内WASM → muse-vm、コンテナを通さない)。旧コンテナ直通は⚙で明示的に選んだときだけ。
+  // /askmuse も同じ設定に従う。失敗しても互いの代替・tunnelsへの切り替えはしない(SPEC aichat-muse 2026-11-08 の図)。
+  // いつも直送(tree-view の Museタブと同じ sendMuseViaWorker)。⚙・Cookie に残った旧コンテナ直通の設定では切り替えない(ユーザー指定 2026-11-13)。
+  const museTransport = 'worker' as 'worker' | 'container';
+  if (selectedMuseInput) c.header('X-Muse-Transport', museTransport);
+  let museConnectionError: string | undefined;
+  if (selectedMuseInput && museTransport === 'container') {
+    try {
+      await requireMuseTailscale(() => getDemoContainerStub(c.env), 4_000,
+        healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'));
+    } catch (error) {
+      museConnectionError = error instanceof Error ? error.message : 'Tailscaleの接続状態を確認できません。';
+    }
+  } else if ((body.model === 'codex' || body.model === 'claude') && selectedModelInput) {
     message = '/neko askgk ' + body.model + '_prompt="' + message + '"';
   }
   const rawMode = (body.systemPromptMode ?? '').trim();
@@ -6948,7 +7427,16 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     }
   };
 
-  const slashCommand = await interpretAichatSlashCommand(message, new Date(), {
+  // ⚙で有効にしたときだけ、直送に失敗したらtunnels.rbへ送る(既定は使わない。ユーザー指定 2026-11-12)。
+  const museTunnelsFallback = resolveMuseTunnelsFallback(c.req.header('Cookie') || '');
+  const interpretInput: typeof interpretAichatSlashCommand = selectedMuseInput
+    ? async (prompt, _now, deps) => museConnectionError
+      ? museTunnelsFallback
+        ? interpretMuseTunnelsFallback(prompt, deps, museConnectionError)
+        : { handled: true, response: '❌ Muse投稿を停止しました: ' + museConnectionError }
+      : interpretMusePrompt(prompt, deps, 'Muse', { tunnelsFallback: museTunnelsFallback })
+    : interpretAichatSlashCommand;
+  const slashCommand = await interpretInput(message, new Date(), {
     clientIp: c.req.header('CF-Connecting-IP')?.trim() || undefined,
     fetchLatestCommitAgentLog: async () => {
       if (!c.env.DB) return null;
@@ -7221,7 +7709,23 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
       : undefined,
     fetchMlbTodaySchedule: async () => fetchMlbTodayGamesFromStatsApi(getJstDateYmdHyphen(new Date())),
     pingDynamicWorker: dwPingDep(c.env),
-    askTunnelSigner: askgkDep(c.env),
+    askTunnelSigner: askgkDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
+    askMuseDirect: museTransport === 'worker'
+      ? museWorkerDep(c.env, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable'))
+      : museDirectDep(c.env, getDemoContainerStub, healthy => c.header('X-Muse-Tailscale', healthy ? 'connected' : 'unavailable')),
+    askMuseGadget: async (prompt) => {
+      if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return { ok: false, error: '管理者権限が必要です' };
+      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(user.sub + ':' + (body.threadId || 'default')));
+      const conversationId = 'askmgs-' + Array.from(new Uint8Array(hash).slice(0, 16)).map(x => x.toString(16).padStart(2, '0')).join('');
+      const headers = new Headers({ 'Content-Type': 'application/json', Origin: new URL(c.req.url).origin });
+      for (const name of ['Authorization', 'Cookie']) { const value = c.req.header(name); if (value) headers.set(name, value); }
+      const response = await app.fetch(new Request(new URL('/api/tailscale-wasm/chat', c.req.url), {
+        method: 'POST', headers, body: JSON.stringify({ prompt, conversationId, requestId: crypto.randomUUID() }),
+      }), c.env);
+      const data = await response.json() as { ok?: boolean; reply?: string; error?: string; partial?: boolean };
+      return { ...data, ok: response.ok && data.ok === true };
+    },
+
     loadMentionEditorRuby: c.env.DB ? async (filename) => {
       const row = await c.env.DB!.prepare(
         'SELECT config_json FROM mention_editor_documents WHERE user_id = ? AND title = ? COLLATE NOCASE LIMIT 1'
@@ -7256,7 +7760,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     },
   });
   if (slashCommand.handled) {
-    const askgkModel = slashCommand.codexAskgk ? 'codex' : slashCommand.claudeAskgk ? 'claude' : null;
+    const askgkModel = slashCommand.codexAskgk ? 'codex' : slashCommand.claudeAskgk ? 'claude' : slashCommand.museAskgk ? 'muse' : null;
     let requestedThreadId = (body.threadId ?? '').trim();
     if (slashCommand.saveAsAiResponse) {
       if (requestedThreadId && !isThreadId(requestedThreadId)) {
@@ -7278,7 +7782,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
     // `/neko askgk codex_prompt="..."` は通常のAI応答と同じ経路に乗せる
     // (ai_chat_sharesへmodel='codex'として保存し、✂️/📔ボタン・左サイドパネル
     // 検索(qsearch)を通常のAI回答と同様に使えるようにする、2026-10-04
-    // ユーザー要望)。claude_promptも同じ保存経路を使う。その他はautoSaveで保存する。
+    // ユーザー要望)。claude_prompt・muse_promptも同じ保存経路を使う。その他はautoSaveで保存する。
     if (askgkModel && c.env.DB) {
       const db = c.env.DB;
       const answer = slashCommand.response;
@@ -7322,7 +7826,7 @@ app.post('/api/aichat', aichatAuthMiddleware, async (c) => {
           const colorRows = await db.prepare('SELECT model_id, color FROM aichat_model_colors').all<{ model_id: string; color: string }>();
           const existingColors: Record<string, string> = {};
           for (const row of colorRows.results ?? []) existingColors[row.model_id] = row.color;
-          const { merged, newAssignments } = assignModelColors(existingColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
+          const { merged, newAssignments } = assignModelColors(existingColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]);
           modelColor = merged[askgkModel];
           for (const a of newAssignments) {
             await db.prepare('INSERT INTO aichat_model_colors (model_id, color, label) VALUES (?, ?, ?) ON CONFLICT(model_id) DO UPDATE SET color = excluded.color, label = excluded.label')
@@ -9212,6 +9716,8 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
   if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
   const month = ((c.req.query('month') ?? '').slice(0, 7)) || new Date().toISOString().slice(0, 7);
 
+  // muse-wasm-test経由の要望は ai_chat_shares に保存されないため、INQUIRY_DB の bridge_jobs から数える(取得できなければ null)。
+  const museWasmTestTotalPromise = countMuseWasmTestRequests(c.env.INQUIRY_DB, user.sub, month);
   const [kwRows, qRows, apiModelRows, sourceRows, newKeywordRows] = await Promise.all([
     c.env.DB.prepare(
       `SELECT substr(searched_at,1,10) as date, COUNT(DISTINCT keyword) as kw_count
@@ -9280,7 +9786,8 @@ app.get('/api/aichat/daily-stats', authMiddleware, async (c) => {
     models: qMap[date] ?? {},
   }));
 
-  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals, sourceTotals });
+  const museWasmTestTotal = await museWasmTestTotalPromise;
+  return jsonUtf8({ month, days, models: Array.from(modelSet), apiModelTotals, sourceTotals, museWasmTestTotal });
 });
 
 app.get('/api/aichat/shares/by-date', authMiddleware, async (c) => {
@@ -12054,10 +12561,16 @@ app.delete('/api/aichat/shares/:id', authMiddleware, async (c) => {
 /**
  * answer-graphの回答モーダル「この回答文をベクタ化する」ボタン用API。
  * 回答文を埋め込みモデル(既定plamo-embedding-1b、bodyのmodelで選択可能)で
- * ベクタ化してaichat_answer_vectorsに保存し、さらにgemma-4-26b-a4b-itに
- * 「この文章を理解するのに必要な予備知識」を単語単位で抽出させて返す。
+ * ベクタ化してaichat_answer_vectorsに保存し、さらに予備知識キーワードを切り出して返す。
+ * 切り出しはEmbeddingGemma 2(KEYWORD_EXTRACTION_EMBEDDING_MODEL)で行い、失敗したときだけ
+ * gemma-4-26b-a4b-it(extractPrerequisiteTerms)へフォールバックする(2026-11-15、
+ * src/utils/embeddingKeywordExtraction.ts)。使ったモデルはkeywordsModel、フォールバックの
+ * 理由は_keywordsFallbackで返す。
  * 予備知識抽出の失敗はベクタ化そのものの失敗とは独立して扱い、
  * _keywordsWarningに理由を入れて返す(ベクタ化自体は成功のまま)。
+ * 切り出し結果・ベクトル分析・各キーワードのスコア(切り出しモデルの類似度・出現回数・
+ * 埋め込みモデルの類似度)はD1(migrations/0192)へ保存する。保存の失敗も✂️全体は
+ * 失敗させず、_extractionSaveWarningに理由を入れて返す。
  */
 app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
   const user = c.get('user');
@@ -12109,15 +12622,27 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
 
   let keywords: string[] = [];
   let keywordsWarning: string | null = null;
+  let extraction: KeywordExtractionOutcome | null = null;
   try {
-    keywords = await withTimeout(
-      extractPrerequisiteTerms(c.env.AI, share.answer),
+    const ai = c.env.AI;
+    extraction = await withTimeout(
+      extractKeywordsWithFallback(
+        ai as unknown as Parameters<typeof extractKeywordsWithFallback>[0],
+        share.answer,
+        (text) => extractPrerequisiteTerms(ai, text),
+        ANSWER_PREREQUISITE_TERMS_MODEL,
+      ),
       PREREQUISITE_TERMS_TIMEOUT_MS,
       `予備知識キーワードの抽出が${PREREQUISITE_TERMS_TIMEOUT_MS / 1000}秒以内に完了しませんでした(タイムアウト)`
     );
+    if (extraction.fallback) {
+      logger.warn('vectorize-answer: embeddinggemma-2 keyword extraction failed, fell back to gemma-4', {
+        shareId, errorCode: extraction.fallback.errorCode, error: extraction.fallback.detail,
+      });
+    }
     // 英数字だけの語・ひらがなカタカナ1文字だけの語は、ベクタ化・登録処理
     // (AI呼び出し・D1書き込み)を行う前にここで弾く
-    keywords = filterMeaningfulPrerequisiteTerms(keywords);
+    keywords = filterMeaningfulPrerequisiteTerms(extraction.terms);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn('vectorize-answer: prerequisite term extraction failed', { shareId, error: message });
@@ -12128,13 +12653,41 @@ app.post('/api/aichat/vectorize-answer', authMiddleware, async (c) => {
     ? await vectorizeAnswerKeywords(c.env.DB, c.env.AI, user.sub, shareId, keywords, embeddingModel, vector)
     : [];
 
+  let extractionSaveWarning: string | null = null;
+  if (extraction) {
+    const embeddingScores: Record<string, number> = {};
+    for (const r of keywordVectorization) {
+      if (typeof r.similarityScore === 'number') embeddingScores[r.keyword] = r.similarityScore;
+    }
+    try {
+      await saveAnswerKeywordExtraction(c.env.DB, {
+        userId: user.sub,
+        shareId,
+        model: extraction.usedModel,
+        scoreMethod: extraction.scoreMethod,
+        terms: keywords,
+        analysis: extraction.analysis,
+        fallback: extraction.fallback,
+        answerText: share.answer,
+        extraScores: [{ model: embeddingModel, scoreMethod: EMBEDDING_PLAIN_COSINE_SCORE_METHOD, scores: embeddingScores }],
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('vectorize-answer: saving keyword extraction failed', { shareId, error: message });
+      extractionSaveWarning = 'キーワード切り出し結果の保存に失敗しました: ' + message;
+    }
+  }
+
   return jsonUtf8({
     vectorized: true,
     model: embeddingModel,
     dim: vector.length,
     keywords,
+    keywordsModel: extraction ? extraction.usedModel : null,
     keywordVectorization,
     _keywordsWarning: keywordsWarning,
+    _keywordsFallback: extraction ? extraction.fallback : null,
+    _extractionSaveWarning: extractionSaveWarning,
   });
 });
 
@@ -13246,6 +13799,15 @@ app.get('/api/countdown', authMiddleware, async (c) => {
 // 一括登録(同じgroup_idを持つ複数件)であれば、そのグループ内で何番目/何件中かを
 // computeCountdownGroupPosition()（純粋関数）で算出しgroupIndex/groupTotalとして返す
 // (単発登録ではnullのまま=フィールド自体を含めない)。
+/**
+ * Workers Static Assets のサンプル(public/static-assets-sample/)から呼ぶ API。
+ * public/ に一致するファイルが無いパスは Worker のコードに渡ることを見せるだけで、認証も保存もしない。
+ */
+app.get('/api/static-assets-sample', (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ served_by: 'worker', path: new URL(c.req.url).pathname, time: new Date().toISOString() });
+});
+
 app.get('/api/countdown/next', authMiddleware, async (c) => {
   const user = c.get('user');
   if (!c.env.DB) return jsonUtf8({ event: null, error: 'DB未設定です' }, 503);
@@ -16491,7 +17053,7 @@ app.post('/api/aichat/model-colors-external', async (c) => {
     logger.error('[dynamicneko-ai-cache] モデルカラー取得クエリ失敗', { error: message });
     return jsonUtf8({ error: 'モデルカラー取得でサーバーエラーが発生しました: ' + message }, 500);
   }
-  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]);
+  const { merged, newAssignments } = assignModelColors(modelColors, [...DEFAULT_AICHAT_MODELS, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]);
   if (newAssignments.length > 0) {
     const db = c.env.DB;
     for (const a of newAssignments) {
@@ -16842,6 +17404,62 @@ function checkJevScoreBoardExternalBearer(c: Context<{ Bindings: Bindings; Varia
   const expected = c.env.AICHAT_EXTERNAL_SECRET ? `Bearer ${c.env.AICHAT_EXTERNAL_SECRET}` : null;
   return !!expected && auth === expected;
 }
+
+app.route('/', createTreeViewConversationStreamRoutes({
+  getContainer: getDemoContainerStub,
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+}));
+
+// tree-viewのMuseタブはWorker内WASMから直通し、本体コンテナに依存しない。
+app.route('/', createTreeViewMuseChatRoutes({
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+}));
+
+// T3 Code controls the same demo container as /cf-containers.
+app.route('/', createTreeViewT3PowerRoutes({
+  getContainer: getDemoContainerStub,
+  authenticate: async (env, token) => {
+    if (!env.DB) return { ok: false, error: 'DB未設定です', status: 503 };
+    const result = await resolveJevScoreBoardExternalAuth(env.DB, env.AICHAT_USER_TOKEN_SECRET, token, true);
+    if (!result.ok) return result;
+    return { ok: true, login: result.login ?? '' };
+  },
+  audit: (env, entry) => recordContainerOperation(env.DB, { ...demoContainerOperationContext(env), ...entry },
+    message => logger.error('[tree-view-t3-power] 操作履歴の保存に失敗', { error: message })),
+}));
+
+/** dynamicneko tree-view用。既存の固定wrangler containers list診断をJSONで中継する。 */
+app.post('/api/tree-view/container-inventory-external', async (c) => {
+  if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
+  if (!c.env.DB) return jsonUtf8({ error: 'DB未設定です' }, 503);
+  const body = await c.req.json<{ userToken?: string }>().catch(() => null);
+  const auth = await resolveJevScoreBoardExternalAuth(c.env.DB, c.env.AICHAT_USER_TOKEN_SECRET, body?.userToken, true);
+  if (!auth.ok) return jsonUtf8({ error: auth.error }, auth.status);
+  const stub = await getDemoContainerStub(c.env);
+  if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
+  try {
+    const response = await stub.fetch(new Request('https://container.internal/debug/wrangler/containers-list'));
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result || typeof result !== 'object') {
+      return jsonUtf8({ error: 'wrangler containers list の取得に失敗しました' }, 502);
+    }
+    return jsonUtf8(result, response.status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[tree-view-container-inventory] wrangler list relay failed', { error: message });
+    return jsonUtf8({ error: 'コンテナ一覧を取得できませんでした' }, 502);
+  }
+});
 
 /** dynamicnekoの/jev-scoresページ用。/api/jev-score-board/rowsのexternal版。 */
 app.post('/api/aichat/jev-score-board-rows-external', async (c) => {
@@ -19584,6 +20202,7 @@ app.get('/settings', authMiddleware, async (c) => {
       heritageTourCountryFilterCookieVal
     ) ? 'on' : 'off',
     emailConfirmLoginEnabled,
+    askgkTimeoutSetting: isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS) ? await readAskgkTimeoutSetting(c.env.DB) : undefined,
     githubScopes: GITHUB_OAUTH_SCOPE,
     githubGrantedScopes: grantedScopes,
     githubScopeError: scopesError,
@@ -19904,6 +20523,26 @@ app.get('/api/cf-dashboard/d1/:dbId/tables', authMiddleware, cfDashboardAdminMid
   }
 });
 
+app.get('/api/worker-static-assets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!c.env.CLOUDFLARE_ACCOUNT_ID || !c.env.CF_CONTAINER_API_TOKEN) {
+    return jsonUtf8({ error: 'CLOUDFLARE_ACCOUNT_IDまたはCF_CONTAINER_API_TOKENが未設定です' }, 503);
+  }
+  try {
+    return jsonUtf8(await collectWorkerStaticAssets(c.env));
+  } catch (err) {
+    return jsonUtf8({ error: err instanceof Error ? err.message : 'Cloudflare APIからWorker一覧を取得できませんでした' }, 502);
+  }
+});
+
+app.get('/worker-static-assets', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const user = c.get('user');
+  const userSession = await getUserSession(c.env.DB, user.sub);
+  if (!userSession) return c.html(getSessionExpiredPage(c.req.path), 403);
+  c.header('Cache-Control', 'no-store');
+  return c.html(getWorkerStaticAssetsPage());
+});
+
 /**
  * Cloudflare D1 ダッシュボードページ（管理者認証が必要）
  */
@@ -19916,13 +20555,6 @@ app.get('/cf-dashboard', authMiddleware, cfDashboardAdminMiddleware, async (c) =
   return c.html(getCfDashboardPage());
 });
 
-/**
- * @cloudflare/containersはcloudflare:workers(workerdのみに存在する組み込み
- * モジュール)を読み込むため、プレーンNode環境のテストが./indexを直接
- * importしたときに巻き込まれて失敗しないよう、静的importせず実際に
- * リクエストを処理するときにだけdynamic importする
- * (src/containers/demoContainer.tsのコメント参照)。
- */
 function demoContainerOperationContext(env: Bindings) {
   return {
     containerKey: env.DEMO_CONTAINER ? 'DemoContainer:' + env.DEMO_CONTAINER.idFromName('demo').toString() : undefined,
@@ -19932,10 +20564,13 @@ function demoContainerOperationContext(env: Bindings) {
   };
 }
 
+/**
+ * 本体demoコンテナのスタブ。demoContainer.ts(cloudflare:workersを読み込む)は
+ * 静的importせず、名前'demo'のDurable ObjectをdemoContainerStub.tsで取り出す。
+ */
 async function getDemoContainerStub(env: Bindings) {
   if (!env.DEMO_CONTAINER) return null;
-  const { getContainer } = await import('@cloudflare/containers');
-  return getContainer(env.DEMO_CONTAINER, 'demo');
+  return getDemoContainer(env.DEMO_CONTAINER);
 }
 
 async function buildContainerStatusResponse(
@@ -19970,6 +20605,260 @@ app.get('/cf-containers/planner', authMiddleware, cfDashboardAdminMiddleware, as
   }
 });
 
+/** tailnet上のmuse・muse-vmの状態、Nixのパッケージ、シグナル送信のページ(管理者のみ)。どの入口も停止中のコンテナは起動しない。 */
+// Museとの協議(D1 agent-inquiries)のカンバン(ユーザー指定、2026-11-07)。内部情報を含むため管理者だけ。読むだけ。
+app.get('/muse-inquiries', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.html(getMuseInquiriesPage());
+});
+app.get('/api/muse-inquiries/board', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  try {
+    return jsonUtf8(await loadInquiryBoard(db));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('muse inquiries board failed', { error: message });
+    return jsonUtf8({ error: '協議の記録を読めませんでした: ' + message }, 500);
+  }
+});
+app.get('/api/muse-inquiries/cases/:caseId', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  const caseId = c.req.param('caseId') ?? '';
+  if (!INQUIRY_CASE_ID_RE.test(caseId)) return jsonUtf8({ error: 'ケースが見つかりません' }, 404);
+  try {
+    const detail = await loadInquiryCase(db, caseId);
+    if (!detail) return jsonUtf8({ error: 'ケースが見つかりません' }, 404);
+    return jsonUtf8(detail);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('muse inquiry case failed', { caseId, error: message });
+    return jsonUtf8({ error: '協議の記録を読めませんでした: ' + message }, 500);
+  }
+});
+
+// 採否待ちの提案を、モーダルからその場で採用・不採用にする(ユーザー指定、2026-11-08)。採用は判断の記録だけで、実行は始めない。
+app.post('/api/muse-inquiries/proposals/:proposalId/decision', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (c.req.header('Origin') !== new URL(c.req.url).origin) return jsonUtf8({ error: '同じオリジンから操作してください。' }, 403);
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  const body = await c.req.json<{ decision?: unknown; note?: unknown }>().catch(() => null);
+  if (!body) return jsonUtf8({ error: 'JSONで送ってください' }, 400);
+  const user = c.get('user');
+  const actor = (user?.name || user?.sub || '').slice(0, 100);
+  try {
+    const result = await decideInquiryProposal(db, c.req.param('proposalId') ?? '', body.decision as 'adopted' | 'rejected', typeof body.note === 'string' ? body.note : '', actor);
+    if (result.ok) return jsonUtf8({ ok: true, status: result.status });
+    const status = result.errorCode === 'not_found' ? 404 : result.errorCode === 'not_pending' ? 409 : 400;
+    return jsonUtf8({ error: result.detail, errorCode: result.errorCode }, status);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn('muse inquiry decision failed', { error: message });
+    return jsonUtf8({ error: '採否を記録できませんでした: ' + message }, 500);
+  }
+});
+
+app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  // 本体コンテナの停止中は、ページがTailscale WASMでtailnetへ参加して取得する
+  c.header('Content-Security-Policy', MUSE_STATUS_CSP);
+  return c.html(getMuseStatusPage());
+});
+
+// /muse-wasm-test: テスト用ページ(ユーザー指定、2026-11-08)。Tailscale WASMでmuse-vmへの到達を定期的に確かめ、
+// 要望はD1 agent-inquiriesのbridge_jobsへ積む(本体コンテナのCLIが片付ける。SPEC bridge-job-queue 12章)。
+app.get('/tailscale-wasm', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'");
+  return c.html(renderTailscaleWasmPage());
+});
+app.get('/api/tailscale-wasm/status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const ns = c.env.TAILSCALE_WASM;
+  if (!ns) return c.json({ error: 'tailscale_wasm_not_configured' }, 503);
+  const response = await ns.get(ns.idFromName('muse')).fetch(new Request('http://tailnet/status'));
+  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+});
+function tailscalePageTools(env: Bindings, owner: string) {
+  return new TailscalePageTools(() => getDemoContainerStub(env), askgkDep({ ...env, ASKGK_ROUTE_ID: 'main' }), env.TAILSCALE_WASM ? async engine => {
+    const res = await forwardMuseJobs(env, owner, '/changes?consumer=' + engine);
+    if (!res.ok) throw new Error('handoff unavailable');
+    const data = await res.json() as { cursor: number; events: { state: string; jobId: string; prompt: string; reply: string | null }[] };
+    const context = data.events.filter(e => e.state === 'done').map(e => 'Job '+e.jobId+'\n依頼：'+e.prompt+'\nMuse：'+e.reply).join('\n\n');
+    return { context, acknowledge: async () => (await forwardMuseJobs(env, owner, '/ack?consumer=' + engine, { cursor: data.cursor })).ok };
+  } : undefined);
+}
+app.get('/api/tailscale-wasm/container-status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(await tailscalePageTools(c.env, c.get('user').sub).status());
+});
+app.get('/api/tailscale-wasm/cost', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const token = cfApiKey(c.env), account = c.env.CLOUDFLARE_ACCOUNT_ID;
+  if (!token || !account) return c.json({ error: 'Cloudflare Analyticsの認証設定がありません' }, 503);
+  try { return c.json(await fetchWorkerMuseCost(account, token)); }
+  catch { return c.json({ error: 'Cloudflare Analyticsの使用量を取得できません。権限・接続状態を確認してください。' }, 502); }
+});
+app.get('/api/tailscale-wasm/fleet', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const results = await Promise.allSettled([collectContainerMonitor(c.env, 'cloudflare-api'), c.env.DB ? loadContainerSessions(c.env.DB) : Promise.reject(new Error('DB未設定'))]);
+  return c.json({ fetchedAt: new Date().toISOString(), snapshot: results[0].status === 'fulfilled' ? results[0].value : null, costs: results[1].status === 'fulfilled' ? results[1].value : null, errors: results.flatMap((r, i) => r.status === 'rejected' ? [i === 0 ? 'コンテナ一覧を取得できません（API認証・権限を確認）' : '稼働台帳の費用を取得できません'] : []) });
+});
+app.get('/api/tailscale-wasm/bridge-health', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json({ healthy: await checkMuseWorkerHealth(c.env), transport: 'worker' });
+});
+async function forwardMuseJobs(env: Bindings, owner: string, path: string, body?: unknown) {
+  if (!env.TAILSCALE_WASM) return Response.json({ error: 'tailscale_wasm_not_configured' }, { status: 503 });
+  const response = await env.TAILSCALE_WASM.get(env.TAILSCALE_WASM.idFromName('muse')).fetch(new Request('http://tailnet/agent-jobs' + path, { method: body === undefined ? 'GET' : 'POST', headers: { 'X-Muse-Owner': owner, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
+  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+}
+app.get('/api/tailscale-wasm/jobs', authMiddleware, cfDashboardAdminMiddleware, c => forwardMuseJobs(c.env, c.get('user').sub, ''));
+// 各コンテナの版の一覧(D1)を、Museへの要望として渡す。Museは muse-vm の ~/workspace/container-versions.md に保存して更新する。
+app.post('/api/container-versions/send-to-muse', authMiddleware, cfDashboardAdminMiddleware, async c => {
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return c.json({ error: 'cross_origin_forbidden' }, 403);
+  if (!c.env.DB) return c.json({ ok: false, error: 'db_not_configured', detail: 'D1(DB)が未設定です' }, 503);
+  const owner = c.get('user').sub;
+  const result = await sendContainerVersionsToMuse(c.env.DB, body => forwardMuseJobs(c.env, owner, '', body));
+  if (!result.ok) return c.json({ ok: false, error: result.errorCode, detail: result.detail }, result.errorCode === 'no_data' ? 404 : 413);
+  const data = await result.response.json().catch(() => ({ error: 'invalid_response' })) as Record<string, unknown>;
+  return c.json({ ...data, count: result.count }, result.response.status as 200);
+});
+app.get('/api/tailscale-wasm/jobs/changes', authMiddleware, cfDashboardAdminMiddleware, c => {
+  const consumer = c.req.query('consumer');
+  if (consumer !== 'codex' && consumer !== 'claude') return c.json({ error: 'invalid_consumer' }, 400);
+  return forwardMuseJobs(c.env, c.get('user').sub, '/changes?consumer=' + consumer);
+});
+app.post('/api/tailscale-wasm/jobs/ack', authMiddleware, cfDashboardAdminMiddleware, async c => {
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return c.json({ error: 'cross_origin_forbidden' }, 403);
+  const consumer = c.req.query('consumer');
+  if (consumer !== 'codex' && consumer !== 'claude') return c.json({ error: 'invalid_consumer' }, 400);
+  const text = await c.req.text(); if (text.length > 1024) return c.json({ error: 'payload_too_large' }, 413);
+  let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+  return forwardMuseJobs(c.env, c.get('user').sub, '/ack?consumer=' + consumer, data);
+});
+app.post('/api/tailscale-wasm/:action', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const origin = c.req.header('Origin');
+  if ((origin && origin !== new URL(c.req.url).origin) || c.req.header('Sec-Fetch-Site') === 'cross-site') return c.json({ error: 'cross_origin_forbidden' }, 403);
+  const action = c.req.param('action');
+  if (action === 'jobs') {
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    return forwardMuseJobs(c.env, c.get('user').sub, '', data);
+  }
+  if (action === 'bridge-chat') {
+    c.header('Cache-Control', 'no-store');
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    if (!data || typeof data.prompt !== 'string' || !data.prompt.trim() || new TextEncoder().encode(data.prompt).length > 16384) return c.json({ error: 'invalid_prompt' }, 400);
+    const result = await museWorkerDep(c.env)(data.prompt);
+    return result.ok ? c.json({ ...result, transport: 'worker' }) : c.json(result, 503);
+  }
+  if (action === 'tasks') {
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    let data: { action?: unknown; payload?: unknown };
+    try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    if (!data || !['bridge-chat', 'agent-ask', 'legacy-chat'].includes(String(data.action)) || !data.payload || typeof data.payload !== 'object' || Array.isArray(data.payload)) return c.json({ error: 'invalid_task' }, 400);
+    if (data.action === 'legacy-chat') {
+      const payload = data.payload as { model?: unknown; message?: unknown };
+      if (payload.model !== 'muse' || typeof payload.message !== 'string' || !payload.message.trim() || new TextEncoder().encode(payload.message).length > 16384 || /^\s*\/(?:neko\b|(?:askmuse|askmgs)(?:\s|$))/i.test(payload.message)) return c.json({ error: 'invalid_legacy_muse_request' }, 400);
+      return enqueueAichatJob(c.env, c.get('user').sub, c.req.raw, '/api/aichat', JSON.stringify({ ...payload, source: 'textbox', stream: false }), 'container');
+    }
+    const endpoint = data.action === 'bridge-chat' ? '/api/tailscale-wasm/bridge-chat' : '/api/tailscale-wasm/agent-ask';
+    return enqueueAichatJob(c.env, c.get('user').sub, c.req.raw, endpoint, JSON.stringify(data.payload));
+  }
+  if (action === 't3-test' || action === 't3-pairing' || action === 'agent-ask') {
+    c.header('Cache-Control', 'no-store');
+    const text = await c.req.text();
+    if (new TextEncoder().encode(text).length > 32768) return c.json({ error: 'payload_too_large' }, 413);
+    const tools = tailscalePageTools(c.env, c.get('user').sub);
+    if (action === 't3-test') return tools.t3();
+    if (action === 't3-pairing') return tools.t3Pairing();
+    let data; try { data = JSON.parse(text); } catch { return c.json({ error: 'invalid_json' }, 400); }
+    return tools.agent(data);
+  }
+  if (!action || !['login', 'logout', 'chat', 'gadget-status'].includes(action)) return c.json({ error: 'not_found' }, 404);
+  const ns = c.env.TAILSCALE_WASM;
+  if (!ns) return c.json({ error: 'tailscale_wasm_not_configured' }, 503);
+  const text = await c.req.text();
+  if (new TextEncoder().encode(text).length > (action === 'chat' ? 32768 : 1024)) return c.json({ error: 'payload_too_large' }, 413);
+  let body: { prompt?: unknown; authKey?: unknown };
+  try { body = JSON.parse(text || '{}'); } catch { return c.json({ error: 'invalid_json' }, 400); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: 'invalid_json' }, 400);
+  if (action === 'chat') {
+    const data = body as { prompt?: unknown; conversationId?: unknown; requestId?: unknown };
+    if (typeof data.prompt !== 'string' || !data.prompt.trim() || new TextEncoder().encode(data.prompt).length > 16384 || typeof data.conversationId !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(data.conversationId) || typeof data.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,64}$/.test(data.requestId)) return c.json({ error: 'invalid_prompt' }, 400);
+    const response = await ns.get(ns.idFromName('muse')).fetch(new Request('http://tailnet/gadget/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: data.prompt, conversationId: data.conversationId, requestId: data.requestId }) }));
+    return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  }
+  const response = await ns.get(ns.idFromName('muse')).fetch(new Request('http://tailnet/' + (action === 'gadget-status' ? 'gadget/status' : action), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
+  return new Response(response.body, { status: response.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+});
+
+app.get('/muse-wasm-test', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', MUSE_WASM_TEST_CSP);
+  return c.html(getMuseWasmTestPage());
+});
+
+app.get('/api/muse-wasm-test/jobs', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  return jsonUtf8({ jobs: await listBridgeJobs(db, c.get('user').sub) });
+});
+
+app.post('/api/muse-wasm-test/jobs', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  // 他のサイトから管理者の資格で積ませない
+  if (!isSameOriginRequest(c.req.header('Origin'), c.req.url)) return jsonUtf8({ error: '同じサイトからの送信だけを受け付けます' }, 403);
+  const db = c.env.INQUIRY_DB;
+  if (!db) return jsonUtf8({ error: '協議の記録(INQUIRY_DB)が未設定です' }, 503);
+  const body = await c.req.json<{ request?: unknown; external?: unknown }>().catch(() => null);
+  const result = await registerBridgeJob(db, {
+    requestText: typeof body?.request === 'string' ? body.request : '',
+    createdBy: c.get('user').sub,
+    origin: 'muse-wasm-test',
+    externalWrite: body?.external === true,
+  });
+  if (!result.ok) return jsonUtf8({ error: result.detail, errorCode: result.errorCode }, result.errorCode === 'db_error' ? 500 : 400);
+  return jsonUtf8({ jobId: result.jobId });
+});
+
+// /api/muse-monitor/:section: muse-monitor(読み取り専用のMuseシステムモニタ)の1項目を、Service Binding経由で
+// HMAC署名付きで取得する(管理者限定)。失敗は理由と一緒に返す(src/utils/museMonitor.ts)。
+app.get('/api/muse-monitor/:section', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await fetchMuseMonitor(c.env.MUSE_MONITOR, c.env.MONITOR_HMAC_SECRET, c.req.param('section') ?? '');
+  if (result.ok) return jsonUtf8({ status: result.status, body: result.body }, result.status === 200 ? 200 : 502);
+  const status = result.errorCode === 'not_configured' ? 503 : result.errorCode === 'unknown_section' ? 404 : 502;
+  return jsonUtf8({ error: result.detail, errorCode: result.errorCode, upstreamStatus: result.status ?? null }, status);
+});
+
+app.get('/api/muse-status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await fetchMuseNodes(await getDemoContainerStub(c.env));
+  return c.json({ ...result, checkedAt: new Date().toISOString() });
+});
+
+app.post('/api/muse-status/signal', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const body = await c.req.json<{ node?: unknown }>().catch(() => null);
+  if (!isMuseNodeName(body?.node)) return c.json({ error: 'invalid_node' }, 400);
+  return c.json(await sendMuseSignal(await getDemoContainerStub(c.env), c.env.MUSE_API_KEY, body.node));
+});
+
+app.get('/api/muse-status/nix', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const node = c.req.query('node');
+  if (!isMuseNodeName(node)) return c.json({ error: 'invalid_node' }, 400);
+  return c.json(await fetchMuseNixPackages(await getDemoContainerStub(c.env), c.env.MUSE_API_KEY, node));
+});
+
 app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const user = c.get('user');
   const userSession = await getUserSession(c.env.DB, user.sub);
@@ -19987,11 +20876,35 @@ app.get('/cf-containers', authMiddleware, cfDashboardAdminMiddleware, async (c) 
   return c.html(getCfContainersPage());
 });
 
+app.get('/fx-wasm', authMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Referrer-Policy', 'no-referrer');
+  c.header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://ai-gateway.vercel.sh; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
+  return c.html(getFxWasmPage());
+});
+
 /**
  * デモコンテナの現在状態を返す（管理者認証が必要）。あわせてD1の
  * cf_container_operation_logから累計起動回数・直近起動からの経過時間も
  * 返す(取得失敗してもstatus本体の応答は妨げない)。
  */
+app.get('/container-monitor', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; connect-src 'self' blob: https://*.tailscale.com wss://*.tailscale.com https://*.tailscale.io wss://*.tailscale.io; img-src 'self' data:; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  return c.html(getContainerMonitorPage());
+});
+app.get('/api/container-monitor/providers', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(getContainerMonitorProviders(c.env));
+});
+app.get('/api/container-monitor/snapshot', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const provider = c.req.query('provider') ?? getContainerMonitorProviders(c.env).defaultProvider;
+  if (!getContainerMonitorProviders(c.env).providers.some(item => item.id === provider && item.execution === 'worker')) return c.json({ error: '選択した取得方式は利用できません' }, 400);
+  try { return c.json(await collectContainerMonitor(c.env, provider)); }
+  catch (error) { return c.json({ error: error instanceof Error ? error.message : '状態を取得できません' }, 502); }
+});
+
 app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const stub = await getDemoContainerStub(c.env);
   const statusResponse = await buildContainerStatusResponse(stub);
@@ -20030,6 +20943,47 @@ app.get('/api/cf-containers/status', authMiddleware, cfDashboardAdminMiddleware,
   // ここでは同じ値を文字列として明示している。値を変えたら両方更新すること。
   const sleepAfter = '5m';
   return jsonUtf8({ ...statusResponse, usage, instanceId, cost, sleepAfter });
+});
+
+/**
+ * /cf-containers の tailscale ノード ヘルスチェック欄のデータ
+ * (SPEC.cloudflare-workers-github-oauth-1.tailscale-wasm.recovery REQ-TW-015)。
+ * TailscaleWasm DO の /status と D1 の起動記録(tailscale_wasm_boot_log)を要約して
+ * 返す。DO への取得が失敗した場合は、その失敗自体を状態として返し、この API
+ * 自体は異常終了しない。ログイン URL は要約に含めない(待ちの有無だけ)。
+ */
+app.get('/api/cf-containers/tailnet-health', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const checkedAt = new Date().toISOString();
+  let bootEvents: TailnetBootEvent[] = [];
+  if (c.env.DB) {
+    try {
+      const rows = await c.env.DB.prepare(
+        'SELECT event, fingerprint, reason, created_at FROM tailscale_wasm_boot_log ORDER BY id DESC LIMIT 10',
+      ).all<TailnetBootEvent>();
+      bootEvents = rows.results ?? [];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-tailnet-health] 起動記録の取得に失敗', { error: message });
+    }
+  }
+  if (!c.env.TAILSCALE_WASM) {
+    return jsonUtf8(summarizeTailnetHealth({ configured: false, doError: null, status: null, bootEvents, checkedAt }));
+  }
+  let doError: string | null = null;
+  let status: { state?: unknown; peers?: unknown; loginURL?: unknown } | null = null;
+  try {
+    const stub = c.env.TAILSCALE_WASM.get(c.env.TAILSCALE_WASM.idFromName('muse'));
+    const res = await stub.fetch(new Request('http://tailnet/status'));
+    const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    if (res.ok && body) {
+      status = body;
+    } else {
+      doError = typeof body?.error === 'string' ? body.error : `http_${res.status}`;
+    }
+  } catch (err) {
+    doError = err instanceof Error ? err.message : String(err);
+  }
+  return jsonUtf8(summarizeTailnetHealth({ configured: true, doError, status, bootEvents, checkedAt }));
 });
 
 /**
@@ -20091,6 +21045,25 @@ app.post('/api/cf-containers/sessions/:id/note', authMiddleware, cfDashboardAdmi
     logger.error('[container-sessions] note save failed',{error:String(error)});
     return jsonUtf8({error:'作業メモを保存できませんでした'},503);
   }
+});
+
+// ページの最上部と左サイドパネルに出す、コンテナの状態(ビルド中・待機中・停止中)。読み取りだけで、コンテナは起動しない。
+app.get('/api/cf-containers/banner', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const container = await buildContainerStatusResponse(await getDemoContainerStub(c.env));
+  let builds: Awaited<ReturnType<typeof fetchBuildActivity>> = [];
+  let buildError: string | undefined;
+  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    buildError = 'CF_CONTAINER_API_TOKEN/CLOUDFLARE_ACCOUNT_IDが未設定のため、ビルドの状態は確認できません';
+  } else {
+    try {
+      builds = await fetchBuildActivity({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: cfApiKey(c.env)! }, 'cloudflare-workers-github-oauth-1');
+    } catch (err) {
+      buildError = err instanceof Error ? err.message : String(err);
+      logger.error('[cf-containers-banner] ビルドの状態の取得に失敗', { error: buildError });
+    }
+  }
+  return jsonUtf8({ ...buildBannerState({ builds, buildError, container }), checkedAt: new Date().toISOString() });
 });
 
 app.get('/api/cf-containers/build-log', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
@@ -20250,6 +21223,79 @@ app.post('/api/cf-containers/snapshot', authMiddleware, cfDashboardAdminMiddlewa
   }
 });
 
+async function getCachedLatestToolVersions(
+  nodeMajor: number,
+  current: Record<string, string | null>,
+  githubToken: string | undefined,
+  executionCtx: Pick<ExecutionContext, 'waitUntil'>,
+): Promise<LatestToolVersions> {
+  const currentKey = Object.keys(current).sort().map((name) => `${name}:${current[name] ?? ''}`).join(',');
+  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}&current=${encodeURIComponent(currentKey)}`);
+  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+  const hit = cache ? await cache.match(cacheKey) : undefined;
+  if (hit) {
+    try { return await hit.json() as LatestToolVersions; } catch { /* 壊れたキャッシュは配布元から取り直す */ }
+  }
+  const latest = await fetchLatestToolVersions({ nodeMajor, current: current as Partial<Record<ToolName, string | null>>, githubToken });
+  if (cache) {
+    const response = Response.json(latest);
+    response.headers.set('Cache-Control', 'max-age=21600');
+    try { executionCtx.waitUntil(cache.put(cacheKey, response)); } catch { /* テスト環境などexecutionCtxが無い場合はキャッシュしない */ }
+  }
+  return latest;
+}
+
+// /cf-containersページ表示時、直近のヘルスチェック版と配布元の最新版を照合し、D1へ保存する。
+app.post('/api/cf-containers/package-release-status/check', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (c.req.header('Origin') !== new URL(c.req.url).origin) return jsonUtf8({ error: '同じオリジンから操作してください。' }, 403);
+  if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
+  try {
+    // 導入版の基準が古いまま固定されないよう、古ければ稼働中コンテナから取り直す(停止中は起動しない)。
+    const db = c.env.DB;
+    const stub = await getDemoContainerStub(c.env);
+    const baseline = await resolveInstalledBaseline({
+      getLatestSnapshot: () => getLatestVersionSnapshot(db),
+      isContainerRunning: async () => (await buildContainerStatusResponse(stub)).running,
+      fetchInstalledVersions: async () => {
+        if (!stub) throw new Error('DEMO_CONTAINERバインディングが未設定です');
+        const res = await stub.fetch(new Request('https://container.internal/health'));
+        if (!res.ok) throw new Error(`コンテナの /health が HTTP ${res.status} を返しました`);
+        return versionsFromHealthPayload(await res.json());
+      },
+      recordSnapshot: async (versions) => {
+        await recordSnapshot(db, RELEASE_CHECK_SNAPSHOT_USER_ID, {
+          runningContainers: 1, connectedSeconds: null, estimatedCostUsd: null, imageCommit: null, versions,
+        });
+        return getLatestVersionSnapshot(db);
+      },
+      now: () => new Date(),
+    });
+    const installedSnapshot = baseline.snapshot;
+    const current = installedSnapshot?.versions ?? {};
+    const nodeMajor = Number(String(current.node ?? '26').split('.')[0]) || 26;
+    const latest = await getCachedLatestToolVersions(nodeMajor, current, c.env.GITHUB_TOKEN, c.executionCtx);
+    const checkedAt = new Date().toISOString();
+    const records = buildPackageReleaseStatuses('demo', installedSnapshot, latest, checkedAt);
+    await savePackageReleaseStatuses(c.env.DB, records);
+    return jsonUtf8({
+      saved: true,
+      containerKey: 'demo',
+      packageCount: records.length,
+      checkedAt,
+      installedSnapshotAt: installedSnapshot?.createdAt ?? null,
+      installedRefreshed: baseline.refreshed,
+      ...(baseline.refreshError ? { installedRefreshError: baseline.refreshError } : {}),
+      updatesAvailable: records.filter((row) => row.updateStatus === 'update_available').length,
+      latestUnavailable: records.filter((row) => row.releaseStatus === 'failed').length,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-package-release-status] D1記録に失敗', { error: message });
+    return jsonUtf8({ error: `パッケージ新版状況の記録に失敗しました: ${message}(migration 0188を適用してください)` }, 503);
+  }
+});
+
 // 各ツールの配布元の最新版(/cf-containersのバージョン表の「新版あり」バッジ用)。配布元への問い合わせを減らすため6時間キャッシュする。
 app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const nodeMajor = Number(c.req.query('nodeMajor') || '26') || 26;
@@ -20259,36 +21305,41 @@ app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMi
     const [name, ver] = pair.split(':');
     if (name && ver && /^[a-z0-9_-]{1,32}$/.test(name) && /^[0-9A-Za-z.+-]{1,40}$/.test(ver)) current[name] = ver;
   }
-  const currentKey = Object.keys(current).sort().map((k) => `${k}:${current[k]}`).join(',');
-  const cacheKey = new Request(`https://cache.internal/cf-containers/latest-versions?nodeMajor=${nodeMajor}&current=${encodeURIComponent(currentKey)}`);
-  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
-  const hit = cache ? await cache.match(cacheKey) : undefined;
-  if (hit) return hit;
-  const latest = await fetchLatestToolVersions({ nodeMajor, githubToken: c.env.GITHUB_TOKEN, current });
-  const res = jsonUtf8({ latest, checkedAt: new Date().toISOString() });
-  if (cache) {
-    const toCache = res.clone();
-    toCache.headers.set('Cache-Control', 'max-age=21600');
-    try { c.executionCtx.waitUntil(cache.put(cacheKey, toCache)); } catch { /* テスト環境などexecutionCtxが無い場合はキャッシュしない */ }
-  }
-  return res;
+  const latest = await getCachedLatestToolVersions(nodeMajor, current, c.env.GITHUB_TOKEN, c.executionCtx);
+  return jsonUtf8({ latest, checkedAt: new Date().toISOString() });
 });
 
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
-  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });
+  // 実行のたびに環境変数を確認する: 設定有無と、設定済みならトークンの検証結果を envCheck に載せる。
+  // CF_CONTAINER_API_TOKEN はフォールバック(CLOUDFLARE_API_TOKEN等)で隠れないよう、それ単体でも確認する。
+  const apiKey = cfApiKey(c.env);
+  const envCheck: { accountIdSet: boolean; tokenSource: string | null; tokenVerify: string | null; containerApiToken: { set: boolean; verify: string | null } } = {
+    accountIdSet: !!c.env.CLOUDFLARE_ACCOUNT_ID,
+    tokenSource: apiKey ? cfApiKeySource(c.env) : null,
+    tokenVerify: null,
+    containerApiToken: { set: !!c.env.CF_CONTAINER_API_TOKEN, verify: null },
+  };
+  if (c.env.CF_CONTAINER_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID) {
+    envCheck.containerApiToken.verify = c.env.CF_CONTAINER_API_TOKEN === apiKey
+      ? null // 使用トークンそのものなら下の tokenVerify と同じ結果になるため、そちらで賄う
+      : await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: c.env.CF_CONTAINER_API_TOKEN });
   }
+  if (!apiKey || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: (apiKey ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [], envCheck });
+  }
+  envCheck.tokenVerify = await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey });
+  if (c.env.CF_CONTAINER_API_TOKEN === apiKey) envCheck.containerApiToken.verify = envCheck.tokenVerify;
   try {
     const tunnels = await listCloudflareTunnels({
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: cfApiKey(c.env)!,
     });
     // 0件のとき、どのアカウント・どのトークンで問い合わせたかを画面で追えるようにする
-    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) } });
+    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) }, envCheck });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-tunnels] 取得に失敗', { error: message });
-    return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [] });
+    return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [], envCheck });
   }
 });
 
@@ -20308,6 +21359,10 @@ app.post('/api/cf-containers/secrets', authMiddleware, cfDashboardAdminMiddlewar
   }
   if (!value.trim()) {
     return jsonUtf8({ error: 'valueが空です' }, 400);
+  }
+  if (name === 'TAILSCALE_LOGIN_SERVER') {
+    const checked = validateTailscaleLoginServer(value);
+    if (!checked.ok) return jsonUtf8({ error: checked.error }, 400);
   }
 
   // 自身のトークン更新は入力値で認証する。保存済みトークンが期限切れでも更新可能。
@@ -20401,12 +21456,56 @@ app.get('/cf-containers/docker-dashboard.css', authMiddleware, cfDashboardAdminM
 app.get('/cf-containers/docker-dashboard.mjs', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
 app.all('/cf-containers/api/docker/*', authMiddleware, cfDashboardAdminMiddleware, proxyDockerDashboard);
 
+/**
+ * /cf-containersの画面から受け付けたSSH公開鍵を、稼働中コンテナの/root/.ssh/authorized_keysへ追記する。
+ * 管理者認証に加えてHMACシークレットの入力を求め、一致しなければ何もせずに中断する。
+ * 鍵はどこにも保存しない(コンテナを作り直すと消える)。
+ */
+app.post('/api/cf-containers/authorized-keys', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const body = await c.req.json<{ publicKey?: unknown; hmac?: unknown }>().catch(() => null);
+  const secret = resolveOriginHmacSecret(c.env);
+  if (!secret) return jsonUtf8({ error: 'ORIGIN_HMAC_SECRETが未設定のため中断しました' }, 503);
+  if (!hmacInputMatches(typeof body?.hmac === 'string' ? body.hmac : '', secret)) {
+    return jsonUtf8({ error: 'HMACが一致しないため中断しました' }, 403);
+  }
+  const checked = validatePublicKeyLine(typeof body?.publicKey === 'string' ? body.publicKey : '');
+  if (!checked.ok) return jsonUtf8({ error: checked.error }, 400);
+
+  const stub = await getDemoContainerStub(c.env);
+  if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
+  try {
+    const url = new URL(c.req.url);
+    const res = await stub.fetch(new Request(`${url.origin}/admin/authorized-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey: checked.value }),
+    }));
+    const text = await res.text();
+    const result = parseAuthorizedKeyResponse(res.status, text);
+    if (!result.ok) {
+      logger.error('[cf-containers-authorized-keys] コンテナが追記を確認できない応答を返した', { status: res.status, body: text.slice(0, 300) });
+      return jsonUtf8({ error: result.error }, 502);
+    }
+    return jsonUtf8({ ok: true, added: result.added, message: result.message });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error('[cf-containers-authorized-keys] コンテナへの追記に失敗', { error: message });
+    return jsonUtf8({ error: 'コンテナへの追記に失敗しました(コンテナが起動しているか確認してください): ' + message }, 502);
+  }
+});
+
 app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   const stub = await getDemoContainerStub(c.env);
   if (!stub) return jsonUtf8({ error: 'DEMO_CONTAINERバインディングが未設定です' }, 503);
   const prefix = '/cf-containers/proxy';
   const url = new URL(c.req.url);
   const forwardPath = url.pathname.slice(prefix.length) || '/';
+  // 公開鍵の追記はHMAC照合付きの /api/cf-containers/authorized-keys からのみ受け付ける。
+  if (forwardPath === '/admin' || forwardPath.startsWith('/admin/')) return jsonUtf8({ error: 'このパスはプロキシできません' }, 403);
+  if (forwardPath === '/t3/pairing') {
+    if (c.req.method !== 'POST') return jsonUtf8({ error: 'method_not_allowed' }, 405);
+    return requestT3PairingHandoff(request => stub.fetch(request));
+  }
   const forwardUrl = `${url.origin}${forwardPath}${url.search}`;
   const diagAction = diagActionForProxyPath(forwardPath);
   const user = c.get('user');
@@ -20416,14 +21515,17 @@ app.all('/cf-containers/proxy/*', authMiddleware, cfDashboardAdminMiddleware, as
           logger.error('[cf-containers-proxy] 診断結果のD1記録に失敗', { error: m })
         )
       : Promise.resolve(false);
+  // 身元の受け渡し(SPEC.cloudflare-workers-github-oauth-1.lib-proxy-identity REQ-LP-001):
+  // ブラウザ由来のX-Forwarded-Userを消し、認証済みセッションのログイン名を付け直して中継する。
+  const forwardRequest = buildProxyForwardRequest(c.req.raw, forwardUrl, user?.sub ?? null);
   try {
     // 応答が返らないまま待ち続けると原因が何も残らないため、診断系は30秒で打ち切って記録する
     const res = diagAction
       ? await Promise.race([
-          stub.fetch(new Request(forwardUrl, c.req.raw)),
+          stub.fetch(forwardRequest),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('コンテナが30秒以内に応答しませんでした(起動中・起動失敗・ポート未待ち受けの可能性)')), 30000)),
         ])
-      : await stub.fetch(new Request(forwardUrl, c.req.raw));
+      : await stub.fetch(forwardRequest);
     if (diagAction) {
       // 診断結果はD1にも残す(Claude CodeがMCP経由で読めるようにするため)
       const body = await res.clone().text();
@@ -26786,6 +27888,24 @@ app.post('/api/settings/aichat-auto-vectorize-enabled', authMiddleware, async (c
     return c.json({ message: 'キーワードの自動ベクタ化設定を変更しました', mode }, 200);
   } catch {
     return c.json({ error: 'キーワードの自動ベクタ化設定の変更に失敗しました' }, 500);
+  }
+});
+
+app.get('/api/settings/askgk-timeout', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  return c.json(await readAskgkTimeoutSetting(c.env.DB));
+});
+app.post('/api/settings/askgk-timeout', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  const body = await c.req.json().catch(() => null);
+  try { validateAskgkTimeoutSeconds(body?.timeoutSeconds); }
+  catch (error) { return c.json({ error: error instanceof Error ? error.message : '設定値が不正です' }, 400); }
+  if (!Number.isSafeInteger(body?.revision) || body.revision < 1) return c.json({ error: 'リビジョンが不正です' }, 400);
+  try {
+    const setting = await saveAskgkTimeoutSetting(c.env.DB, body.timeoutSeconds, body.revision, c.get('user').sub);
+    return c.json(setting);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '設定の保存に失敗しました';
+    return c.json({ error: message }, message.includes('別の操作') ? 409 : 503);
   }
 });
 

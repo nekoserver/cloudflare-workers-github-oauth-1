@@ -1,0 +1,17 @@
+{
+  "claude.tar.gz": {
+    "url": "https://github.com/anthropics/claude-code/releases/download/v2.1.318/claude-linux-x64.tar.gz",
+    "sha256": "e6d426ca0c123f61fad58a361da0329f2a93cd206bc87040ed8d9576dd9eb583",
+    "bytes": 155477886
+  },
+  "chrome.deb": {
+    "url": "https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_157.0.8103.38-1_amd64.deb",
+    "sha256": "a62b277dc03da2cff50cc04589deb66f6875be339c066d46adb49b49eedb629d",
+    "bytes": 147633324
+  },
+  "cloudflared.deb": {
+    "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.7/cloudflared-linux-amd64.deb",
+    "sha256": "70b1a1e0f46033ffc8d90b406e554044ba6cbf2e4360295ef1163aed31e09393",
+    "bytes": 19925068
+  }
+}

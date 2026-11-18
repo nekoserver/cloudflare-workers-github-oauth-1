@@ -36,7 +36,7 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
 
     const inserts: { sql: string; values: unknown[] }[] = [];
     const db = {
-      prepare: (sql: string) => ({
+      prepare: (sql: string) => ({ first: async () => ({ revision: 1, timeoutSeconds: 120 }),
         all: () => Promise.resolve({ results: [{ model_id: 'other', color: '#4f46e5' }] }),
         bind: (...values: unknown[]) => ({
           first: () => Promise.resolve(sql.includes('user_sessions') ? { revoked_at: null } : null),
@@ -87,7 +87,7 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
   it.each(['command', 'selected-claude'])('Claudeとして保存し色と回答操作用usageを返す: %s', async (mode) => {
     const inserts: { sql: string; values: unknown[] }[] = [];
     const db = {
-      prepare: (sql: string) => ({
+      prepare: (sql: string) => ({ first: async () => ({ revision: 1, timeoutSeconds: 120 }),
         all: async () => ({ results: [{ model_id: 'codex', color: '#4f46e5' }] }),
         bind: (...values: unknown[]) => ({
           first: () => Promise.resolve(sql.includes('user_sessions') ? { revoked_at: null } : null),
@@ -120,7 +120,7 @@ describe('POST /api/aichat: /neko askgk codex_prompt="..."', () => {
   });
   it('ページ表示時にCodex色をDBへ登録し、色丸とサイドパネルに同じ色を渡す', async () => {
     const inserts: unknown[][] = [];
-    const DB = { prepare: (sql: string) => ({
+    const DB = { prepare: (sql: string) => ({ first: async () => ({ revision: 1, timeoutSeconds: 120 }),
       all: async () => ({ results: [{ model_id: 'other', color: '#4f46e5' }] }),
       bind: (...args: unknown[]) => ({
         first: async () => ({ revoked_at: null }),

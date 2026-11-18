@@ -3,6 +3,7 @@
  * HTML。コンテナの状態参照・起動/停止/再起動・プロキシへの導線を持つ。
  */
 import { CONFIGURED_INSTANCE_TYPE, CONFIGURED_INSTANCE_SPEC, computeHourlyRate } from '../utils/cfContainerCost';
+import { APACHE_MANUAL_BASE } from '../data/apacheManual';
 
 export function getCfContainersPage(): string {
   const instancePrices = [
@@ -52,7 +53,9 @@ body { background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans
 .section-sidebar summary { cursor: pointer; font-weight: 600; padding: 8px 12px; }
 .section-sidebar details { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .section-sidebar a { display: flex; align-items: center; min-height: 44px; padding: 8px 12px; color: var(--link); text-decoration: none; }
-.section-sidebar a:hover, .section-sidebar a:focus-visible { background: var(--accent-bg); text-decoration: underline; }
+.section-sidebar a:hover, .section-sidebar a:focus-visible { background: var(--accent-bg); }
+/* リンクには下線を付けない(マウスを乗せたときも)。ユーザー指定 2026-11-15 */
+a, a:hover, a:focus-visible { text-decoration: none; }
 main { min-width: 0; }
 main details[data-section] { scroll-margin-top: 12px; }
 main details[data-section]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -60,6 +63,26 @@ main details[data-section]:focus-visible { outline: 2px solid var(--accent); out
   .page-layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .section-sidebar { position: static; max-height: none; }
 }
+/* コンテナの状態の帯(ページ最上部と左サイドパネルの最上位)。色はCSS変数だけを使う。 */
+.status-banner, .sidebar-status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+  min-height: 44px; padding: 8px 12px; margin-bottom: 8px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.status-label { font-weight: 700; font-size: 16px; }
+.status-detail { color: var(--muted); font-size: 13px; }
+[data-kind="loading"] .status-label, [data-kind="unknown"] .status-label { color: var(--muted); }
+[data-kind="building"] .status-label { color: var(--err); animation: status-blink 1s steps(2, start) infinite; }
+[data-kind="building"] .status-detail { color: var(--err); }
+[data-kind="standby"] .status-label { color: var(--ok); background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 999px; padding: 2px 12px; }
+[data-kind="stopped"] .status-label { color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px 12px; }
+[data-kind="build_failed"] .status-label { color: var(--err); background: var(--err-bg); border: 1px solid var(--err); border-radius: 999px; padding: 2px 12px; }
+[data-kind="build_failed"] .status-detail { color: var(--err); }
+@keyframes status-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  [data-kind="building"] .status-label { animation: none; }
+}
+.sidebar-status { margin-bottom: 8px; }
 h1 { font-size: 20px; margin-bottom: 4px; }
 .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .notice {
@@ -85,11 +108,50 @@ button {
 button:hover { background: var(--bg); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 #log { margin-top: 6px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+#log.restarting { color: var(--warn); animation: status-blink 1s steps(2, start) infinite; }
 details.card > summary { cursor: pointer; font-weight: 600; color: var(--text); padding: 2px 0; }
 details.card[open] > summary { margin-bottom: 6px; }
 /* 前回表示時との差分: 増えた・変わった=黄、同じ=淡色 */
 .diff-up { color: var(--warn); font-weight: 600; }
 .diff-ok { color: var(--ok); font-weight: 600; }
+.module-active { color: var(--ok); font-weight: 600; }
+.module-inactive { color: var(--muted); }
+.module-unlocked td:not(.module-active):not(.module-first) { opacity: 0.45; }
+/* グレーアウト中も緑の表記は薄くせず、モジュール名は通常の文字色(ダークテーマでは白)にする。ユーザー指定 2026-11-15 */
+.module-unlocked .module-lock-cell { opacity: 0.45; }
+.module-unlocked .module-name.module-inactive { color: var(--text); }
+button.module-filter-toggle { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
+button.module-name { background: none; border: 0; padding: 0; margin: 0; font: inherit; cursor: pointer; text-decoration: none; }
+.apache-module-panel { width: min(640px, 100%); max-height: calc(100dvh - 80px); overflow-y: auto; }
+.apache-module-panel h4 { font-size: 13px; margin: 10px 0 4px; }
+.apache-module-panel dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; font-size: 12px; }
+.apache-module-panel dt { color: var(--muted); }
+.apache-directives { width: 100%; border-collapse: collapse; font-size: 12px; }
+.apache-directives th, .apache-directives td { border-top: 1px solid var(--border); padding: 3px 4px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.apache-directives code { font-size: 11px; }
+.apache-help-link { display: inline-block; margin: 8px 0 2px; color: var(--link); }
+.apache-help-panel { position: fixed; margin: 0; width: min(960px, 100%); height: calc(100dvh - 80px); display: flex; flex-direction: column; gap: 6px; }
+/* ヘルプのウィンドウ: 右端のボタン・最大化・四隅のつまみ・タイトルバーだけ(ユーザー指定 2026-11-15) */
+#apache-help-bar { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; margin-bottom: 0; user-select: none; touch-action: manipulation; }
+#apache-help-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#apache-help-actions { margin-left: auto; flex: 0 0 auto; display: flex; gap: 6px; }
+#apache-help-actions button { margin-right: 0; }
+.apache-help-panel.maximized { left: 0 !important; top: 0 !important; width: 100vw !important; height: 100dvh !important; border-radius: 0; }
+.apache-help-panel.collapsed { height: auto !important; }
+.apache-help-panel.collapsed iframe, .apache-help-panel.collapsed .help-resize { display: none; }
+.apache-help-panel.maximized .help-resize { display: none; }
+.apache-help-panel.resizing iframe { pointer-events: none; }
+.apache-help-panel.resizing { user-select: none; }
+.help-resize { position: absolute; width: 20px; height: 20px; touch-action: none; z-index: 1; }
+.help-resize[data-corner="nw"] { left: -6px; top: -6px; cursor: nwse-resize; }
+.help-resize[data-corner="ne"] { right: -6px; top: -6px; cursor: nesw-resize; }
+.help-resize[data-corner="sw"] { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.help-resize[data-corner="se"] { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.help-resize[data-corner="se"]::after { content: ''; position: absolute; right: 8px; bottom: 8px; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); }
+.apache-help-panel iframe { flex: 1; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.module-toggle, .module-lock { padding: 0 6px; margin-right: 6px; font-size: 12px; }
+.module-check { margin: 0 6px 0 0; vertical-align: middle; }
+.apache-main-row td { font-weight: 600; }
 .menu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0; font-size: 13px; }
 .menu-toggle { padding: 0 8px; font-size: 12px; }
 .menu-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.35); display: flex; align-items: flex-start; justify-content: center; padding: 16px; }
@@ -117,15 +179,21 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 <body>
 <div class="page-layout">
 <aside class="section-sidebar" aria-label="セクション移動">
+  <div id="sidebar-status" class="sidebar-status" data-kind="loading" role="status" aria-live="polite">
+    <span class="status-label">確認中…</span><span class="status-detail"></span>
+  </div>
   <details open>
     <summary>ページ内メニュー</summary>
     <a href="/cf-containers/planner">コンテナ構成プランナー</a>
     <nav aria-label="コンテナ管理の各セクション">
       <div class="menu-row"><a href="#section-secrets">トークン設定</a><button type="button" class="menu-toggle" data-section="secrets" aria-expanded="false" aria-label="トークン設定 の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-authorized-keys">SSH公開鍵の追加</a><button type="button" class="menu-toggle" data-section="authorized-keys" aria-expanded="false" aria-label="SSH公開鍵の追加 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-control">コンテナの操作</a><button type="button" class="menu-toggle" data-section="control" aria-expanded="false" aria-label="コンテナの操作 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-pricing">単価表</a><button type="button" class="menu-toggle" data-section="pricing" aria-expanded="false" aria-label="単価表 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-links">リンク・プロキシ</a><button type="button" class="menu-toggle" data-section="links" aria-expanded="false" aria-label="リンク・プロキシ の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-health">ヘルスチェック</a><button type="button" class="menu-toggle" data-section="health" aria-expanded="false" aria-label="ヘルスチェック の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-tailnet">Tailscaleノード</a><button type="button" class="menu-toggle" data-section="tailnet" aria-expanded="false" aria-label="Tailscaleノード の設定状況">&#9660;</button></div>
+      <div class="menu-row"><a href="#section-t3">T3・Codex・Tailscale</a><button type="button" class="menu-toggle" data-section="t3" aria-expanded="false" aria-label="T3・Codex・Tailscale の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-report">6時間レポート</a><button type="button" class="menu-toggle" data-section="report" aria-expanded="false" aria-label="6時間レポート の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-net">ネットワーク情報</a><button type="button" class="menu-toggle" data-section="net" aria-expanded="false" aria-label="ネットワーク情報 の設定状況">&#9660;</button></div>
       <div class="menu-row"><a href="#section-buildlog">本番ビルドのログ</a><button type="button" class="menu-toggle" data-section="buildlog" aria-expanded="false" aria-label="本番ビルドのログ の設定状況">&#9660;</button></div>
@@ -135,6 +203,10 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </details>
 </aside>
 <main>
+<div id="status-banner" class="status-banner" data-kind="loading" role="status" aria-live="polite">
+  <span class="status-label">確認中…</span><span class="status-detail">コンテナの状態を確認しています</span>
+</div>
+<p><a href="/container-monitor">全コンテナ・Tailscale監視</a></p>
 <h1>Cloudflare Containers（デモ）</h1>
 <p class="subtitle">Durable Objects上で動くコンテナの起動・停止・状態確認・プロキシのデモページ。</p>
 <div class="notice">
@@ -149,13 +221,23 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <select id="secret-name">
       <option value="NEKOROOT_TUNNEL_TOKEN">NEKOROOT_TUNNEL_TOKEN（nekorootトンネル）</option>
       <option value="TAILSCALE_AUTHKEY">TAILSCALE_AUTHKEY（Tailscale）</option>
+      <option value="TAILSCALE_LOGIN_SERVER">TAILSCALE_LOGIN_SERVER（Tailscale管理サーバーURL・https）</option>
       <option value="CF_CONTAINER_API_TOKEN">CF_CONTAINER_API_TOKEN（コンテナ内cfコマンド）</option>
       <option value="CONTAINER_GH_TOKEN">CONTAINER_GH_TOKEN（コンテナ内gh・git push）</option>
+      <option value="SSH_HOST_ED25519_KEY_B64">SSH_HOST_ED25519_KEY_B64（sshのホスト秘密鍵・base64）</option>
+      <option value="SSH_AUTHORIZED_KEYS">SSH_AUTHORIZED_KEYS（追加の公開鍵・;区切り）</option>
     </select>
   </div>
   <input id="secret-value" type="password" placeholder="トークンを貼り付け" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);margin-bottom:8px;" />
   <button id="btn-set-secret" type="button">保存・更新して再起動</button>
   <div id="secret-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+</details>
+<details class="card" id="section-authorized-keys" tabindex="-1" data-section="authorized-keys">
+  <summary>SSH公開鍵の追加（authorized_keys）</summary>
+  <textarea id="authorized-key-input" rows="2" placeholder="ssh-ed25519 AAAA... comment" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);font-family:monospace;font-size:12px;"></textarea>
+  <input id="authorized-key-hmac" type="password" autocomplete="off" placeholder="HMACシークレット" style="width:100%;padding:8px;margin-top:6px;border:1px solid var(--border);border-radius:4px;background:var(--surface);color:var(--text);">
+  <button id="btn-add-authorized-key" type="button" style="margin-top:6px;">追加</button>
+  <div id="authorized-key-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
 <details class="card" id="section-control" tabindex="-1" data-section="control" open>
   <summary>コンテナの操作（起動・停止・状態）</summary>
@@ -199,11 +281,33 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div class="pricing-scroll">
   <table class="health-table" id="health-table" hidden>
-    <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>Docker</th><th>確認時刻</th></tr></thead>
+    <thead><tr><th>Apache(8443)</th><th>Apache lib(8445)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>Docker</th><th>確認時刻</th></tr></thead>
     <tbody><tr>
-      <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-docker"></td><td id="health-time"></td>
+      <td id="health-apache"></td><td id="health-apache-lib"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-docker"></td><td id="health-time"></td>
     </tr></tbody>
   </table>
+  </div>
+  <div class="pricing-scroll">
+  <p class="subtitle" style="margin:6px 0 4px;">Apacheモジュール（導入済みファイルとapache2ctl -Mのロード状態。版はApache本体の版）</p>
+  <table class="health-table" id="apache-modules-table" hidden>
+    <thead><tr><th>モジュール</th><th>Apache版</th><th>導入</th><th><button type="button" id="apache-modules-filter" class="module-filter-toggle" data-filter="all" aria-label="有効状態で絞り込む(すべて)">有効状態</button></th></tr></thead>
+    <tbody id="apache-modules-tbody"></tbody>
+  </table>
+  <div id="apache-modules-error" class="module-inactive" style="font-size:12px;margin-top:4px;"></div>
+  <div id="apache-module-modal" class="menu-modal" hidden>
+    <div class="menu-panel apache-module-panel" role="dialog" aria-modal="true" aria-labelledby="apache-module-title">
+      <div class="status-row"><strong id="apache-module-title"></strong><button type="button" id="apache-module-close">閉じる</button></div>
+      <div id="apache-module-body" style="font-size:13px;margin-top:6px;"></div>
+    </div>
+  </div>
+  <div id="apache-help-modal" class="menu-modal" hidden>
+    <div class="menu-panel apache-help-panel" role="dialog" aria-modal="true" aria-labelledby="apache-help-title">
+      <div class="status-row" id="apache-help-bar" title="ダブルタップでタイトルバーだけにする/元に戻す"><strong id="apache-help-title"></strong><span id="apache-help-actions"><button type="button" id="apache-help-close">閉じる</button><button type="button" id="apache-help-maximize" aria-pressed="false" aria-label="最大化する" title="最大化する">⬜︎</button></span></div>
+      <iframe id="apache-help-frame" src="about:blank" title="Apacheモジュールのヘルプ" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+      <span class="help-resize" data-corner="nw" aria-hidden="true"></span><span class="help-resize" data-corner="ne" aria-hidden="true"></span><span class="help-resize" data-corner="sw" aria-hidden="true"></span><span class="help-resize" data-corner="se" aria-hidden="true"></span>
+    </div>
+  </div>
+  <!-- /apache-module-modals -->
   </div>
   <div id="image-build" style="font-size:12px;margin-bottom:6px;" hidden></div>
   <div class="pricing-scroll">
@@ -213,14 +317,30 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </table>
   </div>
   <div class="pricing-scroll">
-  <p class="subtitle" style="margin:6px 0 4px;">ネットワーク・CLIツール(apt。最新はコンテナ内のapt-cacheの候補版、6時間ごとに更新)</p>
+  <p class="subtitle" style="margin:6px 0 4px;">ネットワーク・CLIツール（apt導入状況。最新版はコンテナ内のapt-cache候補版、6時間ごとに更新）</p>
   <table class="health-table" id="apt-table" hidden>
     <thead><tr><th>コマンド</th><th>パッケージ</th><th>実際の版</th><th>最新(apt候補)</th><th>判定</th></tr></thead>
     <tbody id="apt-tbody"></tbody>
   </table>
   </div>
   <p style="font-size:12px;color:var(--muted);">OpenSSL・OpenSSHは上流の最新版と比較します。Ubuntuによる修正のバックポート状況は、この比較では判定しません。</p>
+  <div id="version-status-log" style="margin-top:6px;font-size:12px;color:var(--muted);">ページ表示時に最新版・導入状況をD1へ記録します。</div>
   <div id="health-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
+</details>
+<details class="card" id="section-tailnet" tabindex="-1" data-section="tailnet" open>
+  <summary>Tailscaleノード（本体ワーカーのWASMノード）</summary>
+  <div class="status-row">
+    <span class="chip" id="tailnet-chip" data-running="false">確認中</span>
+    <button id="btn-tailnet" type="button">再確認</button>
+  </div>
+  <div id="tailnet-detail" style="font-size:13px;"></div>
+  <div class="pricing-scroll">
+  <table class="health-table" id="tailnet-events" hidden>
+    <thead><tr><th>起動記録（D1）</th><th>状態の指紋</th><th>理由</th><th>時刻</th></tr></thead>
+    <tbody id="tailnet-events-tbody"></tbody>
+  </table>
+  </div>
+  <div id="tailnet-log" style="margin-top:6px;font-size:12px;color:var(--muted);"></div>
 </details>
 <details class="card" id="section-report" tabindex="-1" data-section="report">
   <summary>6時間レポート(Slack通知)</summary>
@@ -236,6 +356,32 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     <button id="btn-net" type="button">ip addr / ip route を取得</button>
   </div>
   <pre id="net-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
+  <button id="btn-tailscale-peers" type="button" style="margin-top:8px;">Tailscaleの接続経路を取得</button>
+  <pre id="tailscale-peers-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
+</details>
+<details class="card" id="section-t3" tabindex="-1" data-section="t3" open>
+  <summary>T3 Code・Codex・Tailscale の状態</summary>
+  <p class="subtitle" style="margin:0 0 4px;">好ましい状態(総合判定が「準備完了」になる条件):</p>
+  <ul class="subtitle" style="margin:0 0 8px;padding-left:20px;">
+    <li>T3本体が 127.0.0.1:3773 だけで待ち受け、HTTPが正常に返る(<code>/.well-known/t3/environment</code>)</li>
+    <li>埋め込み用の中継が 127.0.0.1:3774 だけで待ち受け、frame-ancestors 付きでHTTPが正常に返る</li>
+    <li>codex コマンドが入っていて、<code>codex login status</code> がサインイン済みを返す(T3はこの結果を見ている。手でサインインしても、T3が見る HOME と同じでなければ反映されない)</li>
+    <li><code>~/.codex/auth.json</code> がある(権限は 600)</li>
+    <li>Tailscale が Running で、このコンテナのノードと相手が見える</li>
+  </ul>
+  <div class="status-row">
+    <button id="btn-t3-health" type="button">T3・Codex・Tailscale の状態を確認</button>
+    <button id="btn-t3-login" type="button">T3にログイン(トークン入力なし)</button>
+  </div>
+  <p style="font-size:12px;margin:4px 0;">新しいタブでT3が開き、このブラウザがログイン済みになります。その後はtree-viewのT3もそのまま使えます。PWAには、PWAに出る承認リンクをこのブラウザで開いて承認すると引き継がれます。</p>
+  <div id="t3-verdict" style="margin:8px 0;font-size:13px;" hidden></div>
+  <div class="pricing-scroll">
+  <table class="health-table" id="t3-table" hidden>
+    <thead><tr><th>項目</th><th>結果</th><th>詳細</th></tr></thead>
+    <tbody id="t3-tbody"></tbody>
+  </table>
+  </div>
+  <pre id="t3-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;"></pre>
 </details>
 <details class="card" id="section-buildlog" tabindex="-1" data-section="buildlog">
   <summary>本番ビルド(Workers Builds)のログ</summary>
@@ -245,11 +391,12 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   <pre id="buildlog-log" style="margin-top:6px;font-size:12px;white-space:pre-wrap;max-height:480px;overflow:auto;"></pre>
 </details>
 <details class="card" id="section-container-list" tabindex="-1" data-section="container-list">
-  <summary>Container一覧（wrangler containers list）</summary>
+  <summary>作成日ごとのContainer一覧（wrangler containers list）</summary>
   <p class="subtitle">デモコンテナ内で読み取り専用の一覧コマンドを実行します。Cloudflare APIトークンにはContainers Read権限が必要です。</p>
   <div class="status-row">
-    <button id="btn-container-list" type="button">wrangler containers list を実行</button>
+    <button id="btn-container-list" type="button">一覧を更新</button>
   </div>
+  <div id="container-list-groups" aria-live="polite"></div>
   <pre id="container-list-output" style="margin-top:6px;font-size:12px;white-space:pre;max-height:480px;overflow:auto;" aria-live="polite">未実行</pre>
 </details>
 <details class="card" id="section-tunnels" tabindex="-1" data-section="tunnels">
@@ -347,6 +494,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     if (name === 'pricing') lines.push(sectionText('cost-summary') || '未取得');
     if (name === 'health') lines.push(document.getElementById('health-table').hidden ? '未確認' : '確認済み: ' + document.getElementById('health-time').textContent);
     if (name === 'report') lines.push('Slack通知: ' + (document.getElementById('report-slack-toggle').checked ? 'ON' : 'OFF'));
+    if (name === 't3') lines.push(document.getElementById('t3-table').hidden ? '未確認' : '総合判定: ' + document.getElementById('t3-verdict').textContent);
     if (name === 'net') lines.push(document.getElementById('net-log').textContent ? '取得済み' : '未取得');
     if (name === 'buildlog') lines.push(document.getElementById('buildlog-log').textContent ? '取得済み' : '未取得');
     if (name === 'tunnels') lines.push(document.getElementById('tunnel-table').hidden ? '未取得' : '一覧: ' + document.getElementById('tunnel-tbody').rows.length + '件');
@@ -412,6 +560,478 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   });
   window.addEventListener('hashchange', function () { reveal(window.location.hash); });
   reveal(window.location.hash);
+})();
+</script>
+<script id="apache-modules-panel">
+// Apacheモジュール一覧(ユーザー指定 2026-11-14)。Apache(本体)行の行頭のトグルで
+// ▶(全部閉じる)→▼(全部開く。🔐でない行はグレーアウト)→▲(🔐の行だけ)→▶ と巡る。
+// 各モジュール名の先頭のチェックボックスをONにすると🔐ボタンに替わりロックされ、🔐を押すと解除する。
+// ロックはCookie cfc_apache_module_locks に7日間保存する。壊れた値や一覧に無い名前はロック無しとして扱う。
+// モジュール名を押すと、最上位のモーダルに状態・説明・設定項目(ディレクティブ)を出す(ユーザー指定 2026-11-15)。
+// 説明は静的アセット(Apacheのソースから展開したマニュアル)のmodules.jsonから読み、ヘルプは分離したiframeで最上位に出す。
+(function () {
+  var MANUAL_BASE = '${APACHE_MANUAL_BASE}';
+  var manualPromise = null;
+  var currentModule = null;
+  var moduleModal = document.getElementById('apache-module-modal');
+  var helpModal = document.getElementById('apache-help-modal');
+  var helpFrame = document.getElementById('apache-help-frame');
+  // ヘルプのウィンドウの大きさ(幅x高さ)はCookieに1年保存する。位置は開くたびに中央。
+  // 最大化とタイトルバーだけの状態は一時的なもので、保存しない(ユーザー指定 2026-11-15)。
+  var HELP_COOKIE = 'cfc_apache_help_size';
+  var HELP_MAX_AGE = 365 * 24 * 60 * 60;
+  var HELP_MIN_W = 280;
+  var HELP_MIN_H = 160;
+  var helpPanel = helpModal ? helpModal.querySelector('.apache-help-panel') : null;
+  var helpMaxButton = document.getElementById('apache-help-maximize');
+  var helpBar = document.getElementById('apache-help-bar');
+  var helpBox = null;
+  var resizeEndedAt = 0;
+  var lastTouchUp = 0;
+  var COOKIE = 'cfc_apache_module_locks';
+  var MAX_AGE = 7 * 24 * 60 * 60;
+  var NEXT = { closed: 'open', open: 'locked', locked: 'closed' };
+  var MARK = { closed: '▶', open: '▼', locked: '▲' };
+  var LABEL = { closed: 'モジュール一覧を開く', open: '🔐の行だけにする', locked: 'モジュール一覧を閉じる' };
+  var state = 'closed';
+  var locks = {};
+  // 見出し「有効状態」で切り替える絞り込み(ユーザー指定 2026-11-15)。
+  // all: 有効◯件(すべて) / enabled: 有効のみ(🔐の無い無効な行を消す) / locked: 鍵のみ(🔐の行だけ)
+  var filter = 'all';
+  var enabledCount = 0;
+  var NEXT_FILTER = { all: 'enabled', enabled: 'locked', locked: 'all' };
+  var FILTER_ARIA = { all: 'すべて', enabled: '有効のみ', locked: '鍵のみ' };
+  function filterLabel() {
+    if (filter === 'enabled') return '有効のみ';
+    if (filter === 'locked') return '鍵のみ';
+    return '有効 ' + enabledCount + '件(すべて)';
+  }
+
+  function readLocks() {
+    var found = {};
+    document.cookie.split(';').forEach(function (part) {
+      var kv = part.trim();
+      var eq = kv.indexOf('=');
+      if (eq < 0 || kv.slice(0, eq) !== COOKIE) return;
+      kv.slice(eq + 1).split(',').forEach(function (raw) {
+        var name;
+        try { name = decodeURIComponent(raw); } catch (e) { return; }
+        if (name) found[name] = true;
+      });
+    });
+    return found;
+  }
+
+  function writeLocks() {
+    var value = Object.keys(locks).map(encodeURIComponent).join(',');
+    document.cookie = COOKIE + '=' + value + '; Path=/cf-containers; Secure; SameSite=Lax; Max-Age=' + (value ? MAX_AGE : 0);
+  }
+
+  function apply() {
+    var filterButton = document.getElementById('apache-modules-filter');
+    if (filterButton) {
+      filterButton.setAttribute('data-filter', filter);
+      filterButton.setAttribute('aria-label', '有効状態で絞り込む(' + FILTER_ARIA[filter] + ')');
+    }
+    var filterCell = document.getElementById('apache-modules-filter-cell');
+    if (filterCell) filterCell.textContent = filterLabel();
+    var toggle = document.getElementById('apache-modules-toggle');
+    if (toggle) {
+      toggle.textContent = MARK[state];
+      toggle.setAttribute('data-state', state);
+      toggle.setAttribute('aria-label', LABEL[state]);
+      toggle.setAttribute('aria-expanded', state === 'closed' ? 'false' : 'true');
+    }
+    document.querySelectorAll('#apache-modules-tbody tr[data-module]').forEach(function (tr) {
+      var locked = !!locks[tr.getAttribute('data-module')];
+      tr.classList.toggle('module-unlocked', !locked);
+      var enabled = tr.getAttribute('data-enabled') === 'true';
+      var passes = filter === 'all' || (filter === 'enabled' && (enabled || locked)) || (filter === 'locked' && locked);
+      tr.hidden = state === 'closed' || (state === 'locked' && !locked) || !passes;
+    });
+  }
+
+  function fillLock(cell, name) {
+    cell.innerHTML = '';
+    if (locks[name]) {
+      var lock = document.createElement('button');
+      lock.type = 'button';
+      lock.className = 'module-lock';
+      lock.textContent = '🔐';
+      lock.title = name + ' のロックを解除';
+      lock.setAttribute('aria-label', lock.title);
+      lock.addEventListener('click', function () {
+        delete locks[name];
+        writeLocks();
+        fillLock(cell, name);
+        apply();
+      });
+      cell.appendChild(lock);
+      return;
+    }
+    var box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'module-check';
+    box.setAttribute('aria-label', name + ' をロック');
+    box.addEventListener('change', function () {
+      if (!box.checked) return;
+      locks[name] = true;
+      writeLocks();
+      fillLock(cell, name);
+      apply();
+    });
+    cell.appendChild(box);
+  }
+
+  // 開く直前に、画面のすべての要素のz-indexの最大値+100を取る(CLAUDE.md ルール26)
+  function nextZ() {
+    var max = 1000;
+    document.querySelectorAll('*').forEach(function (el) {
+      var z = parseInt(getComputedStyle(el).zIndex, 10);
+      if (!isNaN(z) && z > max) max = z;
+    });
+    return max + 100;
+  }
+
+  function loadManual() {
+    if (!manualPromise) {
+      manualPromise = fetch(MANUAL_BASE + '/modules.json', { credentials: 'same-origin' }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+      // 失敗は次に開いたときに読み直す
+      manualPromise.catch(function () { manualPromise = null; });
+    }
+    return manualPromise;
+  }
+
+  function el(tag, text, className) {
+    var node = document.createElement(tag);
+    if (text != null) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  }
+
+  function addPair(dl, label, value) {
+    if (!value) return;
+    dl.appendChild(el('dt', label));
+    dl.appendChild(el('dd', value));
+  }
+
+  function viewport() {
+    return { w: window.innerWidth || document.documentElement.clientWidth, h: window.innerHeight || document.documentElement.clientHeight };
+  }
+
+  function readHelpSize() {
+    var found = null;
+    document.cookie.split(';').forEach(function (part) {
+      var kv = part.trim();
+      var eq = kv.indexOf('=');
+      if (eq < 0 || kv.slice(0, eq) !== HELP_COOKIE) return;
+      var pair = kv.slice(eq + 1).split('x');
+      if (pair.length !== 2) return;
+      var w = parseInt(pair[0], 10);
+      var h = parseInt(pair[1], 10);
+      if (w > 0 && h > 0 && String(w) === pair[0] && String(h) === pair[1]) found = { width: w, height: h };
+    });
+    return found;
+  }
+
+  function writeHelpSize() {
+    document.cookie = HELP_COOKIE + '=' + helpBox.width + 'x' + helpBox.height + '; Path=/cf-containers; Secure; SameSite=Lax; Max-Age=' + HELP_MAX_AGE;
+  }
+
+  function clampSize(w, h) {
+    var v = viewport();
+    return { width: Math.max(HELP_MIN_W, Math.min(w, v.w - 16)), height: Math.max(HELP_MIN_H, Math.min(h, v.h - 16)) };
+  }
+
+  function applyHelpBox() {
+    helpPanel.style.left = helpBox.left + 'px';
+    helpPanel.style.top = helpBox.top + 'px';
+    helpPanel.style.width = helpBox.width + 'px';
+    helpPanel.style.height = helpBox.height + 'px';
+  }
+
+  function placeHelp() {
+    var v = viewport();
+    var saved = readHelpSize();
+    var size = saved ? clampSize(saved.width, saved.height) : clampSize(Math.min(960, v.w - 32), v.h - 80);
+    helpBox = { width: size.width, height: size.height, left: Math.round((v.w - size.width) / 2), top: Math.max(8, Math.min(40, v.h - size.height - 8)) };
+    applyHelpBox();
+  }
+
+  function setHelpMaximized(on) {
+    helpPanel.classList.toggle('maximized', on);
+    var label = on ? '元のサイズに戻す' : '最大化する';
+    helpMaxButton.setAttribute('aria-pressed', on ? 'true' : 'false');
+    helpMaxButton.setAttribute('aria-label', label);
+    helpMaxButton.title = label;
+  }
+
+  // 四隅のつまみ: 反対の隅を固定したまま大きさを変え、離したときに大きさを保存する
+  function startResize(corner, e) {
+    if (helpPanel.classList.contains('maximized')) return;
+    e.preventDefault();
+    var start = { x: e.clientX, y: e.clientY, box: { left: helpBox.left, top: helpBox.top, width: helpBox.width, height: helpBox.height } };
+    helpPanel.classList.add('resizing');
+    function move(ev) {
+      var b = start.box;
+      var v = viewport();
+      var dx = ev.clientX - start.x;
+      var dy = ev.clientY - start.y;
+      var w = corner.indexOf('e') >= 0 ? b.width + dx : b.width - dx;
+      var h = corner.indexOf('s') >= 0 ? b.height + dy : b.height - dy;
+      w = Math.max(HELP_MIN_W, Math.min(w, v.w));
+      h = Math.max(HELP_MIN_H, Math.min(h, v.h));
+      helpBox = {
+        left: corner.indexOf('w') >= 0 ? b.left + b.width - w : b.left,
+        top: corner.indexOf('n') >= 0 ? b.top + b.height - h : b.top,
+        width: w,
+        height: h,
+      };
+      applyHelpBox();
+    }
+    function up(ev) {
+      move(ev);
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      document.removeEventListener('pointercancel', up);
+      helpPanel.classList.remove('resizing');
+      resizeEndedAt = Date.now();
+      writeHelpSize();
+    }
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+  }
+
+  function toggleHelpCollapsed() {
+    helpPanel.classList.toggle('collapsed');
+  }
+
+  function onBar(e) {
+    return !(e.target && e.target.closest && e.target.closest('button'));
+  }
+
+  function openHelp(url, title) {
+    document.getElementById('apache-help-title').textContent = title;
+    helpPanel.classList.remove('collapsed');
+    setHelpMaximized(false);
+    placeHelp();
+    helpFrame.setAttribute('src', url);
+    helpModal.style.zIndex = String(nextZ());
+    helpModal.hidden = false;
+  }
+
+  function closeHelp() {
+    helpModal.hidden = true;
+    helpFrame.setAttribute('src', 'about:blank');
+  }
+
+  function closeModule() {
+    closeHelp();
+    moduleModal.hidden = true;
+    currentModule = null;
+  }
+
+  function helpLink(href, text, className, title) {
+    var a = el('a', text, className);
+    a.href = href;
+    a.setAttribute('href', href);
+    a.addEventListener('click', function (e) { e.preventDefault(); openHelp(href, title); });
+    return a;
+  }
+
+  function fillManual(body, note, index, module, apacheVersion) {
+    var entry = index && index.modules ? index.modules[module.name] : null;
+    if (!entry) {
+      note.textContent = '静的アセットにこのモジュールの説明がありません(Apache ' + (index && index.apacheVersion || '?') + ' のマニュアルに無いモジュールです)。';
+      return;
+    }
+    // 日本語版があれば、説明もヘルプも日本語を出す(ユーザー指定 2026-11-15)。英語の原文と英語版へのリンクも残す
+    var ja = !!entry.fileJa;
+    note.textContent = (ja && entry.descriptionJa) || entry.description;
+    if (ja && entry.descriptionJa && entry.description) {
+      body.appendChild(el('p', entry.description, 'module-inactive'));
+    }
+    var dl = el('dl');
+    addPair(dl, '区分', entry.status);
+    addPair(dl, '識別子', entry.identifier);
+    addPair(dl, 'ソース', entry.sourceFile);
+    addPair(dl, '互換性', entry.compatibility);
+    body.appendChild(dl);
+    if (apacheVersion && index.apacheVersion !== apacheVersion) {
+      body.appendChild(el('p', '説明はApache ' + index.apacheVersion + ' のマニュアルです(コンテナは ' + apacheVersion + ')。', 'module-inactive'));
+    }
+    var href = MANUAL_BASE + '/' + (ja ? entry.fileJa : entry.file);
+    var helpTitle = (ja && entry.titleJa) || entry.title;
+    body.appendChild(helpLink(href, '📖 ' + helpTitle + (ja ? ' のヘルプ(日本語)を開く' : ' のヘルプを開く'), 'apache-help-link', helpTitle));
+    if (ja) {
+      body.appendChild(document.createTextNode(' '));
+      body.appendChild(helpLink(MANUAL_BASE + '/' + entry.file, '英語版', 'apache-help-link apache-help-link-en', entry.title));
+      body.appendChild(el('p', '日本語訳は英語版より古い場合があります(英語版が ' + index.apacheVersion + ' の最新です)。', 'module-inactive'));
+    }
+    body.appendChild(el('h4', '設定項目(ディレクティブ)'));
+    if (!entry.directives || !entry.directives.length) {
+      body.appendChild(el('p', 'このモジュールのページで定義されたディレクティブはありません。', 'module-inactive'));
+      return;
+    }
+    var table = el('table', null, 'apache-directives');
+    var head = el('tr');
+    ['名前', '構文', '既定値', '使える場所'].forEach(function (h) { head.appendChild(el('th', h)); });
+    table.appendChild(head);
+    entry.directives.forEach(function (d) {
+      var tr = el('tr');
+      var nameCell = el('td');
+      nameCell.appendChild(helpLink(href + (d.anchor ? '#' + d.anchor : ''), d.name, 'apache-directive-link', helpTitle + ' - ' + d.name));
+      var directiveDescription = (ja && d.descriptionJa) || d.description;
+      if (directiveDescription) { nameCell.appendChild(el('br')); nameCell.appendChild(el('span', directiveDescription, 'module-inactive')); }
+      tr.appendChild(nameCell);
+      var syntax = el('td');
+      syntax.appendChild(el('code', d.syntax || ''));
+      tr.appendChild(syntax);
+      tr.appendChild(el('td', d['default'] || ''));
+      tr.appendChild(el('td', d.context || ''));
+      table.appendChild(tr);
+    });
+    body.appendChild(table);
+  }
+
+  function openModule(module, apacheVersion) {
+    currentModule = module.name;
+    var active = module.installed && module.enabled === true;
+    document.getElementById('apache-module-title').textContent = 'mod_' + module.name;
+    var body = document.getElementById('apache-module-body');
+    body.innerHTML = '';
+    var dl = el('dl');
+    dl.appendChild(el('dt', '有効状態'));
+    var stateCell = el('dd');
+    stateCell.appendChild(el('span', module.enabled === true ? '有効' : (module.enabled === false ? '無効' : '不明'), active ? 'module-active' : 'module-inactive'));
+    stateCell.firstChild.id = 'apache-module-state';
+    dl.appendChild(stateCell);
+    addPair(dl, '導入', module.installed ? '導入済み' : '未導入');
+    addPair(dl, 'Apache版', apacheVersion || '取得できず');
+    body.appendChild(dl);
+    var note = el('p', '説明を読み込んでいます…');
+    note.style.margin = '8px 0 4px';
+    body.appendChild(note);
+    moduleModal.style.zIndex = String(nextZ());
+    moduleModal.hidden = false;
+    var name = module.name;
+    loadManual().then(function (index) {
+      if (currentModule !== name) return;
+      fillManual(body, note, index, module, apacheVersion);
+    }).catch(function (err) {
+      if (currentModule !== name) return;
+      note.textContent = '説明を読み込めませんでした(' + (err && err.message ? err.message : String(err)) + ')。';
+    });
+  }
+
+  var filterButtonInit = document.getElementById('apache-modules-filter');
+  if (filterButtonInit) {
+    filterButtonInit.addEventListener('click', function () { filter = NEXT_FILTER[filter]; apply(); });
+  }
+
+  if (moduleModal && helpModal && helpFrame) {
+    document.getElementById('apache-module-close').addEventListener('click', closeModule);
+    document.getElementById('apache-help-close').addEventListener('click', closeHelp);
+    moduleModal.addEventListener('click', function (e) { if (e.target === moduleModal) closeModule(); });
+    helpModal.addEventListener('click', function (e) {
+      if (e.target !== helpModal) return;
+      // つまみのドラッグをウィンドウの外で離したときのクリックでは閉じない
+      if (resizeEndedAt && Date.now() - resizeEndedAt < 500) { resizeEndedAt = 0; return; }
+      closeHelp();
+    });
+    helpMaxButton.addEventListener('click', function () { setHelpMaximized(!helpPanel.classList.contains('maximized')); });
+    helpPanel.querySelectorAll('.help-resize').forEach(function (handle) {
+      handle.addEventListener('pointerdown', function (e) { startResize(handle.getAttribute('data-corner'), e); });
+    });
+    // タイトルバーのダブルクリック(タッチでは続けて2回のタップ)で、タイトルバーだけにする/元に戻す
+    helpBar.addEventListener('dblclick', function (e) { if (onBar(e)) toggleHelpCollapsed(); });
+    helpBar.addEventListener('pointerup', function (e) {
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+      if (!onBar(e)) return;
+      var now = Date.now();
+      if (lastTouchUp && now - lastTouchUp < 350) { lastTouchUp = 0; toggleHelpCollapsed(); }
+      else lastTouchUp = now;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (!helpModal.hidden) closeHelp();
+      else if (!moduleModal.hidden) closeModule();
+    });
+  }
+
+  function cell(tr, text, className) {
+    var td = document.createElement('td');
+    td.textContent = text;
+    if (className) td.className = className;
+    tr.appendChild(td);
+    return td;
+  }
+
+  function render(data) {
+    var table = document.getElementById('apache-modules-table');
+    var tbody = document.getElementById('apache-modules-tbody');
+    var error = document.getElementById('apache-modules-error');
+    tbody.innerHTML = '';
+    error.textContent = data && data.error ? '状態取得の補足: ' + data.error : '';
+    if (!data || !Array.isArray(data.items)) { table.hidden = true; return; }
+    locks = readLocks();
+    var installed = 0;
+    var enabled = 0;
+    data.items.forEach(function (m) {
+      if (m.installed) installed++;
+      if (m.installed && m.enabled === true) enabled++;
+    });
+
+    var main = document.createElement('tr');
+    main.className = 'apache-main-row';
+    var head = document.createElement('td');
+    var toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.id = 'apache-modules-toggle';
+    toggle.className = 'module-toggle';
+    toggle.addEventListener('click', function () { state = NEXT[state]; apply(); });
+    head.appendChild(toggle);
+    head.appendChild(document.createTextNode('Apache(本体)'));
+    main.appendChild(head);
+    cell(main, data.apacheVersion || '取得できず', data.apacheVersion ? 'module-active' : 'module-inactive');
+    cell(main, installed + '/' + data.items.length + ' 導入済み');
+    enabledCount = enabled;
+    cell(main, filterLabel()).id = 'apache-modules-filter-cell';
+    tbody.appendChild(main);
+
+    data.items.forEach(function (module) {
+      var active = module.installed && module.enabled === true;
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-module', module.name);
+      tr.setAttribute('data-enabled', active ? 'true' : 'false');
+      var first = document.createElement('td');
+      first.className = 'module-first';
+      var lockCell = document.createElement('span');
+      lockCell.className = 'module-lock-cell';
+      var name = document.createElement('button');
+      name.type = 'button';
+      name.className = 'module-name ' + (active ? 'module-active' : 'module-inactive');
+      name.textContent = module.name;
+      name.setAttribute('aria-label', module.name + ' の説明を開く');
+      name.addEventListener('click', function () { openModule(module, data.apacheVersion); });
+      first.appendChild(lockCell);
+      first.appendChild(name);
+      tr.appendChild(first);
+      fillLock(lockCell, module.name);
+      cell(tr, data.apacheVersion || '取得できず', active && data.apacheVersion ? 'module-active' : 'module-inactive');
+      cell(tr, module.installed ? '導入済み' : '未導入', module.installed ? 'module-active' : 'module-inactive');
+      cell(tr, module.enabled === true ? '有効' : (module.enabled === false ? '無効' : '不明'), active ? 'module-active' : 'module-inactive');
+      tbody.appendChild(tr);
+    });
+    apply();
+    table.hidden = false;
+  }
+
+  window.cfcApacheModules = { render: render, openHelp: openHelp };
 })();
 </script>
 <script>
@@ -537,6 +1157,68 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     }
   }
 
+  // Tailscaleノードのヘルスチェック欄(REQ-TW-015)。取得失敗やDOの503は、
+  // ページの異常ではなく欄の状態として表示する。
+  var tailnetChip = document.getElementById('tailnet-chip');
+  var tailnetDetail = document.getElementById('tailnet-detail');
+  var tailnetLog = document.getElementById('tailnet-log');
+  var tailnetEvents = document.getElementById('tailnet-events');
+  var tailnetEventsBody = document.getElementById('tailnet-events-tbody');
+  var tailnetLabels = {
+    running: 'Running（稼働中）',
+    needs_login: 'NeedsLogin（ログイン待ち）',
+    not_started: '未起動',
+    unavailable: '到達不能（DOが応答しない）',
+    not_configured: '未設定（バインディングなし）',
+    unknown: '状態不明'
+  };
+  function renderTailnet(data) {
+    var label = tailnetLabels[data.kind] || data.kind;
+    tailnetChip.textContent = label;
+    tailnetChip.setAttribute('data-running', data.kind === 'running' ? 'true' : 'false');
+    var lines = [];
+    if (data.nodeState) lines.push('ノード状態: ' + data.nodeState);
+    if (data.kind === 'running' || data.kind === 'needs_login') {
+      lines.push('muse-vm: ' + (data.museOnline ? 'オンライン' : 'オフライン'));
+      lines.push('ピア数: ' + data.peerCount);
+    }
+    if (data.loginPending) lines.push('ログインURLが発行されています（この欄には表示しません）');
+    if (data.doError) lines.push('DOの応答: ' + data.doError);
+    tailnetDetail.textContent = lines.join(' ／ ');
+    tailnetLog.textContent = '確認時刻: ' + data.checkedAt;
+    tailnetEventsBody.textContent = '';
+    (data.bootEvents || []).forEach(function (ev) {
+      var tr = document.createElement('tr');
+      [ev.event, ev.fingerprint || '', ev.reason || '', ev.created_at].forEach(function (v) {
+        var td = document.createElement('td');
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      tailnetEventsBody.appendChild(tr);
+    });
+    tailnetEvents.hidden = !(data.bootEvents && data.bootEvents.length);
+  }
+  function fetchTailnet() {
+    return fetch('/api/cf-containers/tailnet-health', { cache: 'no-store' })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error) {
+          tailnetChip.textContent = 'エラー: ' + data.error;
+          tailnetChip.setAttribute('data-running', 'false');
+          return;
+        }
+        renderTailnet(data);
+      })
+      .catch(function (err) {
+        tailnetChip.textContent = '取得に失敗しました';
+        tailnetChip.setAttribute('data-running', 'false');
+        tailnetLog.textContent = String(err);
+      });
+  }
+  var tailnetBtn = document.getElementById('btn-tailnet');
+  if (tailnetBtn) tailnetBtn.addEventListener('click', fetchTailnet);
+  fetchTailnet();
+
   function fetchStatus() {
     return fetch('/api/cf-containers/status')
       .then(readJsonOrText)
@@ -556,7 +1238,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   function runAction(action) {
     setBusy(true);
-    log.textContent = action + ' を実行中…';
+    var isRestart = action === 'restart';
+    log.textContent = isRestart ? '再起動中…' : action + ' を実行中…';
+    if (isRestart) log.classList.add('restarting');
     fetch('/api/cf-containers/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -575,6 +1259,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         log.textContent = 'エラー: ' + String(err);
       })
       .finally(function () {
+        if (isRestart) log.classList.remove('restarting');
         setBusy(false);
       });
   }
@@ -601,7 +1286,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   }
 
   // 版の判定: ok=想定どおり(緑)、warn=想定と違う(黄)、ng=無い・最低版より古い(赤)
-  var VERSION_LABELS = { ok: 'OK', warn: '想定と違う', ng: 'NG' };
+  var VERSION_LABELS = { ok: 'OK', warn: '想定と違う', ng: 'NG', none: '未導入' };
   // 版を数値の並びとして比べる(server.jsのcompareVersionsと同じ考え方)
   function compareVer(a, b) {
     var pa = String(a).split(/[^0-9]+/).filter(Boolean).map(Number);
@@ -643,7 +1328,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var span = document.createElement('span');
       span.className = 'badge';
       span.setAttribute('data-level', t.level);
-      span.textContent = { ok: 'OK(最新)', warn: '古い・取得できず', ng: '未インストール' }[t.level] || t.level;
+      span.textContent = t.status || ({ ok: 'OK(最新)', warn: '古い・取得できず', ng: '未インストール' }[t.level] || t.level);
       tdLevel.appendChild(span);
       tr.appendChild(tdLevel);
       tbody.appendChild(tr);
@@ -664,7 +1349,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       var changed = before !== undefined && before !== v.actual;
       var info = latestVersions && latestVersions[v.name];
       var isLatest = !!(info && info.latest && v.actual && compareVer(v.actual, info.latest) >= 0);
-      var cells = [v.name, v.actual || '(取得できず)', before === undefined ? '-' : (before || '(取得できず)'), v.expected || (v.minimum ? v.minimum + '以上' : '-')];
+      var cells = [v.name, v.actual || (v.level === 'none' ? '未導入' : '(取得できず)'), before === undefined ? '-' : (before || '(取得できず)'), v.expected || (v.minimum ? v.minimum + '以上' : '-')];
       cells.forEach(function (text, i) {
         var td = document.createElement('td');
         td.textContent = text;
@@ -712,6 +1397,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     var snap = {};
     versions.items.forEach(function (v) { snap[v.name] = v.actual; });
     saveSnapshot({ versions: snap });
+  }
+
+  // 描画・開閉・ロックは <script id="apache-modules-panel"> が受け持つ。
+  function renderApacheModules(data) {
+    window.cfcApacheModules.render(data);
   }
 
   // 単価表: 既定は適用中のプランだけ。切り替えで全プランを表示する(適用中は緑のまま)
@@ -790,6 +1480,77 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .finally(function () { reportToggle.disabled = false; });
   });
 
+  // コンテナの状態の帯(ページ最上部と左サイドパネル)。状態はAPIから取り、ビルド中は開始時刻と経過時間を1秒ごとに更新する。
+  var BANNER_LABELS = { building: 'ビルド中', build_failed: 'ビルド失敗', standby: '待機中', stopped: '停止中', unknown: '状態不明' };
+  var bannerTargets = [document.getElementById('status-banner'), document.getElementById('sidebar-status')];
+  var bannerState = null;
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
+  function formatElapsed(ms) {
+    var total = Math.max(0, Math.floor(ms / 1000));
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var sec = total % 60;
+    return (h > 0 ? h + ':' + pad2(m) : String(m)) + ':' + pad2(sec);
+  }
+  function formatStart(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  }
+  function bannerDetail(state) {
+    if (state.kind === 'building') {
+      var start = state.build && state.build.startedAt;
+      var parts = [];
+      if (start) {
+        parts.push('ビルド開始 ' + formatStart(start));
+        parts.push('経過 ' + formatElapsed(Date.now() - new Date(start).getTime()));
+      } else {
+        parts.push('ビルド開始時刻を取得できません');
+      }
+      if (state.build && state.build.status) parts.push('(status: ' + state.build.status + ')');
+      return parts.join(' ');
+    }
+    var notes = [];
+    if (state.kind === 'build_failed') {
+      var failedAt = state.build && state.build.startedAt;
+      notes.push((failedAt ? formatStart(failedAt) + ' 開始の' : '') + '本番のビルドが失敗しました。コンテナは前のイメージのまま動いています。「最新ビルドのログを取得」で原因を確かめてください');
+    }
+    if (state.container && state.container.label) notes.push(state.container.label);
+    if (state.container && state.container.error) notes.push('取得エラー: ' + state.container.error);
+    if (state.build && state.build.checked === false && state.build.error) notes.push('ビルドの状態: ' + state.build.error);
+    return notes.join(' / ');
+  }
+  function renderBanner() {
+    if (!bannerState) return;
+    var label = BANNER_LABELS[bannerState.kind] || BANNER_LABELS.unknown;
+    var detail = bannerDetail(bannerState);
+    bannerTargets.forEach(function (target) {
+      if (!target) return;
+      target.setAttribute('data-kind', bannerState.kind);
+      target.querySelector('.status-label').textContent = label;
+      target.querySelector('.status-detail').textContent = detail;
+    });
+  }
+  function loadBanner() {
+    fetch('/api/cf-containers/banner', { cache: 'no-store' })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (data.error || !data.kind) throw new Error(data.error || '状態を読めません');
+        bannerState = data;
+        renderBanner();
+      })
+      .catch(function (err) {
+        bannerState = { kind: 'unknown', container: { label: '', error: String(err) }, build: { checked: false } };
+        renderBanner();
+      })
+      .finally(function () {
+        // ビルド中は短い間隔、それ以外はゆっくり確認する。
+        setTimeout(loadBanner, bannerState && bannerState.kind === 'building' ? 15000 : 30000);
+      });
+  }
+  setInterval(function () { if (bannerState && bannerState.kind === 'building') renderBanner(); }, 1000);
+  loadBanner();
+
   var btnHealth = document.getElementById('btn-health');
   var healthTable = document.getElementById('health-table');
   var healthLog = document.getElementById('health-log');
@@ -800,6 +1561,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .then(readJsonOrText)
       .then(function (data) {
         document.getElementById('health-apache').innerHTML = badge(data.apache);
+        var apacheLibCell = document.getElementById('health-apache-lib');
+        if (data.apacheLib === undefined) { apacheLibCell.textContent = '不明（旧イメージ）'; } else { apacheLibCell.innerHTML = badge(data.apacheLib); }
         document.getElementById('health-sshd').innerHTML = badge(data.sshd);
         document.getElementById('health-cloudflared').innerHTML = badge(data.cloudflared);
         document.getElementById('health-tailscale').innerHTML = badge(data.tailscale);
@@ -812,6 +1575,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         healthTable.hidden = false;
         latestVersions = null;
         renderVersions(data.versions);
+        renderApacheModules(data.apacheModules);
         renderApt(data.aptTools);
         if (data.versions && data.versions.items) loadLatestVersions(data.versions);
         renderBuild(data.build);
@@ -825,6 +1589,21 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         btnHealth.disabled = false;
       });
   });
+
+  // ページ表示時に上流リリース情報と最後に記録した導入版をD1へ同期する。
+  // コンテナのhealth endpointは呼ばないため、ページ表示を契機にコンテナを起動しない。
+  var versionStatusLog = document.getElementById('version-status-log');
+  fetch('/api/cf-containers/package-release-status/check', { method: 'POST' })
+    .then(readJsonOrText)
+    .then(function (data) {
+      if (data.error) { versionStatusLog.textContent = 'D1記録エラー: ' + data.error; return; }
+      var basis = data.installedSnapshotAt
+        ? '導入版の基準: ' + data.installedSnapshotAt + ' / '
+        : '導入版の記録なし / ';
+      versionStatusLog.textContent = 'D1へ' + data.packageCount + 'パッケージを記録しました。' + basis
+        + '新版あり ' + data.updatesAvailable + '件 / 最新版取得失敗 ' + data.latestUnavailable + '件 / 確認 ' + data.checkedAt;
+    })
+    .catch(function (err) { versionStatusLog.textContent = 'D1記録エラー: ' + String(err); });
 
   var btnNet = document.getElementById('btn-net');
   var netLog = document.getElementById('net-log');
@@ -852,6 +1631,151 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       });
   });
 
+  // T3・Codex・Tailscaleの状態。総合判定の文言(コンテナ側のstateと対応)。
+  var T3_STATE_LABELS = {
+    ready: '準備完了',
+    'server-down': 'T3本体が停止中',
+    'server-error': 'T3本体の応答が異常',
+    'proxy-down': '埋め込み用の中継が停止中',
+    'proxy-error': '埋め込み用の中継の応答が異常',
+    exposed: '外に公開されている(要対処)',
+    'codex-missing': 'codexが無い',
+    'login-required': 'Codexが未サインイン',
+    'login-unknown': 'Codexのサインイン状態が不明'
+  };
+
+  // tailscale-peersの応答を、表示用の{ok,label,detail}にまとめる。ok: true=正常、false=異常、null=不明。
+  function summarizeTailscaleSession(data) {
+    if (!data) return { ok: null, label: '不明', detail: 'Tailscaleの状態を取得できませんでした' };
+    if (data.error) return { ok: false, label: '取得失敗', detail: String(data.error) };
+    var peers = data.peers || [];
+    var online = 0;
+    var direct = 0;
+    var relay = 0;
+    peers.forEach(function (peer) {
+      if (peer.online) online += 1;
+      if (peer.connection === 'direct') direct += 1;
+      if (peer.connection === 'relay') relay += 1;
+    });
+    var self = data.self || {};
+    var detail = 'このコンテナ: ' + (self.dnsName || '不明') + ' (' + (self.ip || 'IPなし') + ') / 相手 ' + peers.length + ' 件(オンライン ' + online + ') / 直接 ' + direct + '・中継 ' + relay;
+    return { ok: data.backendState === 'Running', label: String(data.backendState || '不明'), detail: detail };
+  }
+
+  function t3Cell(ok, text) {
+    var span = document.createElement('span');
+    span.className = 'badge';
+    span.setAttribute('data-ok', ok === true ? 'true' : 'false');
+    span.textContent = text || (ok === true ? 'OK' : ok === false ? 'NG' : '不明');
+    return span;
+  }
+
+  function addT3Row(tbody, name, ok, text, detail) {
+    var tr = document.createElement('tr');
+    var th = document.createElement('td');
+    th.textContent = name;
+    var result = document.createElement('td');
+    result.appendChild(t3Cell(ok, text));
+    var d = document.createElement('td');
+    d.textContent = detail;
+    tr.appendChild(th);
+    tr.appendChild(result);
+    tr.appendChild(d);
+    tbody.appendChild(tr);
+  }
+
+  function renderT3(t3, tailscale) {
+    var tbody = document.getElementById('t3-tbody');
+    tbody.textContent = '';
+    var s = t3.server || {};
+    var p = t3.proxy || {};
+    var c = t3.codex || {};
+    var auth = c.authFile || {};
+    var serverOk = Boolean(s.listening) && s.httpStatus >= 200 && s.httpStatus < 300;
+    var proxyOk = Boolean(p.listening) && p.httpStatus >= 200 && p.httpStatus < 300;
+    addT3Row(tbody, 'T3本体(ポート ' + (s.port || 3773) + ')', serverOk, null,
+      '待ち受け: ' + (s.listening ? (s.listenAddress || 'アドレス不明') : 'なし') + ' / HTTP: ' + (s.httpStatus == null ? '応答なし' : s.httpStatus)
+      + (s.environmentKeys && s.environmentKeys.length ? ' / environmentのキー: ' + s.environmentKeys.join(', ') : ''));
+    addT3Row(tbody, '埋め込み用の中継(ポート ' + (p.port || 3774) + ')', proxyOk, null,
+      '待ち受け: ' + (p.listening ? (p.listenAddress || 'アドレス不明') : 'なし') + ' / HTTP: ' + (p.httpStatus == null ? '応答なし' : p.httpStatus)
+      + ' / frame-ancestors: ' + (p.frameAncestors ? 'あり' : 'なし'));
+    addT3Row(tbody, 'Codex', Boolean(c.installed), null, c.installed ? '版 ' + (c.version || '不明') : 'codex コマンドが見つかりません');
+    addT3Row(tbody, 'Codexのサインイン', c.loggedIn === true ? true : c.loggedIn === false ? false : null, null,
+      (c.loginSummary ? c.loginSummary + ' / ' : '') + 'auth.json: ' + (auth.exists ? '有(権限 ' + (auth.mode || '不明') + ')' : '無') + ' / HOME: ' + (c.codexHome || c.home || '不明'));
+    var ts = summarizeTailscaleSession(tailscale);
+    addT3Row(tbody, 'Tailscaleのセッション', ts.ok, ts.label, ts.detail);
+    var verdict = document.getElementById('t3-verdict');
+    var label = T3_STATE_LABELS[t3.state] || String(t3.state || '不明');
+    verdict.textContent = '';
+    verdict.appendChild(t3Cell(t3.state === 'ready', label));
+    var why = (t3.reasons || []).concat(t3.errors || []);
+    if (why.length > 0) verdict.appendChild(document.createTextNode(' ' + why.join(' / ')));
+    verdict.hidden = false;
+    document.getElementById('t3-table').hidden = false;
+  }
+
+  var btnT3Health = document.getElementById('btn-t3-health');
+  var t3Log = document.getElementById('t3-log');
+  btnT3Health.addEventListener('click', function () {
+    btnT3Health.disabled = true;
+    t3Log.textContent = '確認中…(コンテナが停止中の場合は起動を待ちます)';
+    var tailscaleRequest = fetch('/cf-containers/proxy/debug/tailscale-peers')
+      .then(readJsonOrText)
+      .catch(function (err) { return { error: String(err) }; });
+    fetch('/cf-containers/proxy/health/t3')
+      .then(readJsonOrText)
+      .then(function (t3) {
+        if (!t3 || t3.error || !t3.state) throw new Error((t3 && t3.error) || 'T3の状態を読めません');
+        return tailscaleRequest.then(function (tailscale) {
+          renderT3(t3, tailscale);
+          t3Log.textContent = '確認時刻: ' + (t3.checkedAt || '');
+        });
+      })
+      .catch(function (err) { t3Log.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnT3Health.disabled = false; });
+  });
+
+  var btnT3Login = document.getElementById('btn-t3-login');
+  btnT3Login.addEventListener('click', function () {
+    btnT3Login.disabled = true;
+    // 非同期の後のwindow.openはSafariがブロックするため、先にタブを開いておく。
+    var tab = window.open('about:blank', '_blank');
+    t3Log.textContent = 'ログイン用のペアリングを作成中…';
+    fetch('/cf-containers/proxy/t3/pairing', { method: 'POST' })
+      .then(readJsonOrText)
+      .then(function (r) {
+        if (!r || !r.ok) throw new Error(((r && r.detail) || '応答を読めません') + ((r && r.remedy) ? ' / 対処: ' + r.remedy : ''));
+        if (tab) tab.location.href = r.pairUrl; else window.location.href = r.pairUrl;
+        t3Log.textContent = 'T3を開きました(このリンクは1回限り、期限 ' + r.expiresAt + ')';
+      })
+      .catch(function (err) { if (tab) tab.close(); t3Log.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnT3Login.disabled = false; });
+  });
+
+  var btnTailscalePeers = document.getElementById('btn-tailscale-peers');
+  var tailscalePeersLog = document.getElementById('tailscale-peers-log');
+  btnTailscalePeers.addEventListener('click', function () {
+    btnTailscalePeers.disabled = true;
+    tailscalePeersLog.textContent = '取得中…';
+    fetch('/cf-containers/proxy/debug/tailscale-peers')
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (!data || data.error) { tailscalePeersLog.textContent = 'エラー: ' + ((data && data.error) || '応答を読めません'); return; }
+        var lines = ['状態: ' + data.backendState + ' / このコンテナ: ' + data.self.dnsName + ' (' + data.self.ip + ')', ''];
+        data.peers.forEach(function (peer) {
+          var route = peer.connection === 'direct' ? '直接(P2P) ' + peer.curAddr
+            : peer.connection === 'relay' ? 'DERP中継 ' + peer.relay
+            : '経路なし';
+          lines.push((peer.active ? '[通信中] ' : '') + (peer.online ? '' : '[オフライン] ') + peer.hostName + ' ' + peer.ip + ' ' + peer.os + ' : ' + route);
+        });
+        if (data.peers.length === 0) lines.push('相手がいません');
+        lines.push('', '確認時刻: ' + data.checkedAt);
+        tailscalePeersLog.textContent = lines.join('\\n');
+      })
+      .catch(function (err) { tailscalePeersLog.textContent = 'エラー: ' + String(err); })
+      .finally(function () { btnTailscalePeers.disabled = false; });
+  });
+
   var btnBuildLog = document.getElementById('btn-buildlog');
   var buildLogPre = document.getElementById('buildlog-log');
   btnBuildLog.addEventListener('click', function () {
@@ -870,18 +1794,49 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   var btnContainerList = document.getElementById('btn-container-list');
   var containerListOutput = document.getElementById('container-list-output');
+  var containerListGroups = document.getElementById('container-list-groups');
   btnContainerList.addEventListener('click', function () {
     btnContainerList.disabled = true;
     containerListOutput.textContent = '実行中…';
+    containerListGroups.textContent = '';
     fetch('/cf-containers/proxy/debug/wrangler/containers-list', { cache: 'no-store' })
       .then(readJsonOrText)
       .then(function (data) {
-        var lines = ['$ ' + (data.command || 'wrangler containers list')];
+        var lines = ['$ ' + (data.command || 'wrangler containers list --json')];
         if (data.stdout) lines.push(data.stdout.replace(/\\s+$/, ''));
         if (data.stderr) lines.push('[stderr]\\n' + data.stderr.replace(/\\s+$/, ''));
         if (data.error) lines.push('[error] ' + data.error);
         if (data.checkedAt) lines.push('[取得時刻] ' + data.checkedAt);
         containerListOutput.textContent = lines.join('\\n\\n');
+        if (data.exitCode !== 0 || !data.stdout) return;
+        var rows;
+        try { rows = JSON.parse(data.stdout); } catch (_) { return; }
+        if (!Array.isArray(rows)) rows = rows && (rows.containers || rows.items || rows.results);
+        if (!Array.isArray(rows)) return;
+        if (rows.length === 0) {
+          containerListGroups.textContent = 'コンテナはありません。';
+          return;
+        }
+        var groups = Object.create(null);
+        rows.forEach(function (row) {
+          var created = row && (row.created_at || row.createdAt || row.created);
+          var date = typeof created === 'string' && !isNaN(Date.parse(created)) ? new Date(created).toISOString().slice(0, 10) : '作成日不明';
+          (groups[date] || (groups[date] = [])).push(row);
+        });
+        Object.keys(groups).sort(function (a, b) { return b.localeCompare(a); }).forEach(function (date) {
+          var section = document.createElement('section');
+          var heading = document.createElement('h3');
+          heading.textContent = date + '（' + groups[date].length + '）';
+          section.appendChild(heading);
+          var list = document.createElement('ul');
+          groups[date].forEach(function (row) {
+            var item = document.createElement('li');
+            item.textContent = [row.name || row.id || row.application_id || '名前不明', row.version ? 'version ' + row.version : '', row.status || ''].filter(Boolean).join(' — ');
+            list.appendChild(item);
+          });
+          section.appendChild(list);
+          containerListGroups.appendChild(section);
+        });
       })
       .catch(function (err) { containerListOutput.textContent = 'エラー: ' + String(err); })
       .finally(function () { btnContainerList.disabled = false; });
@@ -897,8 +1852,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     fetch('/api/cf-containers/tunnels')
       .then(readJsonOrText)
       .then(function (data) {
+        var ec = data.envCheck || {};
+        var cat = ec.containerApiToken || {};
+        var envText = '環境変数: CF_CONTAINER_API_TOKEN=' + (cat.set ? '設定済み' : '未設定') +
+          (cat.verify ? '、検証: ' + cat.verify : '') +
+          '、アカウントID=' + (ec.accountIdSet ? '設定済み' : '未設定') +
+          '、使用トークン=' + (ec.tokenSource || '未設定') +
+          (ec.tokenVerify ? '、検証: ' + ec.tokenVerify : '');
         if (data.error) {
-          tunnelLog.textContent = 'エラー: ' + data.error;
+          tunnelLog.textContent = 'エラー: ' + data.error + '（' + envText + '）';
           return;
         }
         tunnelTbody.innerHTML = '';
@@ -911,8 +1873,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         });
         tunnelTable.hidden = false;
         var q = data.queriedWith || {};
-        tunnelLog.textContent = data.tunnels && data.tunnels.length ? '' :
-          '(トンネルが見つかりません: アカウント末尾' + (q.accountIdTail || '?') + '、トークン=' + (q.tokenSource || '?') + '。このアカウントに削除されていないトンネルが無いか、トンネルが別のアカウントにあります)';
+        tunnelLog.textContent = data.tunnels && data.tunnels.length ? envText :
+          '(トンネルが見つかりません: アカウント末尾' + (q.accountIdTail || '?') + '、トークン=' + (q.tokenSource || '?') + '。このアカウントに削除されていないトンネルが無いか、トンネルが別のアカウントにあります)（' + envText + '）';
       })
       .catch(function (err) {
         tunnelLog.textContent = 'エラー: ' + String(err);
@@ -924,6 +1886,31 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   var secretName = document.getElementById('secret-name');
   var secretValue = document.getElementById('secret-value');
+  var authorizedKeyInput = document.getElementById('authorized-key-input');
+  var authorizedKeyHmac = document.getElementById('authorized-key-hmac');
+  var authorizedKeyLog = document.getElementById('authorized-key-log');
+  var btnAddAuthorizedKey = document.getElementById('btn-add-authorized-key');
+  btnAddAuthorizedKey.addEventListener('click', function () {
+    var publicKey = authorizedKeyInput.value.trim();
+    var hmac = authorizedKeyHmac.value;
+    if (!publicKey) { authorizedKeyLog.textContent = '公開鍵を入力してください'; return; }
+    if (!hmac) { authorizedKeyLog.textContent = 'HMACシークレットを入力してください'; return; }
+    btnAddAuthorizedKey.disabled = true;
+    authorizedKeyLog.textContent = '追加中…';
+    fetch('/api/cf-containers/authorized-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ publicKey: publicKey, hmac: hmac })
+    })
+      .then(readJsonOrText)
+      .then(function (data) {
+        if (!data || data.ok !== true) { authorizedKeyLog.textContent = (data && data.error) || '追加を確認できませんでした'; return; }
+        authorizedKeyLog.textContent = data && data.added === false ? data.message : '追加しました';
+        authorizedKeyInput.value = '';
+      })
+      .catch(function (err) { authorizedKeyLog.textContent = '追加に失敗しました: ' + err.message; })
+      .finally(function () { authorizedKeyHmac.value = ''; btnAddAuthorizedKey.disabled = false; });
+  });
   var btnSetSecret = document.getElementById('btn-set-secret');
   var secretLog = document.getElementById('secret-log');
   btnSetSecret.addEventListener('click', function () {

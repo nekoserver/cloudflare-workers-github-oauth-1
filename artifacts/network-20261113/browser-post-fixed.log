@@ -1,0 +1,3 @@
+PASS Chrome real gated panel: HMAC login, current conversation render, console form visible
+{"console_http": 200, "accepted": true, "queued": true, "error": null}
+PASS exactly one matching native queue entry in current ENV thread; assistant response pending

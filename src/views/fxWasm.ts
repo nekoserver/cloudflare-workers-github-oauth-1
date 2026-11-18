@@ -1,0 +1,13 @@
+export function getFxWasmPage(): string {
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>fx WASM サンプル</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;background:#101722;color:#e3eaf4;margin:0}main{max-width:1050px;margin:auto;padding:28px}a{color:#83c8ff}h1{margin-bottom:8px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}section{background:#192334;padding:20px;border-radius:12px;margin:18px 0}label{display:block;margin:10px 0 5px}textarea,input,select,button{box-sizing:border-box;font:inherit;border:1px solid #53637b;border-radius:6px;padding:10px;background:#0e1622;color:inherit}textarea,input,select{width:100%}textarea{font-family:monospace}button{cursor:pointer;margin:12px 6px 0 0}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#b8c6d9}[hidden]{display:none!important}@media(max-width:700px){.grid{display:block}main{padding:16px}}</style>
+</head><body><main><nav><a href="/">ホーム</a> · <a href="/wasm-modules">WASMモジュール</a></nav><h1>fx WASM サンプル</h1>
+<p>コーディングエージェントfxの公式WASMエンジンをブラウザで実行します。作業対象はこの画面内の <code>hello.js</code> です。再読み込みすると会話とファイルは初期状態に戻ります。</p>
+<p id="runtime" role="status">実行環境を確認中…</p><div class="grid"><section><form id="fx-form"><label for="mode">実行方式</label><select id="mode"><option value="demo">模擬モデル（キー不要）</option><option value="gateway">AI Gateway（実モデル）</option></select>
+<p id="demo-note"><small>模擬モデルは定型の応答でファイルの読み書きを試します。WASMエンジンとツールは実行しますが、AIへの通信は行いません。</small></p>
+<div id="gateway-options" hidden><label for="model">モデルID</label><input id="model" placeholder="provider/model" autocomplete="off"><label for="api-key">自分のAI Gateway APIキー</label><input id="api-key" type="password" autocomplete="off" spellcheck="false"><small>実行時にAI Gatewayへ直接送信します。キーを保存しません。プロンプトと作業ファイルがモデルへ送信され、利用料金が発生します。</small></div>
+<label for="prompt">依頼</label><textarea id="prompt" rows="4" maxlength="16000">hello.jsを読み、挨拶を日本語に変更してください。</textarea>
+<button id="run" disabled>実行</button><button id="stop" type="button" disabled>停止</button><button id="reset" type="button">ファイルを初期化</button></form><p id="status" role="status">未実行</p><h2>応答</h2><pre id="output" aria-live="polite"></pre><h2>ツール履歴</h2><pre id="events"></pre></section>
+<section><label for="workspace">hello.js</label><textarea id="workspace" rows="17" maxlength="64000" spellcheck="false"></textarea><p><small>編集できるのはこの仮想ファイルだけです。実行のたびに新しい会話を開始します。</small></p><a href="https://fx.sh/docs/lib/webassembly" target="_blank" rel="noopener noreferrer">fx WASM 公式仕様</a> · <a href="/vendor/libfx/LICENSE">ライセンス</a></section></div>
+<script type="module" src="/fx-wasm.mjs"></script></main></body></html>`;
+}

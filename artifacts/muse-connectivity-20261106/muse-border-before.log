@@ -1,0 +1,59 @@
+npm notice run cloudflare-workers-github-oauth@1.0.0 npx
+npm notice run 'vitest' run src/views/aichatMuseSubmissionHealth.test.ts
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.12 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/views/aichatMuseSubmissionHealth.test.ts (4 tests | 3 failed) 15ms
+     × 切断では枠を解除してポップアップを一度表示する 9ms
+     × 投稿開始前の古い接続成功で枠が戻らない 2ms
+     × 投稿中は定期確認の成功が枠色を変更しない 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/aichatMuseSubmissionHealth.test.ts > Muse投稿・枠色・接続警告の順序 > 切断では枠を解除してポップアップを一度表示する
+AssertionError: expected "vi.fn()" to be called once with arguments: [ 'Tailscaleの接続状況を確認してください' ]
+
+Number of calls: 0
+
+ ❯ src/views/aichatMuseSubmissionHealth.test.ts:16:23
+     14|       const f = setup(async () => false); f.watch.setModel('muse'); aw…
+     15|       expect(f.border).toHaveBeenLastCalledWith('');
+     16|       expect(f.popup).toHaveBeenCalledExactlyOnceWith('Tailscaleの接続状況を…
+       |                       ^
+     17|       await vi.advanceTimersByTimeAsync(600000);
+     18|       expect(f.popup).toHaveBeenCalledTimes(1);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/views/aichatMuseSubmissionHealth.test.ts > Muse投稿・枠色・接続警告の順序 > 投稿開始前の古い接続成功で枠が戻らない
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+ ❯ src/views/aichatMuseSubmissionHealth.test.ts:28:70
+     26|       f.watch.setModel('muse'); f.watch.beginSubmission(); f.watch.fin…
+     27|       resolve(true); await flush();
+     28|       expect(f.border).toHaveBeenLastCalledWith(''); expect(f.popup).t…
+       |                                                                      ^
+     29|     } finally { vi.useRealTimers(); }
+     30|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/views/aichatMuseSubmissionHealth.test.ts > Muse投稿・枠色・接続警告の順序 > 投稿中は定期確認の成功が枠色を変更しない
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ src/views/aichatMuseSubmissionHealth.test.ts:37:22
+     35|       f.watch.setModel('muse'); await flush(); f.watch.beginSubmission…
+     36|       await vi.advanceTimersByTimeAsync(600000);
+     37|       expect(health).toHaveBeenCalledTimes(1); expect(f.border).toHave…
+       |                      ^
+     38|       f.watch.finishSubmission(true); await flush(); expect(f.border).…
+     39|     } finally { vi.useRealTimers(); }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)
+   Start at  23:58:36
+   Duration  530ms (transform 157ms, setup 82ms, import 92ms, tests 15ms, environment 0ms)

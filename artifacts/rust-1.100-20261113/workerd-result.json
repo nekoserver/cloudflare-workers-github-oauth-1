@@ -1,0 +1,13 @@
+{
+  "passed": [
+    "dig",
+    "factor",
+    "gh",
+    "jev",
+    "ls",
+    "msb",
+    "sha256",
+    "sqlx",
+    "tree"
+  ]
+}

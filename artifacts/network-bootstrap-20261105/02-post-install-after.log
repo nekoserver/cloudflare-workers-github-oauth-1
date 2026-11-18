@@ -1,0 +1,19 @@
+test_boot_hook_precedes_apache_and_docker_installs_code (__main__.PostInstallTest.test_boot_hook_precedes_apache_and_docker_installs_code) ... ok
+test_concurrent_configurations_use_process_lock (__main__.PostInstallTest.test_concurrent_configurations_use_process_lock) ... ok
+test_credentials_are_copied_privately_and_never_into_webroot (__main__.PostInstallTest.test_credentials_are_copied_privately_and_never_into_webroot) ... ok
+test_current_env_wins_and_management_values_are_not_chat_settings (__main__.PostInstallTest.test_current_env_wins_and_management_values_are_not_chat_settings) ... ok
+test_explicit_current_thread_beats_saved_target (__main__.PostInstallTest.test_explicit_current_thread_beats_saved_target) ... ok
+test_failed_verification_keeps_previous_source_and_reports_not_ready (__main__.PostInstallTest.test_failed_verification_keeps_previous_source_and_reports_not_ready) ... ok
+test_invalid_fixed_thread_and_origin_are_rejected (__main__.PostInstallTest.test_invalid_fixed_thread_and_origin_are_rejected) ... ok
+test_legacy_current_key_wins_over_saved_primary (__main__.PostInstallTest.test_legacy_current_key_wins_over_saved_primary) ... ok
+test_missing_secret_does_not_generate_one_or_start_services (__main__.PostInstallTest.test_missing_secret_does_not_generate_one_or_start_services) ... ok
+test_no_new_worker_or_binding_dependency (__main__.PostInstallTest.test_no_new_worker_or_binding_dependency) ... ok
+test_private_configuration_and_repeatability (__main__.PostInstallTest.test_private_configuration_and_repeatability) ... ok
+test_source_failure_does_not_start_observer_with_old_target (__main__.PostInstallTest.test_source_failure_does_not_start_observer_with_old_target) ... ok
+test_startup_without_history_does_not_fork_or_submit (__main__.PostInstallTest.test_startup_without_history_does_not_fork_or_submit) ... ok
+test_symlink_configuration_is_not_followed (__main__.PostInstallTest.test_symlink_configuration_is_not_followed) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 0.055s
+
+OK

@@ -1,0 +1,198 @@
+
+ RUN  v5.0.5 /root/cloudflare-workers-github-oauth-1
+
+ ❯ src/utils/latestToolVersions.test.ts (12 tests | 2 failed) 196ms
+   ❯ fetchLatestToolVersions: T3 Code (2)
+     × checks the t3 npm package used by the Dockerfile and its publication dates 12ms
+     × reports unavailable T3 metadata without losing the other tools 2ms
+ ❯ src/cf-containers-tool-updates.test.ts (7 tests | 1 failed) 96ms
+   × checks the actual T3 Code version without changing its verified install pin 65ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/cf-containers-tool-updates.test.ts > checks the actual T3 Code version without changing its verified install pin
+AssertionError: expected [ { name: 'node', …(4) }, …(13) ] to deep equally contain { name: 't3', cmd: 't3', …(2) }
+
+- Expected:
+{
+  "args": [
+    "--version",
+  ],
+  "cmd": "t3",
+  "key": "t3",
+  "name": "t3",
+}
+
++ Received:
+[
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "/opt/node22/bin/node",
+    "key": "node",
+    "minimum": "26.12.1",
+    "name": "node",
+  },
+  {
+    "args": [
+      "-v",
+    ],
+    "cmd": "apache2ctl",
+    "name": "apache",
+  },
+  {
+    "args": [
+      "-V",
+    ],
+    "cmd": "ssh",
+    "name": "openssh",
+  },
+  {
+    "args": [
+      "version",
+    ],
+    "cmd": "openssl",
+    "name": "openssl",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "cloudflared",
+    "key": "cloudflared",
+    "name": "cloudflared",
+  },
+  {
+    "args": [
+      "version",
+    ],
+    "cmd": "tailscale",
+    "key": "tailscale",
+    "name": "tailscale",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "docker",
+    "name": "docker",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "codex",
+    "key": "codex",
+    "name": "codex",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "claude",
+    "key": "claude",
+    "name": "claude",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "gh",
+    "key": "gh",
+    "name": "gh",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "git",
+    "name": "git",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "jj",
+    "key": "jj",
+    "name": "jj",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "preprint",
+    "key": "preprint",
+    "name": "preprint",
+  },
+  {
+    "args": [
+      "--version",
+    ],
+    "cmd": "ruby",
+    "key": "ruby",
+    "name": "ruby",
+  },
+]
+
+ ❯ src/cf-containers-tool-updates.test.ts:47:33
+     45|
+     46| it('checks the actual T3 Code version without changing its verified in…
+     47|  expect(server.VERSION_SOURCES).toContainEqual({name:'t3',cmd:'t3',arg…
+       |                                 ^
+     48|  expect(df).toContain('"t3":"%s"');
+     49|  expect(arg('T3_VERSION')).toBe('0.1.3');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/utils/latestToolVersions.test.ts > fetchLatestToolVersions: T3 Code > checks the t3 npm package used by the Dockerfile and its publication dates
+AssertionError: expected undefined to match object { latest: '0.1.4', …(3) }
+
+- Expected:
+{
+  "currentDate": "2026-10-01",
+  "latest": "0.1.4",
+  "latestDate": "2026-11-05",
+  "source": "npm",
+}
+
++ Received:
+undefined
+
+ ❯ src/utils/latestToolVersions.test.ts:125:18
+    123|   const fetcher=routeFetcher({...allRoutes(),'registry.npmjs.org/t3':(…
+    124|   const out=await fetchLatestToolVersions({nodeMajor:26,current:{...cu…
+    125|   expect(out.t3).toMatchObject({latest:'0.1.4',latestDate:'2026-11-05'…
+       |                  ^
+    126|  });
+    127|  it('reports unavailable T3 metadata without losing the other tools',a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/utils/latestToolVersions.test.ts > fetchLatestToolVersions: T3 Code > reports unavailable T3 metadata without losing the other tools
+AssertionError: expected undefined to match object { latest: null, error: 'HTTP 429' }
+
+- Expected:
+{
+  "error": "HTTP 429",
+  "latest": null,
+}
+
++ Received:
+undefined
+
+ ❯ src/utils/latestToolVersions.test.ts:130:18
+    128|   const fetcher=routeFetcher({...allRoutes(),'registry.npmjs.org/t3':(…
+    129|   const out=await fetchLatestToolVersions({nodeMajor:26},fetcher as un…
+    130|   expect(out.t3).toMatchObject({latest:null,error:'HTTP 429'});expect(…
+       |                  ^
+    131|  });
+    132| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  3 failed | 16 passed (19)
+   Start at  22:30:48
+   Duration  1.21s (tests 44%, transform 31%, import 14%, worker 11%)

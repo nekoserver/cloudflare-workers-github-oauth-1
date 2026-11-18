@@ -49,6 +49,12 @@ function listCreatedTables(): Map<string, string> {
         tableToMigration.set(m[1], migration);
       }
     }
+    // 同じmigrationの中で作ってRENAMEする一時テーブル(例: 0154のd1_query_catalog_0154_new)は、
+    // 本番に残らないので対象外にする。
+    const renameRe = /ALTER TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+RENAME TO\s+[a-zA-Z_][a-zA-Z0-9_]*/g;
+    while ((m = renameRe.exec(sql)) !== null) {
+      if (tableToMigration.get(m[1]) === migration) tableToMigration.delete(m[1]);
+    }
   }
   return tableToMigration;
 }

@@ -110,13 +110,13 @@ describe('ハイライトトグルボタン: スワイプ後の highlights 再�
 });
 
 describe('ハイライトトグルボタン: クリックハンドラ互換性', () => {
-  it('click ハンドラで historyModalHighlightActive を反転する', () => {
+  it('click ハンドラで historyModalHighlightActive を3段階の切り替え結果に更新する', () => {
     const html = buildPage();
     const idx = html.indexOf('historyModalHighlightToggleBtn.addEventListener');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 1200);
-    expect(fn).toContain('historyModalHighlightActive');
-    expect(fn).toContain('!historyModalHighlightActive');
+    const fn = html.slice(idx, idx + 1600);
+    expect(fn).toContain('historyModalHighlightActive = nextView.highlightActive');
+    expect(fn).toContain('nextKeywordToggleMode(');
   });
 
   it('click ハンドラで highlights-hidden クラスをトグルする', () => {

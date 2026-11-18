@@ -1,5 +1,6 @@
 import { getKeywordClassificationModalScript } from '../utils/keywordClassificationModal';
 import { getConversationStreamPanel, getConversationStreamToggle } from './conversationStreamPanel';
+import type { ConversationStreamRoutes } from '../utils/conversationStreamRoutes';
 /**
  * AI チャットページのHTML
  */
@@ -15,7 +16,11 @@ import { getKeywordHighlightScript } from '../utils/keywordHighlight';
 import { getVectorizeAndBulkRegisterScript } from '../utils/vectorizeAndBulkRegister';
 import { getRubyWasmLoaderScript, rubyWasmBinaryCacheName } from '../utils/rubyWasmLoader';
 import { getRubyWasmVersionInfo, RUBY_WASM_BINARY_URL, RUBY_WASM_JS_URL } from './rubyWasm';
-import { CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
+import { AICHAT_MUSE_HEALTH_SCRIPT } from './aichatMuseHealth';
+import { AICHAT_JOB_CLIENT_SCRIPT } from './aichatJobClient';
+import { AICHAT_DRAFT_SCRIPT } from './aichatDraft';
+import { AICHAT_PENDING_CSS, AICHAT_PENDING_SCRIPT } from './aichatPending';
+import { CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL, assignModelColors, AICHAT_TUNABLE_MODELS, AICHAT_MODEL_MAX_TOKENS, AICHAT_TEMPERATURE_MIN, AICHAT_TEMPERATURE_MAX } from '../utils/aichatModelConfig';
 
 export const DEFAULT_AICHAT_MODELS: Array<{value: string; label: string}> = [
   { value: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'llama-3.3-70b-instruct-fp8-fast' },
@@ -51,25 +56,30 @@ export function getAiChatPage(user: {
   availableModels?: Array<{value: string; label: string}>;
   modelColors?: Record<string, string>;
   aichatPreferMoondream?: boolean;
+  /** 会話ストリームの接続先(resolveConversationStreamRoutes()の結果)。null は設定エラー。 */
+  conversationStreamRoutes?: ConversationStreamRoutes | null;
+  conversationStreamRoutesError?: string;
 }): string {
   const rubyVersion = getRubyWasmVersionInfo();
   const rubyCacheName = rubyWasmBinaryCacheName(rubyVersion.rubyBuildLine, rubyVersion.wasmWasiPackageVersion);
   const displayName = escapeHtml(user.name || user.username);
   const initials = escapeHtml((user.name || user.username).substring(0, 2).toUpperCase());
   const safeModel = escapeHtml(user.aiChatModel);
-  const models = [...(user.availableModels ?? DEFAULT_AICHAT_MODELS).filter(m => !['codex', 'claude'].includes(m.value)), CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL];
+  const models = [...(user.availableModels ?? DEFAULT_AICHAT_MODELS).filter(m => !['codex', 'claude', 'muse'].includes(m.value)), CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL];
   const modelList = models.some(m => m.value === user.aiChatModel)
     ? models
     : [{ value: user.aiChatModel, label: user.aiChatModel.split('/').pop() ?? user.aiChatModel }, ...models];
   const modelOptionsHtml = modelList
-    .map(m => `<option value="${escapeHtml(m.value)}"${m.value === user.aiChatModel ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
+    // 初期の言語モデルは Muse(ユーザー指定 2026-11-12)。AI_CHAT_MODEL は Slack 応答と共通の設定なので変えない。
+    .map(m => `<option value="${escapeHtml(m.value)}"${m.value === MUSE_ASKGK_MODEL.value ? ' selected' : ''}>${escapeHtml(m.label)}</option>`)
     .join('');
-  const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL]).merged);
+  const modelColorsJson = JSON.stringify(assignModelColors(user.modelColors ?? {}, [...modelList, CODEX_ASKGK_MODEL, CLAUDE_ASKGK_MODEL, MUSE_ASKGK_MODEL]).merged);
   const aichatPreferMoondreamInit = user.aichatPreferMoondream === false ? 'false' : 'true';
   const modelListJson = JSON.stringify([
-    ...modelList.filter(m => !['codex', 'claude'].includes(m.value)).map(m => ({ value: m.value, label: m.label })),
+    ...modelList.filter(m => !['codex', 'claude', 'muse'].includes(m.value)).map(m => ({ value: m.value, label: m.label })),
     { ...CODEX_ASKGK_MODEL, commandOnly: true },
     { ...CLAUDE_ASKGK_MODEL, commandOnly: true },
+    { ...MUSE_ASKGK_MODEL, commandOnly: true },
   ]);
   // 色丸ドロップダウンの「⚙」からパラメータ調整モーダルを開けるのは
   // AICHAT_TUNABLE_MODELS(よく使うGemma-4・Qwenのみ、ユーザー要望2026-10-03)に
@@ -777,6 +787,9 @@ export function getAiChatPage(user: {
       display: flex; flex-direction: column; gap: 14px;
     }
     .history-modal .chat-bubble { max-width: 88%; font-size: 11px; line-height: 1.5; }
+    .history-modal.fullscreen .chat-bubble {
+      width: 100%; max-width: 100%; box-sizing: border-box;
+    }
     .history-modal .preview-area table { font-size: 10px; }
     .history-modal .search-hist-btn { font-size: 9px; }
     .history-modal .chat-bubble.user {
@@ -1047,6 +1060,8 @@ export function getAiChatPage(user: {
     }
     .moondream-analysis-body th, .moondream-analysis-body td { overflow-wrap: normal; word-break: normal; }
     .moondream-analysis-body pre { max-width: 100%; overflow-x: auto; }
+    /* 回答待ちの表示(ユーザー指定、2026-11-07): 入力窓と応答バブルの外枠を同じ色で点滅させ、考え中の右に波形 */
+${AICHAT_PENDING_CSS}
   </style>
 </head>
 <body>
@@ -1209,7 +1224,7 @@ export function getAiChatPage(user: {
     </div>
 
     <!-- チャット本体 -->
-    ${getConversationStreamPanel()}
+    ${getConversationStreamPanel(user.conversationStreamRoutes === undefined ? undefined : user.conversationStreamRoutes, user.conversationStreamRoutesError)}
     <div class="chat-wrapper">
       <div class="chat-log" id="chatLog"></div>
       <!-- 「探索の境界線」パネル: ベクタ化済みキーワードのうちまだどの
@@ -3360,6 +3375,7 @@ export function getAiChatPage(user: {
         var wasDbApplied = historyModalDBKeywordsApplied;
         historyModalDBKeywordsApplied = false;
         historyModalChipsPinned = false;
+        historyModalKwPanelOn = false;
         historyModalActiveChipKeyword = '';
         historyModalKeywordsFromDB = [];
         fetchShareKeywords(data.id, function() { if (wasDbApplied && historyModalHighlightActive) applyAllDbKeywordHighlights(); });
@@ -3535,6 +3551,7 @@ export function getAiChatPage(user: {
 
     function applyAllDbKeywordHighlights() {
       historyModalHighlightActive = true;
+      historyModalKwPanelOn = false;
       historyModalChat.classList.remove('highlights-hidden');
       clearKeywordHighlights(historyModalChat);
       var allKws = buildAllKeywords();
@@ -3590,6 +3607,7 @@ export function getAiChatPage(user: {
             return;
           }
           historyModalChipsPinned = true;
+          historyModalKwPanelOn = false;
           historyModalActiveChipKeyword = kw;
           clearKeywordHighlights(historyModalChat);
           applyKeywordHighlight(historyModalChat, kw);
@@ -3607,9 +3625,9 @@ export function getAiChatPage(user: {
 
     function updateHighlightToggleBtn() {
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
-      var highlightsVisible = marks && marks.length > 0 && historyModalHighlightActive;
-      renderKeywordChips(!highlightsVisible || historyModalChipsPinned);
-      if (!marks || marks.length === 0) {
+      var hasMarks = !!marks && marks.length > 0;
+      renderKeywordChips(!hasMarks || historyModalChipsPinned || historyModalKwPanelOn);
+      if (!hasMarks) {
         if (historyModalKeywordsFromDB.length > 0) {
           historyModalHighlightToggleBtn.style.opacity = '1';
           historyModalHighlightToggleBtn.title = '🔑 クリックでキーワードをハイライト表示';
@@ -3619,12 +3637,16 @@ export function getAiChatPage(user: {
         }
         return;
       }
-      if (historyModalHighlightActive) {
+      var mode = currentKeywordToggleMode(historyModalHighlightActive, historyModalKwPanelOn);
+      if (mode === 'highlight') {
         historyModalHighlightToggleBtn.style.opacity = '1';
-        historyModalHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックで非表示）';
-      } else {
+        historyModalHighlightToggleBtn.title = '🔑 ハイライト表示中（クリックでハイライトもパネルも非表示）';
+      } else if (mode === 'off') {
         historyModalHighlightToggleBtn.style.opacity = '0.35';
-        historyModalHighlightToggleBtn.title = '🔑 ハイライト非表示（クリックで表示）';
+        historyModalHighlightToggleBtn.title = '🔑 ハイライトもパネルも非表示（クリックでキーワードパネルを表示）';
+      } else {
+        historyModalHighlightToggleBtn.style.opacity = '0.65';
+        historyModalHighlightToggleBtn.title = '🔑 キーワードパネル表示中（クリックでハイライト表示）';
       }
     }
 
@@ -3667,6 +3689,24 @@ export function getAiChatPage(user: {
     var historyModalKeywordsFromDB = [];
     var historyModalDBKeywordsApplied = false;
     var historyModalChipsPinned = false;
+    var historyModalKwPanelOn = false;
+
+    function nextKeywordToggleMode(mode) {
+      if (mode === 'highlight') return 'off';
+      if (mode === 'off') return 'panel';
+      return 'highlight';
+    }
+
+    function keywordToggleView(mode) {
+      if (mode === 'off') return { highlightActive: false, panelOn: false };
+      if (mode === 'panel') return { highlightActive: false, panelOn: true };
+      return { highlightActive: true, panelOn: false };
+    }
+
+    function currentKeywordToggleMode(highlightActive, panelOn) {
+      if (highlightActive) return 'highlight';
+      return panelOn ? 'panel' : 'off';
+    }
     var historyModalActiveChipKeyword = '';
     var historyModalKwEditMode = false;
 
@@ -3752,6 +3792,7 @@ export function getAiChatPage(user: {
       historyModalSwipeDataCache[r.id] = r;
       historyModalHighlightActive = true;
       historyModalChipsPinned = true;
+      historyModalKwPanelOn = false;
       historyModalActiveChipKeyword = '';
       historyModalCurrentKeyword = keyword || '';
       historyModalKeywordsFromDB = [];
@@ -4874,6 +4915,7 @@ export function getAiChatPage(user: {
     historyModalHighlightToggleBtn.addEventListener('click', function() {
       if (historyModalKeywordsFromDB.length > 0 && !historyModalDBKeywordsApplied) {
         historyModalChipsPinned = false;
+        historyModalKwPanelOn = false;
         historyModalHighlightActive = true;
         historyModalChat.classList.remove('highlights-hidden');
         clearKeywordHighlights(historyModalChat);
@@ -4885,9 +4927,11 @@ export function getAiChatPage(user: {
       if (!historyModalDBKeywordsApplied && historyModalCurrentId) { fetchShareKeywords(historyModalCurrentId, applyAllDbKeywordHighlights); return; }
       var marks = historyModalChat.querySelectorAll('.kw-highlight');
       if (!marks || marks.length === 0) return;
-      historyModalHighlightActive = !historyModalHighlightActive;
+      var nextView = keywordToggleView(nextKeywordToggleMode(currentKeywordToggleMode(historyModalHighlightActive, historyModalKwPanelOn)));
+      historyModalHighlightActive = nextView.highlightActive;
+      historyModalKwPanelOn = nextView.panelOn;
+      historyModalChipsPinned = false;
       if (historyModalHighlightActive) {
-        historyModalChipsPinned = false;
         historyModalChat.classList.remove('highlights-hidden');
       } else {
         historyModalChat.classList.add('highlights-hidden');
@@ -5449,6 +5493,7 @@ export function getAiChatPage(user: {
     var kwClassifyListClose = document.getElementById('kwClassifyListClose');
     var kwClassifyListBody = document.getElementById('kwClassifyListBody');
     var kwClassifySearchInput = document.getElementById('kwClassifySearchInput');
+    var kwMidCatCollapsed = false;
 
     function applyKwClassifySearchFilter() {
       var q = kwClassifySearchInput.value.trim().toLowerCase();
@@ -5628,9 +5673,12 @@ export function getAiChatPage(user: {
         var html = '';
         if (cats.length > 0) {
           html += '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">';
+          html += '<button id="kwMidCatToggle" type="button" title="中分類カテゴリを開閉" style="font-size:10px;padding:2px 7px;margin:1px 4px 1px 1px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;vertical-align:top;">▲▼</button>';
+          html += '<span id="kwMidCatBadges"' + (kwMidCatCollapsed ? ' style="display:none;"' : '') + '>';
           cats.forEach(function(cat) {
             html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + escHtml(cat.color || '#6366f1') + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin:1px;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
+          html += '</span>';
           html += '<div id="kwMidSoloReleaseWrap" style="display:none;text-align:center;margin-top:8px;"><button id="kwMidSoloReleaseBtn" type="button">解除する</button></div>';
           html += '</div>';
         }
@@ -5676,6 +5724,14 @@ export function getAiChatPage(user: {
         var kwMidSoloReleaseBtn = document.getElementById('kwMidSoloReleaseBtn');
         if (kwMidSoloReleaseBtn) {
           kwMidSoloReleaseBtn.addEventListener('click', function() { exitKwMidSoloMode(); });
+        }
+        var kwMidCatToggle = document.getElementById('kwMidCatToggle');
+        if (kwMidCatToggle) {
+          kwMidCatToggle.addEventListener('click', function() {
+            kwMidCatCollapsed = !kwMidCatCollapsed;
+            var kwMidCatBadges = document.getElementById('kwMidCatBadges');
+            if (kwMidCatBadges) kwMidCatBadges.style.display = kwMidCatCollapsed ? 'none' : '';
+          });
         }
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
@@ -6942,14 +6998,17 @@ export function getAiChatPage(user: {
             leftHtml += apiPieSvg + apiRatioHtml + '</div>';
           }
 
-          // ===== 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカー) =====
-          var SOURCE_LABELS = { slack: 'Slack', textbox: 'AIチャット入力窓', api: '回答伝播ページ', dynamicneko: 'ダイナミックワーカー' };
-          var SOURCE_COLORS = { slack: '#611f69', textbox: '#0ea5e9', api: '#f59e0b', dynamicneko: '#10b981' };
-          var sourceTotals = d.sourceTotals || {};
-          var sourceKeys = ['slack', 'textbox', 'api', 'dynamicneko'].filter(function(k) { return (sourceTotals[k] || 0) > 0; });
+          // ===== 左パネル: リクエスト元別円グラフ(Slack/AIチャット入力窓/回答伝播ページ/ダイナミックワーカー/muse-wasm-test) =====
+          // muse-wasm-testはai_chat_sharesではなくINQUIRY_DBのbridge_jobsの件数(museWasmTestTotal)。nullは取得できなかったこと。
+          var SOURCE_COLORS = { slack: '#611f69', textbox: '#0ea5e9', api: '#f59e0b', dynamicneko: '#10b981', museWasmTest: '#e11d48' };
+          var SOURCE_LABELS = { slack: 'Slack', textbox: 'AIチャット入力窓', api: '回答伝播ページ', dynamicneko: 'ダイナミックワーカー', museWasmTest: 'muse-wasm-test' };
+          var sourceTotals = Object.assign({}, d.sourceTotals || {});
+          var museWasmTestUnavailable = d.museWasmTestTotal === null;
+          sourceTotals.museWasmTest = Number(d.museWasmTestTotal) || 0;
+          var sourceKeys = ['slack', 'textbox', 'api', 'dynamicneko', 'museWasmTest'].filter(function(k) { return (sourceTotals[k] || 0) > 0; });
           var sourceTotal = sourceKeys.reduce(function(s, k) { return s + (sourceTotals[k] || 0); }, 0);
 
-          if (sourceTotal > 0) {
+          if (sourceTotal > 0 || museWasmTestUnavailable) {
             leftHtml += '<div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:12px;margin-bottom:4px;">リクエスト元別</div>';
 
             var SPR = 46, SPCX = 50, SPCY = 50, SPSZ = 100;
@@ -6981,6 +7040,13 @@ export function getAiChatPage(user: {
               sourceRatioHtml += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px;">' + cnt + '件 ' + ratio.toFixed(1) + '%' + '</span>';
               sourceRatioHtml += '</div>';
             });
+            if (museWasmTestUnavailable) {
+              sourceRatioHtml += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">';
+              sourceRatioHtml += '<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + SOURCE_COLORS.museWasmTest + ';flex-shrink:0;"></span>';
+              sourceRatioHtml += '<span style="font-size:10px;color:var(--text-primary);flex:1;">' + escHtml(SOURCE_LABELS.museWasmTest) + '</span>';
+              sourceRatioHtml += '<span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-left:2px;">取得できません</span>';
+              sourceRatioHtml += '</div>';
+            }
             sourceRatioHtml += '</div>';
 
             leftHtml += '<div>' + sourcePieSvg + sourceRatioHtml + '</div>';
@@ -7143,6 +7209,23 @@ export function getAiChatPage(user: {
       chatInput.style.height = 'auto';
       chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
     });
+    // 入力中の文字を、タブの切り替えや再読み込みで消さない(ユーザー指定、2026-11-07)。URLのdraftがあればそちらを優先する。
+${AICHAT_DRAFT_SCRIPT}
+${AICHAT_PENDING_SCRIPT}
+    var aichatDraftStorage = (function() { try { return window.localStorage; } catch (e) { return null; } })();
+    function persistAichatDraft() { saveAichatDraft(aichatDraftStorage, chatInput.value); }
+    function restoreAichatDraft() {
+      if (chatInput.value) return;
+      var saved = loadAichatDraft(aichatDraftStorage);
+      if (!saved) return;
+      chatInput.value = saved;
+      chatInput.style.height = 'auto';
+      chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + 'px';
+    }
+    restoreAichatDraft();
+    chatInput.addEventListener('input', persistAichatDraft);
+    document.addEventListener('visibilitychange', persistAichatDraft);
+    window.addEventListener('pagehide', persistAichatDraft);
     chatInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey || e.shiftKey)) {
         e.preventDefault();
@@ -7684,7 +7767,7 @@ export function getAiChatPage(user: {
     function buildAssistantBubble(text, model, isFallback, usage, isLocalCommand, nekoResults, svg, nekoCursorResults, shareId) {
       var el = document.createElement('div');
       el.className = 'chat-bubble assistant preview-area';
-      var isClaudeOrCodex = model === 'claude' || model === 'codex';
+      var isClaudeOrCodex = model === 'claude' || model === 'codex' || model === 'muse';
       var renderText = isClaudeOrCodex ? convertAnswerLinksToFootnotes(text) : text;
       el.innerHTML = parseMd(renderText);
       if (isClaudeOrCodex) highlightCodeBlocksIn(el);
@@ -8020,7 +8103,7 @@ export function getAiChatPage(user: {
     // 画面間で表示が食い違わないよう、ここでも同じ固定色を優先する
     // (2026-10-08、サイドパネルと質問文パネルでclaudeの色が食い違う
     // 不具合の修正)。
-    var FIXED_MODEL_DOT_COLORS = { claude: '#f97316' };
+    var FIXED_MODEL_DOT_COLORS = { claude: '#f97316', muse: '#2563eb' };
     function getModelDotColor(modelId) {
       return FIXED_MODEL_DOT_COLORS[modelId] || (MODEL_COLORS && MODEL_COLORS[modelId]) || '';
     }
@@ -8038,9 +8121,40 @@ export function getAiChatPage(user: {
     var aichatPreferMoondream = ${aichatPreferMoondreamInit};
     var modelColorDot = document.getElementById('modelColorDot');
 
+${AICHAT_MUSE_HEALTH_SCRIPT}
+    var museHealthWatch = createMuseHealthWatch({
+      fetchHealth: function() {
+        return fetch('/api/aichat/muse-health', { credentials: 'same-origin' })
+          .then(function(res) { return res.ok ? res.json() : { healthy: false }; })
+          .then(function(data) { return data.healthy === true; });
+      },
+      getColor: function() { return getModelDotColor('muse'); },
+      setBorderColor: function(color) { chatInput.style.borderColor = color; },
+      notifyUnavailable: function(message) { showAichatToast(message); },
+      isHidden: function() { return document.hidden; },
+      getSettings: function() { return readMuseSignalSettings(document.cookie); }
+    });
+    document.addEventListener('visibilitychange', function() { museHealthWatch.checkIfDue(); });
+
+    function openMuseSignalSettings() {
+      openMuseSignalModal({
+        getSettings: function() { return readMuseSignalSettings(document.cookie); },
+        saveSettings: function(settings) {
+          writeMuseSignalSettings(settings);
+          museHealthWatch.applySettings();
+        },
+        resetSettings: function() {
+          clearMuseSignalSettings();
+          museHealthWatch.applySettings();
+        },
+        getNextZ: getNextZ
+      });
+    }
+
     function applyModelColor(model) {
       var color = getModelDotColor(model) || '';
       modelColorDot.style.background = color || 'var(--border-color)';
+      museHealthWatch.setModel(model);
     }
 
     var modelSelect = document.getElementById('modelSelect');
@@ -8081,6 +8195,21 @@ export function getAiChatPage(user: {
             openAichatTuneModal(m.value, m.label);
           });
           item.appendChild(tuneBtn);
+        }
+        // Museの行の⚙はパラメータ調整ではなく、シグナル送信(死活確認)の設定を開く。
+        if (m.value === 'muse') {
+          var signalBtn = document.createElement('button');
+          signalBtn.type = 'button';
+          signalBtn.className = 'model-dot-dropdown-tune-btn';
+          signalBtn.textContent = '⚙';
+          signalBtn.title = 'muse の接続・シグナル設定';
+          signalBtn.setAttribute('aria-label', 'muse の接続・シグナル設定');
+          signalBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            closeModelDotDropdown();
+            openMuseSignalSettings();
+          });
+          item.appendChild(signalBtn);
         }
         item.addEventListener('click', function() {
           lastModel = m.value;
@@ -8333,11 +8462,58 @@ ${getRubyWasmLoaderScript()}
       if (thinking.isConnected) thinking.remove();
       if (!state.bubble) {
         state.bubble = appendBubble(state.text, 'assistant', lastModel, !!streamMeta.fallbackUsed);
+        markAichatPendingBubble(state.bubble);
       } else {
         state.bubble.innerHTML = parseMd(state.text);
         chatLog.scrollTop = chatLog.scrollHeight;
       }
       return state.bubble;
+    }
+
+${AICHAT_JOB_CLIENT_SCRIPT}
+    var aichatJobDeps = {
+      fetch: function(url, init) { return fetch(url, init); },
+      storage: (function() { try { return window.localStorage; } catch (e) { return null; } })(),
+      now: function() { return Date.now(); },
+      sleep: function(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); }
+    };
+    /** 送信をジョブとして登録し、途中経過を受け取りながら/api/aichatと同じ形の結果を返す(ユーザー指定、2026-11-07)。 */
+    function runAichatJob(payload, question, onDelta, thinking) {
+      return startAichatJob(aichatJobDeps, payload, { question: question, model: payload.model }).then(function(jobId) {
+        // 返事を待つ間、「考え中」にキャンセルボタンを置く(ユーザー指定 2026-11-12)。
+        if (thinking) addAichatCancelButton(aichatJobDeps, thinking, jobId);
+        return pollAichatJob(aichatJobDeps, jobId, onDelta);
+      });
+    }
+    /** 前に開いていたタブで送ったまま終わっていないジョブを、続きから表示する。生成とログ保存はサーバー側で済んでいる。 */
+    function resumePendingAichatJobs() {
+      readPendingAichatJobs(aichatJobDeps).forEach(function(job) {
+        appendBubble(job.question, 'user');
+        var thinking = appendBubble('考え中...(前回の送信の続き)', 'thinking');
+        addAichatCancelButton(aichatJobDeps, thinking, job.jobId);
+        beginAichatPending(chatInput, thinking, getModelDotColor(job.model));
+        var streamState = { text: '', bubble: null };
+        var assistantBubbleEl = null;
+        pollAichatJob(aichatJobDeps, job.jobId, function(delta, streamMeta) {
+          assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
+        })
+          .then(prepareAichatRubyResponse)
+          .then(function(data) {
+            if (thinking.isConnected) thinking.remove();
+            if (data.error) { appendBubble('エラー: ' + data.error, 'error'); return; }
+            var responseText = data.response || '(応答なし)';
+            var usedModel = data.usedModel || job.model;
+            var isLocalCommand = usedModel === 'local/neko';
+            var completedBubble = buildAssistantBubble(responseText, usedModel, data.fallbackUsed, extractRespUsage(data), false, null, null, null, data.shareId);
+            if (assistantBubbleEl) assistantBubbleEl.replaceWith(completedBubble);
+            else chatLog.appendChild(completedBubble);
+            chatLog.scrollTop = chatLog.scrollHeight;
+            if (!isLocalCommand) appendShareBtn(job.question, responseText, usedModel, data.shareId, data.userHash);
+            if (data.threadId) currentThreadId = data.threadId;
+          })
+          .catch(function(err) { if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
+          .then(function() { endAichatPending(chatInput); });
+      });
     }
 
     var formatAskgkPromptQuestion = ${formatAskgkPromptQuestion.toString()};
@@ -8371,6 +8547,10 @@ ${getRubyWasmLoaderScript()}
         payload.image = attachedImage;
         payload.preferMoondream = aichatPreferMoondream;
       }
+      // 送信したので入力の下書きを消す(ユーザー指定、2026-11-07)
+      saveAichatDraft(aichatDraftStorage, '');
+      // 回答を得るまで、入力窓と応答バブルの外枠を同じ色で点滅させる(ユーザー指定、2026-11-07)
+      beginAichatPending(chatInput, thinking, getModelDotColor(lastModel));
       // 色丸ドロップダウンの「⚙」で保存したパラメータ調整値(対象モデルの
       // 場合のみ)をpayloadへ含める。未調整・対象外モデルの場合は何も
       // 付けず、サーバー側のデフォルト値のまま動かす。
@@ -8418,16 +8598,18 @@ ${getRubyWasmLoaderScript()}
           .catch(function() {});
       }
 
-      fetch('/api/aichat', {
-        method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-        .then(function(res) {
-          var streamState = { text: '', bubble: null };
-          return readAichatResponse(res, function(delta, streamMeta) {
-            assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
-          });
+      var museSubmission = /^\\s*\\/neko\\s+askgk\\s+muse_prompt\\s*=/i.test(currentMsg)
+        || (payload.model === 'muse' && !/^\\s*\\/(?:neko\\b|(?:askmuse|askmgs)(?:\\s|$))/i.test(currentMsg));
+      if (museSubmission) museHealthWatch.beginSubmission();
+      // 生成とログ保存はサーバーのジョブ(Durable Object)が行う。タブを閉じても途切れない(ユーザー指定、2026-11-07)。
+      var streamState = { text: '', bubble: null };
+      runAichatJob(payload, currentMsg, function(delta, streamMeta) {
+        assistantBubbleEl = renderAichatDelta(streamState, delta, streamMeta, thinking);
+      }, thinking)
+        .then(function(data) {
+          var museConnection = data.museTailscale || null;
+          if (museConnection || museSubmission) museHealthWatch.finishSubmission(museConnection === 'connected');
+          return data;
         })
         .then(prepareAichatRubyResponse)
         .then(function(data) {
@@ -8462,10 +8644,11 @@ ${getRubyWasmLoaderScript()}
             if (data.threadId) currentThreadId = data.threadId;
           }
         })
-        .catch(function(err) { if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
-        .finally(function() { chatSendBtn.disabled = false; chatInput.focus(); });
+        .catch(function(err) { if (museSubmission) museHealthWatch.finishSubmission(false); if (thinking.isConnected) thinking.remove(); appendBubble('通信エラー: ' + (err && err.message ? err.message : '通信に失敗しました'), 'error'); })
+        .finally(function() { endAichatPending(chatInput); chatSendBtn.disabled = false; chatInput.focus(); });
     });
 
+    resumePendingAichatJobs();
     chatInput.focus();
   </script>
 </body>

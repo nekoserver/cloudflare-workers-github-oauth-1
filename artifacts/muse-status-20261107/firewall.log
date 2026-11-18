@@ -1,0 +1,284 @@
+2026-11-07T02:51:42Z cloudchamber firewall: rules applied mode=counters-only
+2026-11-07T02:51:42Z cloudchamber firewall: collector started mode=counters-only; counters sampled every 10 seconds; timestamps are collection time
+2026-11-07T02:51:42Z cloudchamber firewall: per-packet kernel logging unavailable; recording actual drop-counter deltas instead
+2026-11-07T02:51:42Z cloudchamber firewall: counter epoch changed; starting a new baseline
+2026-11-07T02:51:42Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=4
+2026-11-07T02:51:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=7 bytes_delta=504 packets_total=7
+2026-11-07T02:51:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=7 bytes_delta=504 packets_total=7
+2026-11-07T02:52:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=13
+2026-11-07T02:52:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=13
+2026-11-07T02:52:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=3 bytes_delta=216 packets_total=16
+2026-11-07T02:52:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=3 bytes_delta=216 packets_total=16
+2026-11-07T02:52:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=3 bytes_delta=216 packets_total=19
+2026-11-07T02:52:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=3 bytes_delta=216 packets_total=19
+2026-11-07T02:52:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=25
+2026-11-07T02:52:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=25
+2026-11-07T02:52:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:52:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=30
+2026-11-07T02:52:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=30
+2026-11-07T02:53:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=34
+2026-11-07T02:53:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=34
+2026-11-07T02:53:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=40
+2026-11-07T02:53:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=40
+2026-11-07T02:53:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=46
+2026-11-07T02:53:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=46
+2026-11-07T02:53:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=50
+2026-11-07T02:53:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=50
+2026-11-07T02:53:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=55
+2026-11-07T02:53:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=55
+2026-11-07T02:53:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:53:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=61
+2026-11-07T02:53:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=61
+2026-11-07T02:54:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=67
+2026-11-07T02:54:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=67
+2026-11-07T02:54:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=73
+2026-11-07T02:54:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=73
+2026-11-07T02:54:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=78
+2026-11-07T02:54:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=78
+2026-11-07T02:54:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=82
+2026-11-07T02:54:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=82
+2026-11-07T02:54:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=88
+2026-11-07T02:54:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=88
+2026-11-07T02:54:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:54:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=94
+2026-11-07T02:54:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=94
+2026-11-07T02:55:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=98
+2026-11-07T02:55:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=98
+2026-11-07T02:55:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=104
+2026-11-07T02:55:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=104
+2026-11-07T02:55:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=109
+2026-11-07T02:55:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=109
+2026-11-07T02:55:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=115
+2026-11-07T02:55:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=115
+2026-11-07T02:55:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=119
+2026-11-07T02:55:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=119
+2026-11-07T02:55:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:55:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=124
+2026-11-07T02:55:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=124
+2026-11-07T02:56:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=130
+2026-11-07T02:56:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=130
+2026-11-07T02:56:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=135
+2026-11-07T02:56:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=135
+2026-11-07T02:56:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=139
+2026-11-07T02:56:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=139
+2026-11-07T02:56:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=145
+2026-11-07T02:56:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=145
+2026-11-07T02:56:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=150
+2026-11-07T02:56:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=150
+2026-11-07T02:56:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:56:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=155
+2026-11-07T02:56:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=155
+2026-11-07T02:57:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=160
+2026-11-07T02:57:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=160
+2026-11-07T02:57:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=166
+2026-11-07T02:57:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=166
+2026-11-07T02:57:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=172
+2026-11-07T02:57:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=172
+2026-11-07T02:57:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=178
+2026-11-07T02:57:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=178
+2026-11-07T02:57:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=184
+2026-11-07T02:57:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=184
+2026-11-07T02:57:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:57:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=190
+2026-11-07T02:57:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=190
+2026-11-07T02:58:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=195
+2026-11-07T02:58:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=195
+2026-11-07T02:58:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=201
+2026-11-07T02:58:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=201
+2026-11-07T02:58:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=207
+2026-11-07T02:58:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=207
+2026-11-07T02:58:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=212
+2026-11-07T02:58:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=212
+2026-11-07T02:58:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=218
+2026-11-07T02:58:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=218
+2026-11-07T02:58:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:58:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=224
+2026-11-07T02:58:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=224
+2026-11-07T02:59:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=229
+2026-11-07T02:59:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=229
+2026-11-07T02:59:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=234
+2026-11-07T02:59:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=234
+2026-11-07T02:59:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=240
+2026-11-07T02:59:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=240
+2026-11-07T02:59:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=246
+2026-11-07T02:59:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=246
+2026-11-07T02:59:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=251
+2026-11-07T02:59:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=251
+2026-11-07T02:59:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T02:59:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=257
+2026-11-07T02:59:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=257
+2026-11-07T03:00:03Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=263
+2026-11-07T03:00:03Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=263
+2026-11-07T03:00:13Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=268
+2026-11-07T03:00:13Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=268
+2026-11-07T03:00:23Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=274
+2026-11-07T03:00:23Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=274
+2026-11-07T03:00:33Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=280
+2026-11-07T03:00:33Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=280
+2026-11-07T03:00:43Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=7 bytes_delta=504 packets_total=287
+2026-11-07T03:00:43Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=7 bytes_delta=504 packets_total=287
+2026-11-07T03:00:43Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:00:53Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=293
+2026-11-07T03:00:53Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=293
+2026-11-07T03:01:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=298
+2026-11-07T03:01:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=298
+2026-11-07T03:01:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=304
+2026-11-07T03:01:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=304
+2026-11-07T03:01:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=310
+2026-11-07T03:01:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=310
+2026-11-07T03:01:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=316
+2026-11-07T03:01:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=316
+2026-11-07T03:01:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=321
+2026-11-07T03:01:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=321
+2026-11-07T03:01:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:01:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=327
+2026-11-07T03:01:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=327
+2026-11-07T03:02:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=333
+2026-11-07T03:02:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=333
+2026-11-07T03:02:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=339
+2026-11-07T03:02:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=339
+2026-11-07T03:02:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=345
+2026-11-07T03:02:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=345
+2026-11-07T03:02:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=351
+2026-11-07T03:02:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=351
+2026-11-07T03:02:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=357
+2026-11-07T03:02:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=357
+2026-11-07T03:02:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:02:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=363
+2026-11-07T03:02:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=363
+2026-11-07T03:03:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=369
+2026-11-07T03:03:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=369
+2026-11-07T03:03:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=374
+2026-11-07T03:03:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=374
+2026-11-07T03:03:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=380
+2026-11-07T03:03:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=380
+2026-11-07T03:03:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=385
+2026-11-07T03:03:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=385
+2026-11-07T03:03:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=391
+2026-11-07T03:03:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=391
+2026-11-07T03:03:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:03:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=397
+2026-11-07T03:03:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=397
+2026-11-07T03:04:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=403
+2026-11-07T03:04:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=403
+2026-11-07T03:04:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=409
+2026-11-07T03:04:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=409
+2026-11-07T03:04:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=415
+2026-11-07T03:04:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=415
+2026-11-07T03:04:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=421
+2026-11-07T03:04:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=421
+2026-11-07T03:04:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=427
+2026-11-07T03:04:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=427
+2026-11-07T03:04:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:04:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=432
+2026-11-07T03:04:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=432
+2026-11-07T03:05:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=438
+2026-11-07T03:05:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=438
+2026-11-07T03:05:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=444
+2026-11-07T03:05:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=444
+2026-11-07T03:05:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=450
+2026-11-07T03:05:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=450
+2026-11-07T03:05:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=456
+2026-11-07T03:05:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=456
+2026-11-07T03:05:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=460
+2026-11-07T03:05:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=460
+2026-11-07T03:05:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:05:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=466
+2026-11-07T03:05:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=466
+2026-11-07T03:06:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=471
+2026-11-07T03:06:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=471
+2026-11-07T03:06:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=475
+2026-11-07T03:06:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=475
+2026-11-07T03:06:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=481
+2026-11-07T03:06:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=481
+2026-11-07T03:06:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=485
+2026-11-07T03:06:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=485
+2026-11-07T03:06:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=490
+2026-11-07T03:06:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=490
+2026-11-07T03:06:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:06:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=496
+2026-11-07T03:06:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=496
+2026-11-07T03:07:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=500
+2026-11-07T03:07:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=500
+2026-11-07T03:07:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=505
+2026-11-07T03:07:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=505
+2026-11-07T03:07:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=511
+2026-11-07T03:07:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=511
+2026-11-07T03:07:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=517
+2026-11-07T03:07:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=517
+2026-11-07T03:07:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=522
+2026-11-07T03:07:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=522
+2026-11-07T03:07:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:07:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=526
+2026-11-07T03:07:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=526
+2026-11-07T03:08:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=532
+2026-11-07T03:08:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=532
+2026-11-07T03:08:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=538
+2026-11-07T03:08:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=538
+2026-11-07T03:08:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=542
+2026-11-07T03:08:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=542
+2026-11-07T03:08:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=8 bytes_delta=576 packets_total=550
+2026-11-07T03:08:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=8 bytes_delta=576 packets_total=550
+2026-11-07T03:08:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=554
+2026-11-07T03:08:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=554
+2026-11-07T03:08:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:08:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=559
+2026-11-07T03:08:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=559
+2026-11-07T03:09:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=565
+2026-11-07T03:09:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=565
+2026-11-07T03:09:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=7 bytes_delta=504 packets_total=572
+2026-11-07T03:09:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=7 bytes_delta=504 packets_total=572
+2026-11-07T03:09:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=577
+2026-11-07T03:09:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=577
+2026-11-07T03:09:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=583
+2026-11-07T03:09:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=583
+2026-11-07T03:09:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=589
+2026-11-07T03:09:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=589
+2026-11-07T03:09:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:09:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=595
+2026-11-07T03:09:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=595
+2026-11-07T03:10:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=600
+2026-11-07T03:10:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=600
+2026-11-07T03:10:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=606
+2026-11-07T03:10:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=606
+2026-11-07T03:10:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=612
+2026-11-07T03:10:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=612
+2026-11-07T03:10:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=617
+2026-11-07T03:10:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=617
+2026-11-07T03:10:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=623
+2026-11-07T03:10:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=623
+2026-11-07T03:10:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:10:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=629
+2026-11-07T03:10:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=629
+2026-11-07T03:11:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=5 bytes_delta=360 packets_total=634
+2026-11-07T03:11:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=5 bytes_delta=360 packets_total=634
+2026-11-07T03:11:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=640
+2026-11-07T03:11:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=640
+2026-11-07T03:11:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=646
+2026-11-07T03:11:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=646
+2026-11-07T03:11:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=652
+2026-11-07T03:11:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=652
+2026-11-07T03:11:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=8 bytes_delta=576 packets_total=660
+2026-11-07T03:11:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=8 bytes_delta=576 packets_total=660
+2026-11-07T03:11:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:11:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=4 bytes_delta=288 packets_total=664
+2026-11-07T03:11:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=4 bytes_delta=288 packets_total=664
+2026-11-07T03:12:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=670
+2026-11-07T03:12:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=670
+2026-11-07T03:12:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=676
+2026-11-07T03:12:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=676
+2026-11-07T03:12:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=682
+2026-11-07T03:12:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=682
+2026-11-07T03:12:34Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=688
+2026-11-07T03:12:34Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=688
+2026-11-07T03:12:44Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=694
+2026-11-07T03:12:44Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=694
+2026-11-07T03:12:44Z cloudchamber firewall: collector healthy mode=counters-only tracked_counters=5
+2026-11-07T03:12:54Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=700
+2026-11-07T03:12:54Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=700
+2026-11-07T03:13:04Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=706
+2026-11-07T03:13:04Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=706
+2026-11-07T03:13:14Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=712
+2026-11-07T03:13:14Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=712
+2026-11-07T03:13:24Z cloudchamber firewall: DROP_COUNTER SRC=fd00::22 packets_delta=6 bytes_delta=432 packets_total=718
+2026-11-07T03:13:24Z cloudchamber firewall: DROP_COUNTER CHAIN=input HANDLE=6 packets_delta=6 bytes_delta=432 packets_total=718

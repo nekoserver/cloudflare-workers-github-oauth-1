@@ -1,0 +1,14 @@
+   Compiling tree-wasm v0.1.0 (/root/cloudflare-workers-github-oauth-1/wasm/tree-wasm)
+    Finished `test` profile [unoptimized] target(s) in 0.68s
+     Running unittests src/lib.rs (/tmp/rust-compat-target-20261113/debug/build/tree-wasm/b790daa90e2fd16b/out/tree_wasm-b790daa90e2fd16b)
+
+running 6 tests
+test tests::タイムスタンプの新しい順と逆順に並べる ... ok
+test tests::フィルタとファイル限定を適用する ... ok
+test tests::ワイルドカードなしのパターンは大文字小文字を無視して部分一致する ... ok
+test tests::不正入力と排他的オプションを拒否する ... ok
+test tests::名前順のmarkdownツリーへ変換する ... ok
+test tests::隠しファイルの表示を選べる ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

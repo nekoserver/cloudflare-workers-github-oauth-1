@@ -1,0 +1,23 @@
+# Muse投稿前の接続確認・エラー区別・枠色と警告の同期
+
+## 変更した動作（ソースのみ、未デプロイ）
+
+通常のMuse投稿と明示的な`/neko askgk muse_prompt="…"`は、本体Workerの共通askgk依存で本体コンテナのTailscale状態を毎回確認する。`/debug/tailscale-peers`のbackendStateがRunning、かつmuse-vmがonline=trueの場合のみ中継Workerへの送信を一度行う。停止・未登録・オフライン・API異常・JSON破損・4秒以内に状態確認できない場合は処理を停止し、tunnels.rb/LLM workerへ未送信であることを表示する。停止中コンテナを起動せず、確認失敗時に許可したり別経路へ送ったりしない。Codex/ClaudeはMuse用ゲートで停止しない。
+
+枠色のhealth APIも同じTailscale確認を使い、それが成功してから既存のMuse /healthを確認する。投稿開始で枠色を一度解除し、古い確認の結果を無効化する。投稿確認中は定期確認による色更新を止め、HTTP応答のX-Muse-Tailscaleを受けて未接続なら解除を維持、接続できていればhealthを再確認する。通信例外も色を解除する。モデル選択と明示的プレフィックスを区別し、Muse選択中のCodex指定をMuse投稿として扱わない。
+
+未接続・確認失敗で枠色を解除するとき、既存トーストで「Tailscaleの接続状況を確認してください」と表示する。同じ障害が継続している間は繰り返さず、復旧後の再切断で再表示する。モデル切替や監視設定OFFによる解除では警告しない。監視OFFでもサーバー側の投稿前ゲートは省略しない。
+
+中継通信失敗、tunnels.rbのHTTP異常、LLM workerソケット、非対応エンジン、Muse接続・認証、実行タイムアウトの表示を区別した。上流HTTP異常があれば本文のunsupported_engineを実行結果として採用しない。unsupported_engineだけではTailscaleへの接続は未確認と表示する。muse_connection_failedだけでTailscale切断とは断定しない。
+
+## 検証
+
+対象は7ファイル（接続ゲート、エラー分類、既存署名中継、経路解決、枠色監視、投稿時の枠色・警告、実Workerルート統合）。関連134テスト成功。最終ログはartifacts/muse-connectivity-20261106/final.log、push前の並列数2での再確認は同ディレクトリのpr-validation.log。AGENT.mdの指示に従い全体テストは実施せず、変更対象の7ファイルのみを実行した。新仕様の失敗先行ログも同ディレクトリに保存した。HTMLに展開したinline scriptをnode --checkに渡すテストを含む。
+
+API統合テストでは通常のMuse投稿に対しNeedsLoginを返し、中継Workerへの呼出0回、モデル回答の保存0件、応答ヘッダunavailable、エンジン非対応ではなく未接続の表示を確認した。状態確認が遅延して期限を超えた後に成功しても送信されないこと、古いhealth成功応答が枠色を戻さないことを確認した。
+
+## 境界
+
+このゲートが確認するのは本体コンテナのtailnet状態とpeerのonline情報であり、各パケットの到達・推論成功・tunnels.rbの稼働を保証するものではない。接続確認後の切断はあり得るため、後段の実通信エラー分類を維持する。別コンテナを送り先とする設定へ変更する場合、その実行側のtailnetも独立に確認する必要がある。
+
+`/askmuse`の直接経路と`/neko askgk muse_prompt`の実行経路は変更・代替していない。今回は後者とその通常投稿UIが対象。物理的なTailscale切断、本番への投稿、実ブラウザでの警告表示は未実施。Dockerビルド・Workerデプロイ・Git pushは未実施。既存ENV・認証情報は変更しない。

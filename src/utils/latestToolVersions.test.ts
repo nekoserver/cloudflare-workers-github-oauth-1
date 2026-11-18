@@ -96,11 +96,37 @@ describe('fetchLatestToolVersions: Ruby', () => {
   it('ruby-lang.orgのリリース一覧から、プレビューを除いた最も新しい版とその日付を取る', async () => {
     const fetcher = routeFetcher({ ...allRoutes(), 'www.ruby-lang.org/en/downloads/releases/': () => new Response(page) });
     const result = await fetchLatestToolVersions({ nodeMajor: 26, current: { ...current, ruby: '4.0.8' } }, fetcher as unknown as typeof fetch);
-    expect(result.ruby).toEqual({ latest: '4.0.9', latestDate: '2026-10-23', currentDate: '2026-09-30', source: 'ruby-lang.org' });
+    expect(result.ruby).toEqual({ latest: '4.0.9', latestDate: '2026-10-23', latestReleasedAt: '2026-10-23', currentDate: '2026-09-30', currentReleasedAt: '2026-09-30', source: 'ruby-lang.org' });
   });
   it('一覧から版が読めなければerrorに理由を残す', async () => {
     const fetcher = routeFetcher({ ...allRoutes(), 'www.ruby-lang.org/en/downloads/releases/': () => new Response('<html></html>') });
     const result = await fetchLatestToolVersions({ nodeMajor: 26, current }, fetcher as unknown as typeof fetch);
     expect(result.ruby).toMatchObject({ latest: null, error: '版が見つかりません' });
   });
+});
+
+describe('fetchLatestToolVersions: preprint',()=>{
+ it('uses npm publish timestamps for the installed and latest package',async()=>{
+  const fetcher=routeFetcher({...allRoutes(),'registry.npmjs.org/@supermemory/preprint':()=>json({'dist-tags':{latest:'0.1.2'},time:{'0.1.2':'2026-05-25T19:59:26Z','0.1.1':'2026-05-24T10:00:00Z'}})});
+  const out=await fetchLatestToolVersions({nodeMajor:26,current:{...current,preprint:'0.1.1'}},fetcher as unknown as typeof fetch);
+  expect(out.preprint).toMatchObject({latest:'0.1.2',latestDate:'2026-05-25',currentDate:'2026-05-24',source:'npm'});
+ });
+ it('keeps failures explicit and leaves other tool results available',async()=>{
+  const fetcher=routeFetcher({...allRoutes(),'registry.npmjs.org/@supermemory/preprint':()=>json({},503)});
+  const out=await fetchLatestToolVersions({nodeMajor:26},fetcher as unknown as typeof fetch);
+  expect(out.preprint).toMatchObject({latest:null,error:'HTTP 503'});expect(out.node.latest).toBe('26.13.0');
+ });
+});
+
+describe('fetchLatestToolVersions: T3 Code',()=>{
+ it('checks the t3 npm package used by the Dockerfile and its publication dates',async()=>{
+  const fetcher=routeFetcher({...allRoutes(),'registry.npmjs.org/t3':()=>json({'dist-tags':{latest:'0.1.4'},time:{'0.1.4':'2026-11-05T00:00:00Z','0.1.3':'2026-10-01T00:00:00Z'}})});
+  const out=await fetchLatestToolVersions({nodeMajor:26,current:{...current,t3:'0.1.3'}},fetcher as unknown as typeof fetch);
+  expect(out.t3).toMatchObject({latest:'0.1.4',latestDate:'2026-11-05',currentDate:'2026-10-01',source:'npm'});
+ });
+ it('reports unavailable T3 metadata without losing the other tools',async()=>{
+  const fetcher=routeFetcher({...allRoutes(),'registry.npmjs.org/t3':()=>json({},429)});
+  const out=await fetchLatestToolVersions({nodeMajor:26},fetcher as unknown as typeof fetch);
+  expect(out.t3).toMatchObject({latest:null,error:'HTTP 429'});expect(out.node.latest).toBe('26.13.0');
+ });
 });

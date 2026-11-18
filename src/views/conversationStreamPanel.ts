@@ -1,11 +1,26 @@
-import { CONVERSATION_STREAM_URLS } from '../utils/conversationStreamHosts';
+import { resolveConversationStreamRoutes, type ConversationStreamRoutes } from '../utils/conversationStreamRoutes';
+import { escapeHtml } from '../utils/html';
+
+/** <script>内に埋め込むJSON。`</script>`等で文脈を抜けないよう<をエスケープする。 */
+function scriptJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
 
 /** 通常のチャット入力から独立した、認証付き会話ストリームの埋め込み。 */
 export function getConversationStreamToggle(): string {
   return '<button type="button" class="search-hist-btn conversation-stream-toggle" id="conversationStreamToggle" aria-controls="conversationStreamPanel" aria-expanded="false" aria-pressed="false" title="ストリーム">ストリーム</button>';
 }
 
-export function getConversationStreamPanel(): string {
+/**
+ * 接続先は resolveConversationStreamRoutes() の結果を渡す(既定は同梱の台帳)。
+ * 設定が不正なときは config に null、configError に理由を渡すと、接続先なしで理由を表示する。
+ */
+export function getConversationStreamPanel(config: ConversationStreamRoutes | null = resolveConversationStreamRoutes(), configError?: string): string {
+  const routes = config?.routes ?? [];
+  const options = routes.map(route => `<option value="${escapeHtml(route.id)}">${escapeHtml(route.label)}</option>`).join('\n        ');
+  const embedUrls = { worker: '/aichat/worker-stream', ...Object.fromEntries(routes.map(route => [route.id, route.endpoints.embed])) };
+  const labels = { worker: 'Worker', ...Object.fromEntries(routes.map(route => [route.id, route.label])) };
+  const errorNotice = configError ? `<p id="conversationStreamConfigError" class="conversation-stream-config-error" role="alert">${escapeHtml(configError)}</p>` : '';
   return `<style>
     .conversation-stream-panel { position: fixed; top: var(--aichat-navbar-height, 44px); right: 0; bottom: 0; z-index: 190; width: min(420px, 100%); display: flex; flex-direction: column; gap: 8px; padding: 10px; border-left: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); overflow: hidden; }
     .conversation-stream-panel[hidden] { display: none; }
@@ -26,6 +41,7 @@ export function getConversationStreamPanel(): string {
     .conversation-stream-host-option:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; }
     .conversation-stream-controls button[aria-pressed="true"] { border-color: var(--accent-color); }
     @media (max-width: 360px) { .conversation-stream-controls button, .conversation-stream-controls select { font-size: 6px; padding: 2px; } }
+    .conversation-stream-config-error { margin: 0; padding: 6px 8px; border: 1px solid #dc2626; border-radius: 4px; color: #dc2626; font-size: 11px; }
     .conversation-stream-frame { display: block; width: 100%; flex: 1; height: 100%; min-height: 0; border: 1px solid var(--border-color); border-radius: 6px; background: var(--card-bg); }
   </style>
   <aside id="conversationStreamPanel" class="conversation-stream-panel" aria-label="ストリーム" hidden>
@@ -40,10 +56,8 @@ export function getConversationStreamPanel(): string {
       <span id="conversationStreamHostOptions" class="conversation-stream-host-options" role="listbox" aria-label="ストリーム接続先の候補" hidden></span>
       <select id="conversationStreamHost" aria-label="ストリーム接続先の値" hidden tabindex="-1">
         <option value="auto" selected>自動</option>
-        <option value="mygw">mygw.nekomaneki.work</option>
-        <option value="mynw">mynw.nekomaneki.work</option>
-        <option value="testcfc">stream.test.cfc.nekomaneki.work</option>
-        <option value="redmine">r9.nekomaneki.work (Redmine)</option>
+        ${options}
+        <option value="worker">Worker</option>
       </select>
       </span>
       <span id="conversationStreamHostStatus" role="status" aria-live="polite">自動</span>
@@ -51,6 +65,7 @@ export function getConversationStreamPanel(): string {
       <button type="button" id="conversationStreamStop" disabled>受信を停止</button>
       <button type="button" id="conversationStreamClose" class="conversation-stream-close" aria-label="ストリームを閉じる">✕</button>
     </div>
+    ${errorNotice}
     <iframe id="conversationStreamFrame" class="conversation-stream-frame" title="この会話の閲覧専用ストリーム" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
   </aside>
   <script>
@@ -66,6 +81,20 @@ export function getConversationStreamPanel(): string {
     var hostPicker = document.getElementById('conversationStreamHostPicker');
     var hostOptions = document.getElementById('conversationStreamHostOptions');
     var hostChoices = {};
+    var workerHealthy = false;
+    var workerCheck = null;
+    function probeWorker() {
+      if (workerCheck) return workerCheck;
+      if (panel.hidden || document.hidden) return Promise.resolve();
+      workerCheck = (async function() { try {
+        var res = await fetch('/api/aichat/conversation-stream/worker-health', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+        var data = res.ok ? await res.json() : null;
+        workerHealthy = !!(data && data.healthy === true && data.service === 'worker-conversation-stream');
+      } catch (e) { workerHealthy = false; }
+      finally { renderHostOptions(); }
+      })().finally(function() { workerCheck = null; });
+      return workerCheck;
+    }
     function setHostMenuOpen(open, restoreFocus) {
       hostOptions.hidden = !open;
       hostPicker.setAttribute('aria-expanded', String(open));
@@ -88,7 +117,7 @@ export function getConversationStreamPanel(): string {
       hostChoices[option.value] = choice;
       hostOptions.appendChild(choice);
     });
-    hostPicker.addEventListener('click', function () { setHostMenuOpen(hostOptions.hidden, false); });
+    hostPicker.addEventListener('click', function () { setHostMenuOpen(hostOptions.hidden, false); probeWorker(); });
     hostPicker.addEventListener('keydown', function (event) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setHostMenuOpen(true, false); }
     });
@@ -115,72 +144,34 @@ export function getConversationStreamPanel(): string {
     var healthGeneration = 0;
     var latestHealth = null;
     var loadGeneration = 0;
-    var embedUrls = ${JSON.stringify(CONVERSATION_STREAM_URLS)};
-    function installStreamDirectory(streams) {
-      var next = {};
-      streams.forEach(function (stream) {
-        if (!stream || typeof stream.id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,31}$/i.test(stream.id)
-          || typeof stream.embedUrl !== 'string') return;
-        try {
-          var url = new URL(stream.embedUrl);
-          if (url.protocol !== 'https:' || url.pathname !== '/lib/conversation-embed.html') return;
-          next[stream.id] = url.href;
-        } catch {}
-      });
-      var previousPreference = hostPreference;
-      embedUrls = next;
-      origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1]).origin]; }));
-      hostSelect.innerHTML = '<option value="auto">自動</option>';
-      Object.keys(embedUrls).forEach(function (id) {
-        var stream = streams.find(function (item) { return item.id === id; });
-        var option = document.createElement('option');
-        option.value = id;
-        option.textContent = (stream && stream.label ? stream.label + ' — ' : '') + new URL(embedUrls[id]).host;
-        hostSelect.appendChild(option);
-      });
-      hostOptions.innerHTML = '';
-      hostChoices = {};
-      Array.from(hostSelect.options).forEach(function (option) {
-        var choice = document.createElement('button');
-        choice.type = 'button';
-        choice.className = 'conversation-stream-host-option';
-        choice.setAttribute('role', 'option');
-        choice.dataset.value = option.value;
-        choice.tabIndex = -1;
-        choice.textContent = option.textContent;
-        choice.addEventListener('click', function () {
-          hostSelect.value = option.value;
-          hostSelect.dispatchEvent(new Event('change'));
-          setHostMenuOpen(false, true);
-        });
-        hostChoices[option.value] = choice;
-        hostOptions.appendChild(choice);
-      });
-      var removedManualChoice = previousPreference !== 'auto' && !Object.prototype.hasOwnProperty.call(embedUrls, previousPreference);
-      hostPreference = previousPreference !== 'auto' && !removedManualChoice ? previousPreference : 'auto';
-      hostSelect.value = hostPreference;
-      renderHostOptions();
-      if (removedManualChoice) hostStatus.textContent = '手動選択先が登録解除されたため自動へ切り替えました';
-    }
-    var origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1]).origin]; }));
+    var embedUrls = ${scriptJson(embedUrls)};
+    var hostLabels = ${scriptJson(labels)};
+    if (${configError ? 'true' : 'false'}) toggle.disabled = true;
+    var origins = Object.fromEntries(Object.entries(embedUrls).map(function (entry) { return [entry[0], new URL(entry[1], location.href).origin]; }));
     var protocol = 'websocket';
     var healthTimer = null;
     var checkingHealth = false;
     function renderHostOptions() {
       hostChoices.auto.setAttribute('aria-selected', String(hostPreference === 'auto'));
-      hostPicker.textContent = (hostPreference === 'auto' ? '自動' : new URL(embedUrls[hostPreference]).host) + ' ▾';
+      hostPicker.textContent = (hostPreference === 'auto' ? '自動' : hostLabels[hostPreference]) + ' ▾';
       Array.from(hostSelect.options).forEach(function (option) {
         if (!Object.prototype.hasOwnProperty.call(embedUrls, option.value)) return;
         var automatic = hostPreference === 'auto';
         var available = availableHosts.indexOf(option.value) >= 0;
         var connected = automatic && available && connectedHost === option.value && !panel.hidden;
-        var label = new URL(embedUrls[option.value]).host;
+        var label = hostLabels[option.value];
         var state = connected ? 'connected' : available ? 'available' : availabilityKnown ? 'unavailable' : 'unknown';
         option.textContent = (connected ? '🟢 ' : '') + label;
         option.style.color = automatic ? (available ? '#16a34a' : '#9ca3af') : '';
         option.dataset.streamState = automatic ? state : 'manual';
         option.title = automatic ? label + ' — ' + (connected ? '接続済み' : available ? '接続可能（認証が必要な場合があります）' : availabilityKnown ? '接続不可' : '接続状況を確認できません') : label;
         var choice = hostChoices[option.value];
+        if (option.value === 'worker') {
+          option.style.color = workerHealthy ? '#16a34a' : '#9ca3af';
+          option.dataset.streamState = workerHealthy ? 'available' : 'unavailable';
+          option.title = workerHealthy ? 'Worker — 接続可能' : 'Worker — 接続を確認できません';
+          if (hostPreference === 'worker') hostPicker.style.color = option.style.color;
+        }
         choice.textContent = option.textContent;
         choice.style.color = option.style.color;
         choice.dataset.streamState = option.dataset.streamState;
@@ -188,13 +179,10 @@ export function getConversationStreamPanel(): string {
         choice.setAttribute('aria-label', option.title);
         choice.setAttribute('aria-selected', String(option.value === hostPreference));
       });
-      if (hostPreference !== 'auto' && availabilityKnown && availableHosts.indexOf(hostPreference) < 0) {
-        hostStatus.textContent = '手動選択先は接続できません: ' + new URL(embedUrls[hostPreference]).host;
-      }
+      if (hostPreference !== 'worker') hostPicker.style.color = '';
     }
     function applyHealth(data) {
       latestHealth = data;
-      if (data && Array.isArray(data.streams)) installStreamDirectory(data.streams);
       availabilityKnown = !!(data && Array.isArray(data.availableHosts));
       availableHosts = availabilityKnown ? data.availableHosts.filter(function (host) {
         return Object.prototype.hasOwnProperty.call(embedUrls, host);
@@ -222,11 +210,13 @@ export function getConversationStreamPanel(): string {
       }
     }
     async function checkHealth() {
-      if (checkingHealth || document.hidden) return null;
+      if (!document || checkingHealth || document.hidden || panel.hidden || hostPreference !== 'auto') return null;
       checkingHealth = true;
+      var generation = healthGeneration + 1;
       try {
         var data = await requestHealth();
-        if (hostPreference === 'auto' && !panel.hidden) {
+        if (!document || generation !== healthGeneration) return null;
+        if (hostPreference === 'auto' && !panel.hidden && !document.hidden) {
           var candidates = data && Array.isArray(data.availableHosts) ? data.availableHosts : [];
           var next = candidates.indexOf(activeHost) >= 0 ? activeHost : candidates.find(function (candidate) { return Object.prototype.hasOwnProperty.call(embedUrls, candidate); }) || null;
           if (next !== activeHost) load(data);
@@ -242,9 +232,24 @@ export function getConversationStreamPanel(): string {
       } finally { checkingHealth = false; }
     }
     function startHealthChecks() {
-      if (healthTimer !== null) return;
+      if (healthTimer !== null || panel.hidden || document.hidden || hostPreference !== 'auto') return;
       checkHealth();
       healthTimer = setInterval(checkHealth, 30000);
+    }
+    function stopHealthChecks() {
+      clearInterval(healthTimer);
+      healthTimer = null;
+      healthGeneration++;
+      checkingHealth = false;
+    }
+    function suspendStream() {
+      stopHealthChecks();
+      loadGeneration++;
+      activeHost = null;
+      connectedHost = null;
+      frame.removeAttribute('src');
+      start.disabled = true; stop.disabled = true;
+      renderHostOptions();
     }
     var buttons = panel.querySelectorAll('[data-conversation-protocol]');
     function theme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
@@ -259,7 +264,7 @@ export function getConversationStreamPanel(): string {
       var host = hostPreference;
       if (host === 'auto') {
         var health = preloadedHealth || await requestHealth();
-        if (generation !== loadGeneration || panel.hidden) return;
+        if (generation !== loadGeneration || panel.hidden || document.hidden) return;
         var candidates = health && Array.isArray(health.availableHosts) ? health.availableHosts : [];
         host = candidates.indexOf(previousHost) >= 0 ? previousHost : candidates.find(function (candidate) { return Object.prototype.hasOwnProperty.call(embedUrls, candidate); }) || null;
       }
@@ -271,11 +276,20 @@ export function getConversationStreamPanel(): string {
         return;
       }
       activeHost = host;
+      buttons.forEach(function(button) { button.disabled = host === 'worker'; });
       renderHostOptions();
-      hostStatus.textContent = (hostPreference === 'auto' ? '自動: ' : '') + new URL(embedUrls[host]).host;
-      var url = new URL(embedUrls[host]);
+      hostStatus.textContent = (hostPreference === 'auto' ? '自動: ' : '') + hostLabels[host];
+      if (host === 'worker') {
+        await probeWorker();
+        if (generation !== loadGeneration || panel.hidden || document.hidden) return;
+        if (!workerHealthy) { hostStatus.textContent = 'Worker: 接続を確認できません'; return; }
+        toggle.setAttribute('data-server-state', 'healthy');
+      }
+      var url = new URL(embedUrls[host], location.href);
       url.searchParams.set('protocol', protocol);
       url.searchParams.set('theme', theme());
+      // 経路ID(秘密ではない): lib側のApacheが、どの呼出し元が埋め込んだかをログで見分ける。鍵は付けない。
+      if (host !== 'worker') url.searchParams.set('via', 'aichat-panel');
       frame.src = url.href;
     }
     buttons.forEach(function (button) {
@@ -290,7 +304,8 @@ export function getConversationStreamPanel(): string {
       activeHost = null;
       connectedHost = null;
       renderHostOptions();
-      if (!panel.hidden) load();
+      stopHealthChecks();
+      if (!panel.hidden && !document.hidden) { if (hostPreference === 'auto') startHealthChecks(); else load(); }
       else hostStatus.textContent = hostPreference === 'auto' ? '自動' : hostPreference;
     });
     function setOpen(open) {
@@ -299,17 +314,34 @@ export function getConversationStreamPanel(): string {
       toggle.setAttribute('aria-expanded', String(open));
       toggle.setAttribute('aria-pressed', String(open));
       document.body.classList.toggle('conversation-stream-open', open);
-      if (open) { if (!frame.getAttribute('src')) load(); }
-      else { loadGeneration++; activeHost = null; connectedHost = null; frame.removeAttribute('src'); }
+      if (open) probeWorker();
+      if (open && !document.hidden) { if (hostPreference === 'auto') startHealthChecks(); else load(); }
+      else suspendStream();
       renderHostOptions();
     }
     frame.addEventListener('load', function () {
       if (!panel.hidden && frame.getAttribute('src') && activeHost) frame.contentWindow.postMessage({ type: 'conversation-controls' }, origins[activeHost]);
     });
+    function sendWorkerSnapshot() {
+      if (activeHost !== 'worker' || panel.hidden || document.hidden || !frame.getAttribute('src')) return;
+      var log = document.getElementById('chatLog');
+      var turns = log ? Array.from(log.querySelectorAll('.chat-bubble')).map(function(bubble) {
+        var copy = bubble.cloneNode(true);
+        copy.querySelectorAll('button,script,style').forEach(function(el) { el.remove(); });
+        return { role: bubble.classList.contains('user') ? 'user' : bubble.classList.contains('thinking') ? 'thinking' : 'assistant', text: copy.textContent || '' };
+      }) : [];
+      frame.contentWindow.postMessage({ type: 'conversation-snapshot', turns: turns }, location.origin);
+    }
+    function observeWorkerChat() {
+      var log = document.getElementById('chatLog');
+      if (log) new MutationObserver(sendWorkerSnapshot).observe(log, { childList: true, subtree: true, characterData: true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observeWorkerChat, { once: true }); else observeWorkerChat();
     start.addEventListener('click', function () { if (activeHost) frame.contentWindow.postMessage({ type: 'conversation-start' }, origins[activeHost]); });
     stop.addEventListener('click', function () { if (activeHost) frame.contentWindow.postMessage({ type: 'conversation-stop' }, origins[activeHost]); });
     window.addEventListener('message', function (event) {
       if (!activeHost || event.origin !== origins[activeHost] || event.source !== frame.contentWindow || panel.hidden) return;
+      if (activeHost === 'worker' && event.data && event.data.type === 'conversation-ready') sendWorkerSnapshot();
       if (event.data && event.data.type === 'conversation-state' && typeof event.data.busy === 'boolean') {
         connectedHost = activeHost;
         renderHostOptions();
@@ -329,16 +361,16 @@ export function getConversationStreamPanel(): string {
       if (!panel.hidden && frame.contentWindow && activeHost) frame.contentWindow.postMessage({ type: 'conversation-theme', theme: theme() }, origins[activeHost]);
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     window.addEventListener('pagehide', function () {
-      frame.removeAttribute('src'); clearInterval(healthTimer); healthTimer = null; activeHost = null; connectedHost = null; loadGeneration++;
-      renderHostOptions();
+      suspendStream();
     });
     window.addEventListener('pageshow', function () {
-      startHealthChecks();
-      if (!panel.hidden && !frame.getAttribute('src')) load();
+      if (!panel.hidden && !document.hidden) { if (hostPreference === 'auto') startHealthChecks(); else if (!frame.getAttribute('src')) load(); }
     });
-    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkHealth(); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) suspendStream();
+      else if (!panel.hidden) { if (hostPreference === 'auto') { if (healthTimer === null) startHealthChecks(); else checkHealth(); } else if (!frame.getAttribute('src')) load(); }
+    });
     renderHostOptions();
-    startHealthChecks();
   })();
   </script>`;
 }

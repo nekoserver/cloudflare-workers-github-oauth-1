@@ -1,0 +1,10 @@
+test_private_paths_denied (__main__.RuntimeTest.test_private_paths_denied) ... /usr/lib/python3.14/tempfile.py:484: ResourceWarning: Implicitly cleaning up <HTTPError 403: 'Forbidden'>
+  _warnings.warn(self.warn_message, ResourceWarning)
+ok
+test_private_sockets (__main__.RuntimeTest.test_private_sockets) ... ok
+test_ssi_expands (__main__.RuntimeTest.test_ssi_expands) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.082s
+
+OK

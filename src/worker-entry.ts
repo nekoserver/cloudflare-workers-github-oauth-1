@@ -9,6 +9,9 @@ import { runCodexResetCountdownCron } from './utils/codexResetCountdown';
 // worker-entry-config.test.tsが本来防ぎたかった「値のnamed export」
 // (例: export const X = 90)とは別物。詳細はそのテストのコメント参照。
 export { DemoContainer } from './containers/demoContainer';
+// AIチャットの応答とログ保存を、ブラウザの接続と切り離して最後まで行うジョブ(wrangler.tomlのAICHAT_JOB)。
+export { AichatJob } from './durable/aichatJob';
+export { TailscaleWasm } from './durable/tailscaleWasm';
 
 export default {
   fetch: app.fetch,
