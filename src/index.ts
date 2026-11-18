@@ -21310,20 +21310,36 @@ app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMi
 });
 
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
-  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });
+  // 実行のたびに環境変数を確認する: 設定有無と、設定済みならトークンの検証結果を envCheck に載せる。
+  // CF_CONTAINER_API_TOKEN はフォールバック(CLOUDFLARE_API_TOKEN等)で隠れないよう、それ単体でも確認する。
+  const apiKey = cfApiKey(c.env);
+  const envCheck: { accountIdSet: boolean; tokenSource: string | null; tokenVerify: string | null; containerApiToken: { set: boolean; verify: string | null } } = {
+    accountIdSet: !!c.env.CLOUDFLARE_ACCOUNT_ID,
+    tokenSource: apiKey ? cfApiKeySource(c.env) : null,
+    tokenVerify: null,
+    containerApiToken: { set: !!c.env.CF_CONTAINER_API_TOKEN, verify: null },
+  };
+  if (c.env.CF_CONTAINER_API_TOKEN && c.env.CLOUDFLARE_ACCOUNT_ID) {
+    envCheck.containerApiToken.verify = c.env.CF_CONTAINER_API_TOKEN === apiKey
+      ? null // 使用トークンそのものなら下の tokenVerify と同じ結果になるため、そちらで賄う
+      : await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey: c.env.CF_CONTAINER_API_TOKEN });
   }
+  if (!apiKey || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: (apiKey ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [], envCheck });
+  }
+  envCheck.tokenVerify = await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey });
+  if (c.env.CF_CONTAINER_API_TOKEN === apiKey) envCheck.containerApiToken.verify = envCheck.tokenVerify;
   try {
     const tunnels = await listCloudflareTunnels({
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: cfApiKey(c.env)!,
     });
     // 0件のとき、どのアカウント・どのトークンで問い合わせたかを画面で追えるようにする
-    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) } });
+    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) }, envCheck });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-tunnels] 取得に失敗', { error: message });
-    return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [] });
+    return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [], envCheck });
   }
 });
 

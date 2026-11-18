@@ -1850,8 +1850,15 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
     fetch('/api/cf-containers/tunnels')
       .then(readJsonOrText)
       .then(function (data) {
+        var ec = data.envCheck || {};
+        var cat = ec.containerApiToken || {};
+        var envText = '環境変数: CF_CONTAINER_API_TOKEN=' + (cat.set ? '設定済み' : '未設定') +
+          (cat.verify ? '、検証: ' + cat.verify : '') +
+          '、アカウントID=' + (ec.accountIdSet ? '設定済み' : '未設定') +
+          '、使用トークン=' + (ec.tokenSource || '未設定') +
+          (ec.tokenVerify ? '、検証: ' + ec.tokenVerify : '');
         if (data.error) {
-          tunnelLog.textContent = 'エラー: ' + data.error;
+          tunnelLog.textContent = 'エラー: ' + data.error + '（' + envText + '）';
           return;
         }
         tunnelTbody.innerHTML = '';
@@ -1864,8 +1871,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         });
         tunnelTable.hidden = false;
         var q = data.queriedWith || {};
-        tunnelLog.textContent = data.tunnels && data.tunnels.length ? '' :
-          '(トンネルが見つかりません: アカウント末尾' + (q.accountIdTail || '?') + '、トークン=' + (q.tokenSource || '?') + '。このアカウントに削除されていないトンネルが無いか、トンネルが別のアカウントにあります)';
+        tunnelLog.textContent = data.tunnels && data.tunnels.length ? envText :
+          '(トンネルが見つかりません: アカウント末尾' + (q.accountIdTail || '?') + '、トークン=' + (q.tokenSource || '?') + '。このアカウントに削除されていないトンネルが無いか、トンネルが別のアカウントにあります)（' + envText + '）';
       })
       .catch(function (err) {
         tunnelLog.textContent = 'エラー: ' + String(err);
