@@ -161,7 +161,7 @@ describe('POST /api/aichat の /askmuse', () => {
     stub.fetch.mockImplementation(async () => new Response('{}', { status: 502 }));
     const response = await post({ message: '質問本文', model: 'muse' });
     const data = await response.json() as { response: string };
-    expect(data.response).toContain('Museへの接続を確認できません');
+    expect(data.response).toContain('WorkerからのMuse投稿結果を確認できません');
     expect(data.response).not.toContain('unsupported_engine');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
     expect(inserts).toHaveLength(0);
@@ -196,7 +196,7 @@ describe('POST /api/aichat の /askmuse', () => {
     RUST_WORKER.fetch.mockResolvedValue(new Response(JSON.stringify({ ok: true, status: 200, body: JSON.stringify({ reply: 'tunnelsの回答' }) })));
     const response = await post({ message: '質問 "そのまま"', model: 'muse', museTunnelsFallback }, { MUSE_API_KEY: 'key' }, cookie);
     const data = await response.json() as { response: string; fallbackUsed?: boolean };
-    expect(data.response).toContain('Museへの接続を確認できません');
+    expect(data.response).toContain('Worker内Tailscaleが未接続、またはmuse-vmの在席を確認できません');
     expect(data.response).not.toContain('tunnelsの回答');
     expect(data.fallbackUsed).toBeUndefined();
     expect(response.headers.get('X-Muse-Tailscale')).toBe('unavailable');
@@ -215,7 +215,7 @@ describe('POST /api/aichat の /askmuse', () => {
   it('tunnelsがONでも直送し、Muse実行失敗で再送しない', async () => {
     stub.fetch.mockImplementation(async () => new Response('{}', { status: 502 }));
     const response = await post({ message: '通常質問', model: 'muse', museTunnelsFallback: true });
-    expect((await response.json() as { response: string }).response).toContain('Museへの接続を確認できません');
+    expect((await response.json() as { response: string }).response).toContain('WorkerからのMuse投稿結果を確認できません');
     expect(RUST_WORKER.fetch).not.toHaveBeenCalled();
   });
 
