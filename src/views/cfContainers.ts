@@ -1595,6 +1595,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         ? '導入版の基準: ' + data.installedSnapshotAt + ' / '
         : '導入版の記録なし / ';
       versionStatusLog.textContent = 'D1へ' + data.packageCount + 'パッケージを記録しました。' + basis
+        + (data.installedRefreshed ? '導入版は古かったため、稼働中コンテナから取り直しました。' : '')
         + '新版あり ' + data.updatesAvailable + '件 / 最新版取得失敗 ' + data.latestUnavailable + '件 / 確認 ' + data.checkedAt;
     })
     .catch(function (err) { versionStatusLog.textContent = 'D1記録エラー: ' + String(err); });
