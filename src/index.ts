@@ -21310,20 +21310,28 @@ app.get('/api/cf-containers/latest-versions', authMiddleware, cfDashboardAdminMi
 });
 
 app.get('/api/cf-containers/tunnels', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
-  if (!cfApiKey(c.env) || !c.env.CLOUDFLARE_ACCOUNT_ID) {
-    return jsonUtf8({ error: (cfApiKey(c.env) ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [] });
+  // 実行のたびに環境変数を確認する: 設定有無と、設定済みならトークンの検証結果を envCheck に載せる。
+  const apiKey = cfApiKey(c.env);
+  const envCheck: { accountIdSet: boolean; tokenSource: string | null; tokenVerify: string | null } = {
+    accountIdSet: !!c.env.CLOUDFLARE_ACCOUNT_ID,
+    tokenSource: apiKey ? cfApiKeySource(c.env) : null,
+    tokenVerify: null,
+  };
+  if (!apiKey || !c.env.CLOUDFLARE_ACCOUNT_ID) {
+    return jsonUtf8({ error: (apiKey ? 'CLOUDFLARE_ACCOUNT_ID' : 'CF_CONTAINER_API_TOKEN') + 'が未設定です(Cloudflareダッシュボード→Workers→cloudflare-workers-github-oauth-1→設定→変数とシークレットでSecretとして追加。権限: Workers Scripts:Edit, Cloudflare Tunnel:Read)', tunnels: [], envCheck });
   }
+  envCheck.tokenVerify = await verifyApiToken({ accountId: c.env.CLOUDFLARE_ACCOUNT_ID, apiKey });
   try {
     const tunnels = await listCloudflareTunnels({
       accountId: c.env.CLOUDFLARE_ACCOUNT_ID,
       apiKey: cfApiKey(c.env)!,
     });
     // 0件のとき、どのアカウント・どのトークンで問い合わせたかを画面で追えるようにする
-    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) } });
+    return jsonUtf8({ tunnels, queriedWith: { accountIdTail: c.env.CLOUDFLARE_ACCOUNT_ID.slice(-4), tokenSource: cfApiKeySource(c.env) }, envCheck });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('[cf-containers-tunnels] 取得に失敗', { error: message });
-    return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [] });
+    return jsonUtf8({ error: 'トンネル一覧の取得に失敗しました: ' + message, tunnels: [], envCheck });
   }
 });
 
