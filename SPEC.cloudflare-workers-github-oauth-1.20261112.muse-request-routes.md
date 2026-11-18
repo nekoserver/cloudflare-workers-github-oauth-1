@@ -112,11 +112,11 @@ muse-vm へ届く要求(どの経路でも同じ):
 | 1' | `aichat-legacy-container` | 同上、⚙ で旧コンテナ直通を選んだとき | 本体 Worker → demo コンテナ `server.js` → `tailscale nc` → muse-vm | 必須(本体 demo コンテナ) | 本体の `MUSE_API_KEY` |
 | 2 | `treeview-musetab-container` | dynamicneko tree-view の Museタブ(通信経路: コンテナ) | dynamicneko → 本体 `/api/tree-view/muse-chat-external` → demo コンテナ → muse-vm | 必須(本体 demo コンテナ) | dynamicneko の `MUSE_API_KEY`(本体はそのまま渡す) |
 | 2' | `treeview-musetab-wasm` | 同上(通信経路: ワーカー) | dynamicneko → 本体の中継 → TailscaleWasm → muse-vm | 不要 | dynamicneko の `MUSE_API_KEY` |
-| 3 | `treeview-workertab-stream` | dynamicneko tree-view のワーカータブ | dynamicneko → 本体ワーカー経由の会話ストリーム(`/lib/conversation-embed.html`・`/lib/api/chat/*`)(細部は未確認) | 必須(会話ストリームを出すコンテナ、mygw) | 未確認 |
+| 3 | `treeview-workertab-stream` | dynamicneko tree-view のワーカータブ | dynamicneko → 本体ワーカー経由の会話ストリーム(`/lib/conversation-embed.html`・`/lib/api/chat/*`)(細部は未確認) | 必須(会話ストリームを出すコンテナ、mygw)。公開`/lib`は2026-11-11から403で、2026-11-13から内部8445経由（節「libへのアクセスの厳格化による影響」） | 未確認 |
 | 4 | `wasmtest-jobqueue` | 本体 `/muse-wasm-test` | 本体 → TailscaleWasm の MuseAgentJobs(キュー)→ WASM → muse-vm | 不要 | 本体の `MUSE_API_KEY` |
 | 5 | `aichat-askmgs-gadget` | 本体 AIチャット `/askmgs prompt="…"` | 本体 → TailscaleWasm → `cf-demo-container:8766` → Gadgets | 必須(行き先の `cf-demo-container`、本体 demo コンテナ) | `MUSE_GADGET_SDK_TOKEN`(中継への署名は `ORIGIN_HMAC_SECRET`) |
-| 6 | `aichat-askgk-tunnels` | 本体 AIチャット `/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 `/tunnel-signer` → tunnels.rb → lib の worker → muse-vm | 必須(lib を付けたコンテナ。種類は問わない) | lib の worker の `MUSE_API_KEY` |
-| 7 | `libhost-askgk-selfcheck` | コンテナ起動後の確認送信「今日は何日？」(手で実行) | `askgk_request.rb` → `tunnels.claude.rb`(CGI を直接実行)→ lib の worker → `tailscale nc` → muse-vm(Worker・Apache・HMAC を通らない) | 必須(lib を付けたコンテナ。種類は問わない。そこで手で実行) | lib の worker の `MUSE_API_KEY` |
+| 6 | `aichat-askgk-tunnels` | 本体 AIチャット `/neko askgk muse_prompt="…"` | 本体 → rust-worker-sqlx-d1 `/tunnel-signer` → tunnels.rb → lib の worker → muse-vm | 必須(lib を付けたコンテナ。種類は問わない)。公開`/lib/api/tunnels`は署名ヘッダーがあるときだけ通る（節「libへのアクセスの厳格化による影響」） | lib の worker の `MUSE_API_KEY` |
+| 7 | `libhost-askgk-selfcheck` | コンテナ起動後の確認送信「今日は何日？」(手で実行) | `askgk_request.rb` → `tunnels.claude.rb`(CGI を直接実行)→ lib の worker → `tailscale nc` → muse-vm(Worker・Apache・HMAC を通らない。そのため6のApacheでの403は見つけられない) | 必須(lib を付けたコンテナ。種類は問わない。そこで手で実行) | lib の worker の `MUSE_API_KEY` |
 | 8 | `tailscalepage-wasm-muse` | 本体 `/tailscale-wasm` の「Worker → Muse」 | ページ → `/api/tailscale-wasm/tasks` → 永続ジョブ → `/api/tailscale-wasm/bridge-chat` → `museWorkerDep` → TailscaleWasm → muse-vm | 不要 | 本体の `MUSE_API_KEY` |
 | 8' | `tailscalepage-legacy-container` | 同ページの旧コンテナ経路（明示操作・確認あり） | `/api/tailscale-wasm/tasks`（`action: legacy-chat`）→ 永続ジョブ → `/api/aichat`（Muse、`container`指定）→ demo コンテナ → muse-vm | 必須（本体 demo コンテナ） | 本体の `MUSE_API_KEY` |
 
@@ -233,3 +233,71 @@ Workerだけの反映にWranglerの `deploy --containers-rollout none --keep-var
 未ログイン埋め込みの302、未署名中継の401、公開mygw/libの403、配信JSのハッシュ一致は、それぞれ認証境界と配信版の確認である。利用者のログイン済み画面で会話が描画された証拠とは分けて記録する。テストの投稿受付、同一会話キューへの登録、モデルの実受信、回答、ブラウザ描画も別々の到達点として確認する。
 
 本体コンテナのlibに対する公開拒否・署名付きAPI例外・内部SSI・観測/投稿認証・Worker中継・ソケット権限の現状は、[libアクセス制御SPEC](SPEC.cloudflare-workers-github-oauth-1.20261113.lib-access-control.md)に分けて記録した。
+
+## libへのアクセスの厳格化による影響（2026-11-18）
+
+**対象**: 7章の経路1〜8'のうち、本体demoコンテナの`/lib`を通るもの（3・6・7） — 2026-11-11に公開Apache（:8443）で`/lib`を拒否したこと（利用者の判断「管理者だけ」、[`1a9e0c62`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/1a9e0c62)）が、Museへの経路にどう効いたかをまとめる。制限の目的と内容は、libの`NOTICE.lib.20261107.claude-host-setup.md`の2026-11-18の節と`SPEC.lib.20261118.lib-features-access.md`。
+
+### 経路ごとの影響
+
+| # | 名前の候補 | `/lib`を通るか | 2026-11-11の厳格化の影響 | 今の状態（2026-11-18） |
+|---|---|---|---|---|
+| 1 | `aichat-wasm-direct` | 通らない（Worker内WASM） | なし | 影響なし |
+| 1' | `aichat-legacy-container` | 通らない（Worker → `container.fetch` → `server.js`の`/muse/*`。8443を通らない） | なし | 影響なし |
+| 2 | `treeview-musetab-container` | 通らない（同上） | なし | 影響なし |
+| 2' | `treeview-musetab-wasm` | 通らない | なし | 影響なし |
+| 3 | `treeview-workertab-stream` | **通る**（`/lib/conversation-embed.html`・`/lib/chat/`・`/lib/api/chat/*`） | 公開mygwの`/lib`を直接表示していたため、iframeに「Forbidden」（403）が出た（2026-11-13に発覚） | 2026-11-13にdynamicneko → 本体の中継 → `server.js` → 内部Apache 8445へ移した（下の「経路3」）。**ただし今のイメージの8445にはチャットの中継が無く、動かない可能性が高い**（未確認）。2026-11-18に中継を`apache-lib.conf`へ足した（ソースのみ、イメージの再ビルド待ち） |
+| 4 | `wasmtest-jobqueue` | 通らない | なし | 影響なし |
+| 5 | `aichat-askmgs-gadget` | 通らない（tailnetの`cf-demo-container:8766`） | なし | 影響なし |
+| 6 | `aichat-askgk-tunnels` | **通る**（公開mygwの`/lib/api/tunnels`） | 例外なしで拒否され、`/neko askgk muse_prompt=`も403になった | 2026-11-13にイメージ側の例外で戻ったが、2026-11-18のイメージに例外が無く、再び`HTTP 403`。同日、libの`claude/ops/apache-lib-tunnels.conf`に例外を足して戻した（下の「経路6」） |
+| 7 | `libhost-askgk-selfcheck` | 通らない（CGIを直接実行） | なし。**そのため、6の403を見つけられない** | 影響なし。点検としての役割は下の「経路7」 |
+| 8 | `tailscalepage-wasm-muse` | 通らない | なし | 影響なし |
+| 8' | `tailscalepage-legacy-container` | 通らない（`/api/aichat` → `container.fetch`） | なし | 影響なし |
+
+- `/lib`を通るのは、公開のトンネル（mygw → cloudflared → Apache :8443）を使う経路だけ。本体Workerから`container.fetch`で`server.js`（8080）へ直接入る経路（1'・2・8'）と、Worker内WASMの経路（1・2'・4・8）は、8443を通らないため影響を受けない。
+- Museの鍵（`MUSE_API_KEY`）と muse-vm 側には、厳格化による変更は無い。6・7で使う鍵はlibのworkerの`MUSE_API_KEY`で、`/lib`の制限とは関係しない。
+
+### 経路3（ワーカータブ）
+
+- 2026-11-13の修正（節「tree-view のMuseウィンドウ内「ワーカー」の403（2026-11-13）」）は、内部Apache 8445が`/lib/api/chat/*`を8091・8092へ中継することを前提にしている。libの`NOTICE.lib.20261113.lib-admin-only-impact.md`は、その中継を「本体の作業ツリーにある未コミットの変更」と書いている。
+- 本体のmainの`containers/demo/apache-lib.conf`には、この中継が無い（2026-11-18確認。最後の変更は[`a97025ca`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a97025ca)の文字コードの追加だけ）。
+- 2026-11-18に、コンテナの中から8445へ直接`GET`した結果は、`/lib/conversation-embed.html`が200（8092を通らない静的なファイル）、`/lib/api/chat/session`が404、`/lib/chat/`が403。会話のセッションとストリームは、8445からは取れない。
+- dynamicneko → 本体の中継 → 8445を、利用者のログイン済みの画面で通した結果は、まだ確かめていない。
+- **修正（2026-11-18、ソースのみ）**: `containers/demo/apache-lib.conf`に、`ProxyPreserveHost On`と、`/lib/api/chat/ws`（8091）・`/lib/api/chat/`・`/lib/conversation-embed.html`・`/lib/chat/`・`/lib/t/`（8092）の中継を足した。テストは`src/cf-containers-lib-ssi.test.ts`（修正前に3件失敗することを確かめた）。この設定を使い捨てのApacheで起動し、いま動いているストリームのサーバーへ中継されることを確かめた（`/lib/api/chat/session`・`/lib/conversation-embed.html`・`/lib/chat/`は、ストリームのサーバーの認証による401。修正前は404・静的なファイル。WebSocketはchallengeまで届いた）。
+- **反映にはイメージの再ビルドとコンテナの再起動が要る。** Dockerビルド・本番のイメージでの確認はしていない。
+- `server.js`の`proxyToLib`はWebSocketのupgradeを中継しない。本体の中継 → `server.js` → 8445の経路では、`/lib/api/chat/ws`は届かない見込み（未確認）。SSE・NDJSON・JSON Text Sequenceは届く見込み。
+- tunnels APIの例外は本体のイメージに入れない。mainのイメージには2026-11-05から`/lib/api/tunnels`のCGIの別名も秘密の受け渡しも無く、例外だけを入れると`server.js` → 8445へ流れて`tunnels.rb`のソースが公開側に見える。CGI・秘密・例外は、libの`restore-claude-host.sh`がまとめて入れる。2026-11-11〜13の固定イメージ（`image.lock.json`のdigest）に例外があり、11-13からmainのDockerfileでイメージを作るようになって消えた、というのが今回の403の経緯（固定イメージの中身は確かめていない）。
+
+### 経路6（`/neko askgk muse_prompt=`）
+
+| 時期 | 公開`/lib/api/tunnels`の扱い | askgkの結果 |
+|---|---|---|
+| 〜2026-11-10 | Apacheは確かめず、CGIが署名を確かめる。署名なしは401 | 動く |
+| 2026-11-11〜 | `/lib`の拒否に巻き込まれ、署名があっても403 | `HTTP 403` |
+| 2026-11-13〜 | イメージ側の例外（署名ヘッダーがあれば通す）。署名なしは403、不正な署名は401 | 動く |
+| 2026-11-18 | 新しいイメージに例外が無い。例外は本体のmainの履歴にも無い | `HTTP 403`（Slackで「tunnels.rbへの接続・HTTP応答に異常があります: HTTP 403」） |
+| 2026-11-18〜（修正後） | libの`claude/ops/apache-lib-tunnels.conf`が例外を持つ（`<LocationMatch "^/lib/api/tunnels$">`、`X-Timestamp`と`X-Signature`の両方を要求）。`restore-claude-host.sh`で反映 | Apache経由の署名付きPOSTで、`muse_prompt`が`done`（約28秒）、`claude_prompt`が`done`（約7秒） |
+
+- 例外はApacheの段では「ヘッダーがあるか」だけを見る。署名の照合はCGI（`tunnels_lib.rb`）が行う。
+- 本体のイメージに例外を入れれば、lib側の例外は要らなくなる（提案、未実施）。イメージを作り直すたびに例外が消える状態は、まだ残っている。
+- askgkの経路台帳の`independent`（r9、別のコンテナ）は、今回は測っていない。
+
+### 経路7（起動後の確認送信）
+
+- 7は`askgk_request.rb`でCGIを直接実行するため、Apacheを通らない。2026-11-18は、7が`done`を返した一方で、Slackからの6は`HTTP 403`だった。**7の成功は、6が届くことの根拠にならない。**
+- 6の経路まで確かめるには、Apache（8443）へ、askgkと同じ形の署名付きPOSTを送る。`[点検 libhost-askgk-selfcheck <UNIX秒>]`の印はそのまま使える（7の経路キーのまま。Apache経由用の新しい経路キーは決めていない）。
+
+### エラーの見分け方（5章への追加）
+
+| 画面の表示 | 意味 | 見るところ |
+|---|---|---|
+| tunnels.rbへの接続・HTTP応答に異常があります: HTTP 403 | askgk（6）が、CGIに届く前にApacheで拒否された。LLM worker・Tailscale・Museまでは届いていない | コンテナの`/etc/apache2/lib-tunnels.conf`に`Require expr`の例外があるか。無ければ`restore-claude-host.sh`を再実行する |
+| ワーカータブに「Forbidden」 | 3が公開mygwの`/lib`を直接見ている、または8445がチャットを中継していない | 節「tree-view のMuseウィンドウ内「ワーカー」の403」の切り分けの表と、上の「経路3」 |
+
+### 確かめていないこと
+
+- 修正後のSlackからの`/neko askgk muse_prompt=`（Apache経由の署名付きPOSTでは確かめた）。
+- 経路3を、利用者のログイン済みの画面で通した結果。
+- 2026-11-11〜13の固定イメージの中身（例外がそこにあったことは、当時のlibの記録からの判断）。
+- 8445のチャットの中継を入れたイメージでの、ワーカータブの表示（再ビルド前）。
+- askgkの`independent`（r9）経路の、今の応答。
