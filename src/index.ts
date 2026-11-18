@@ -75,6 +75,7 @@ import { listCloudflareTunnels } from './utils/cloudflareTunnelApi';
 import { fetchLatestToolVersions, type LatestToolVersions, type ToolName } from './utils/latestToolVersions';
 import { getLatestSnapshot, recordSnapshot, getLatestVersionSnapshot, buildCronHeader, buildVersionReport, CRON_SNAPSHOT_USER_ID, getCronReportSlackEnabled, setCronReportSlackEnabled } from './utils/cfContainerSnapshot';
 import { buildPackageReleaseStatuses, savePackageReleaseStatuses } from './utils/cfContainerPackageReleaseStatus';
+import { resolveInstalledBaseline, versionsFromHealthPayload, RELEASE_CHECK_SNAPSHOT_USER_ID } from './utils/cfContainerInstalledBaseline';
 import { sendContainerVersionsToMuse } from './utils/containerVersionsForMuse';
 import { fetchBuildActivity, fetchLatestBuildLog } from './utils/cfBuildsApi';
 import { buildBannerState } from './utils/cfContainerBanner';
@@ -21250,7 +21251,27 @@ app.post('/api/cf-containers/package-release-status/check', authMiddleware, cfDa
   if (c.req.header('Origin') !== new URL(c.req.url).origin) return jsonUtf8({ error: '同じオリジンから操作してください。' }, 403);
   if (!c.env.DB) return jsonUtf8({ error: 'DBバインディングがありません' }, 503);
   try {
-    const installedSnapshot = await getLatestVersionSnapshot(c.env.DB);
+    // 導入版の基準が古いまま固定されないよう、古ければ稼働中コンテナから取り直す(停止中は起動しない)。
+    const db = c.env.DB;
+    const stub = await getDemoContainerStub(c.env);
+    const baseline = await resolveInstalledBaseline({
+      getLatestSnapshot: () => getLatestVersionSnapshot(db),
+      isContainerRunning: async () => (await buildContainerStatusResponse(stub)).running,
+      fetchInstalledVersions: async () => {
+        if (!stub) throw new Error('DEMO_CONTAINERバインディングが未設定です');
+        const res = await stub.fetch(new Request('https://container.internal/health'));
+        if (!res.ok) throw new Error(`コンテナの /health が HTTP ${res.status} を返しました`);
+        return versionsFromHealthPayload(await res.json());
+      },
+      recordSnapshot: async (versions) => {
+        await recordSnapshot(db, RELEASE_CHECK_SNAPSHOT_USER_ID, {
+          runningContainers: 1, connectedSeconds: null, estimatedCostUsd: null, imageCommit: null, versions,
+        });
+        return getLatestVersionSnapshot(db);
+      },
+      now: () => new Date(),
+    });
+    const installedSnapshot = baseline.snapshot;
     const current = installedSnapshot?.versions ?? {};
     const nodeMajor = Number(String(current.node ?? '26').split('.')[0]) || 26;
     const latest = await getCachedLatestToolVersions(nodeMajor, current, c.env.GITHUB_TOKEN, c.executionCtx);
@@ -21263,6 +21284,8 @@ app.post('/api/cf-containers/package-release-status/check', authMiddleware, cfDa
       packageCount: records.length,
       checkedAt,
       installedSnapshotAt: installedSnapshot?.createdAt ?? null,
+      installedRefreshed: baseline.refreshed,
+      ...(baseline.refreshError ? { installedRefreshError: baseline.refreshError } : {}),
       updatesAvailable: records.filter((row) => row.updateStatus === 'update_available').length,
       latestUnavailable: records.filter((row) => row.releaseStatus === 'failed').length,
     });
