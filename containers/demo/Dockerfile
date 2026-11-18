@@ -298,6 +298,9 @@ COPY container_setup.py /usr/local/libexec/container_setup.py
 RUN python3 /usr/local/libexec/container_setup.py
 COPY codex-harness/ /usr/local/share/codex-harness/
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+# lib の復元を、/root/lib が届いてから行う(entrypoint.sh が裏で呼ぶ。2026-11-18)。
+COPY lib-restore-wait.sh /usr/local/libexec/lib-restore-wait.sh
+RUN chmod 755 /usr/local/libexec/lib-restore-wait.sh
 COPY t3-embed-proxy.cjs /usr/local/libexec/t3-embed-proxy.cjs
 COPY t3-pwa-auth.cjs t3-stale-session.cjs t3-pwa-client.js t3-pwa-client.css /usr/local/libexec/
 COPY tailscale-up.sh /usr/local/bin/tailscale-up.sh
