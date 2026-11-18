@@ -236,9 +236,29 @@ else
 fi
 
 # --- Apache(server.jsへのTLSプロキシ・Redmineは127.0.0.1:8444で内部待ち受け) ---
-apache2ctl configtest >/tmp/apache-configtest.log 2>&1 \
-  && (apache2ctl start >/tmp/apache.log 2>&1 && log "apache2 started") \
-  || log "WARN: apache2 configtest/start failed, see /tmp/apache-configtest.log /tmp/apache.log"
+# apache2ctl のサービス制御は使わない。Ubuntu の apache2ctl は systemd が居ると判定すると
+# systemctl へ委譲し、systemctl は chroot 環境では start を無視して正常終了するため、
+# Apache が起動していないのに成功扱いになる(2026-11-18、実機の /tmp/apache.log で確認:
+# "Running in chroot, ignoring command 'start'")。envvars を読み込んで httpd 本体を直接
+# 起動し、起動後は待ち受けを実測で確認する(終了コードは成功の根拠にしない)。
+if apache2ctl configtest >/tmp/apache-configtest.log 2>&1; then
+  ( . /etc/apache2/envvars; /usr/sbin/apache2 -k start ) >/tmp/apache.log 2>&1
+  apache_listening=""
+  for _ in 1 2 3 4 5; do
+    if (exec 3<>/dev/tcp/127.0.0.1/8443) 2>/dev/null && (exec 3<>/dev/tcp/127.0.0.1/8445) 2>/dev/null; then
+      apache_listening=1
+      break
+    fi
+    sleep 1
+  done
+  if [ -n "$apache_listening" ]; then
+    log "apache2 started (8443/8445 listening)"
+  else
+    log "WARN: apache2 start failed or not listening on 8443/8445, see /tmp/apache-configtest.log /tmp/apache.log"
+  fi
+else
+  log "WARN: apache2 configtest failed, see /tmp/apache-configtest.log"
+fi
 
 # --- cloudflared(nekorootトンネル) ---
 NEKOROOT_TUNNEL_TOKEN=$(extract_tunnel_token "${NEKOROOT_TUNNEL_TOKEN:-}")
