@@ -47,6 +47,10 @@ describe('前提チェック: lib経路の配線(server.js → Apache lib Virtua
     expect(dir).toMatch(/AddHandler cgi-script \.cgi/);
     expect(dir).toMatch(/Require local/);
   });
+
+  it('lib の VirtualHost は応答に charset=utf-8 を付ける(断片単体の表示でも文字化けさせない)', () => {
+    expect(libConf).toMatch(/AddDefaultCharset\s+utf-8/i);
+  });
 });
 
 describe('前提チェック: Dockerfile が lib の VirtualHost を配置し有効化する', () => {
