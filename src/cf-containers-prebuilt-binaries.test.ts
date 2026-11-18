@@ -26,7 +26,7 @@ describe('公式のリリースのバイナリを使う', () => {
   it('固定したsha256は、固定した版のもの', () => {
     // 版を上げるときは、配布元の値でsha256も上げる(下の表もあわせて直す)
     expect({ gh: [arg('GH_VERSION'), arg('GH_SHA256')], jj: [arg('JJ_VERSION'), arg('JJ_SHA256')] }).toEqual({
-      gh: ['2.104.0', '98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e'],
+      gh: ['2.105.0', '79e7ab5db738c48777b696e374f8b428f0647debfb424f44d2f426370407fe2f'],
       jj: ['0.47.1', 'd4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7'],
     });
   });

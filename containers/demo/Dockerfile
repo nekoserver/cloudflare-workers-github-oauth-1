@@ -1,6 +1,6 @@
 # 固定する版。最後に/etc/image-versions.jsonへ書き出すため、全ステージで共有する。
 ARG TAILSCALE_VERSION=1.104.7
-ARG GH_VERSION=2.104.0
+ARG GH_VERSION=2.105.0
 ARG JJ_VERSION=0.47.1
 ARG RUBY_VERSION=4.0.9
 ARG GIT_VERSION=2.56.1
@@ -61,7 +61,7 @@ FROM ubuntu:26.04
 ARG NODE_VERSION=26.13.1
 ARG NODE_SHA256=5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864
 ARG NPM_VERSION=12.2.2
-ARG CODEX_VERSION=0.169.1
+ARG CODEX_VERSION=0.170.0
 ARG T3_VERSION=0.1.10
 ARG CLAUDE_VERSION=2.1.327
 ARG VITEST_VERSION=5.1.0
@@ -102,7 +102,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3-websock
 # ghとjjは公式のコンパイル済みバイナリを使う。jjは退避パッケージから再利用。
 # sha256はghの公式チェックサム、jjのGitHub release asset digestと照合して固定。
 ARG GH_VERSION
-ARG GH_SHA256=98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e
+ARG GH_SHA256=79e7ab5db738c48777b696e374f8b428f0647debfb424f44d2f426370407fe2f
 RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/gh.tar.gz \
         "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
     && echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c - \
