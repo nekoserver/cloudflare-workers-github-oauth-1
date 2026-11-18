@@ -312,19 +312,6 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/cf-api \
     && sed -i 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf \
     && mkdir -p /run/sshd
 
-# TLS証明書(自己署名で、検証もされない)は起動時に毎回生成せず、ビルド時に焼き込む
-# (SPEC.cloudflare-workers-github-oauth-1.lib-apache-wiring の REQ-LW-010)。
-# entrypoint の生成処理は、証明書が無い場合の予備として残してある。
-# あわせて最終形(サイト有効化と証明書の配置が済んだ状態)の設定をここで検証し、
-# 落ちる設定はビルド自体を失敗させる。apache 置換直後の apache2 -t はサイト配置前の
-# 既定設定しか見ておらず、最終形はビルド時に未検証だった。
-RUN mkdir -p /etc/apache2/tls \
-    && openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
-        -keyout /etc/apache2/tls/nekoroot.key -out /etc/apache2/tls/nekoroot.crt \
-        -subj "/CN=nekoroot-demo" \
-    && chmod 600 /etc/apache2/tls/nekoroot.key \
-    && env -i PATH=/usr/sbin:/usr/bin:/bin sh -c '. /etc/apache2/envvars; exec apache2 -t'
-
 EXPOSE 8080
 ENV PORT=8080
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
