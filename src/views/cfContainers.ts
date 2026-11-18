@@ -108,6 +108,7 @@ button {
 button:hover { background: var(--bg); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 #log { margin-top: 6px; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+#log.restarting { color: var(--warn); animation: status-blink 1s steps(2, start) infinite; }
 details.card > summary { cursor: pointer; font-weight: 600; color: var(--text); padding: 2px 0; }
 details.card[open] > summary { margin-bottom: 6px; }
 /* 前回表示時との差分: 増えた・変わった=黄、同じ=淡色 */
@@ -1237,7 +1238,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
 
   function runAction(action) {
     setBusy(true);
-    log.textContent = action + ' を実行中…';
+    var isRestart = action === 'restart';
+    log.textContent = isRestart ? '再起動中…' : action + ' を実行中…';
+    if (isRestart) log.classList.add('restarting');
     fetch('/api/cf-containers/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1256,6 +1259,7 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         log.textContent = 'エラー: ' + String(err);
       })
       .finally(function () {
+        if (isRestart) log.classList.remove('restarting');
         setBusy(false);
       });
   }
@@ -1595,7 +1599,6 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
         ? '導入版の基準: ' + data.installedSnapshotAt + ' / '
         : '導入版の記録なし / ';
       versionStatusLog.textContent = 'D1へ' + data.packageCount + 'パッケージを記録しました。' + basis
-        + (data.installedRefreshed ? '導入版は古かったため、稼働中コンテナから取り直しました。' : '')
         + '新版あり ' + data.updatesAvailable + '件 / 最新版取得失敗 ' + data.latestUnavailable + '件 / 確認 ' + data.checkedAt;
     })
     .catch(function (err) { versionStatusLog.textContent = 'D1記録エラー: ' + String(err); });
