@@ -276,8 +276,9 @@ function readContainerFeatures() {
 }
 
 async function buildHealth() {
-  const [apache, sshd, cloudflared, tailscale, docker] = await Promise.allSettled([
+  const [apache, apacheLib, sshd, cloudflared, tailscale, docker] = await Promise.allSettled([
     probeTcp(8443),
+    probeTcp(LIB_PORT),
     probeTcp(2222),
     probeCloudflaredReady(),
     probeTailscaleRunning(),
@@ -286,6 +287,7 @@ async function buildHealth() {
   const value = (settled) => (settled.status === 'fulfilled' ? settled.value : false);
   return {
     apache: value(apache),
+    apacheLib: value(apacheLib),
     sshd: value(sshd),
     cloudflared: value(cloudflared),
     tailscale: value(tailscale),

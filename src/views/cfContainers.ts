@@ -281,9 +281,9 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
   </div>
   <div class="pricing-scroll">
   <table class="health-table" id="health-table" hidden>
-    <thead><tr><th>Apache(8443)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>Docker</th><th>確認時刻</th></tr></thead>
+    <thead><tr><th>Apache(8443)</th><th>Apache lib(8445)</th><th>sshd(2222)</th><th>cloudflared(nekoroot)</th><th>Tailscale</th><th>Docker</th><th>確認時刻</th></tr></thead>
     <tbody><tr>
-      <td id="health-apache"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-docker"></td><td id="health-time"></td>
+      <td id="health-apache"></td><td id="health-apache-lib"></td><td id="health-sshd"></td><td id="health-cloudflared"></td><td id="health-tailscale"></td><td id="health-docker"></td><td id="health-time"></td>
     </tr></tbody>
   </table>
   </div>
@@ -1561,6 +1561,8 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .then(readJsonOrText)
       .then(function (data) {
         document.getElementById('health-apache').innerHTML = badge(data.apache);
+        var apacheLibCell = document.getElementById('health-apache-lib');
+        if (data.apacheLib === undefined) { apacheLibCell.textContent = '不明（旧イメージ）'; } else { apacheLibCell.innerHTML = badge(data.apacheLib); }
         document.getElementById('health-sshd').innerHTML = badge(data.sshd);
         document.getElementById('health-cloudflared').innerHTML = badge(data.cloudflared);
         document.getElementById('health-tailscale').innerHTML = badge(data.tailscale);
