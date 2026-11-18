@@ -21,16 +21,23 @@ describe('lib の起動時の復元と経路情報によるアクセス制御', 
     expect(vars.match(/^LIB_ROUTE_ACCESS_CONTROL = "(?:0|1)"$/gm)).toHaveLength(1);
   });
 
-  it('entrypoint は /root/lib を見せた後、毎回の起動で lib の復元を呼び、失敗しても起動は続ける', () => {
-    const mount = ep.indexOf('mount --bind /root/lib /var/www/html/lib');
-    const call = ep.indexOf('/root/lib/claude/ops/restore-claude-host.sh');
-    expect(mount).toBeGreaterThan(-1);
-    expect(call).toBeGreaterThan(mount);
+  it('entrypoint は Apache の起動の後、/root/lib が届くのを裏で待ってから lib の復元を呼び、失敗しても起動は続ける', () => {
+    // 2026-11-18: /root/lib はコンテナの起動から約2時間後に置かれ、起動時に一度だけ見る作りでは復元もbind mountも行われなかった。
+    const call = ep.indexOf('/usr/local/libexec/lib-restore-wait.sh /root/lib /var/www/html/lib');
+    expect(call).toBeGreaterThan(ep.indexOf('mount --bind /root/lib /var/www/html/lib'));
+    expect(call).toBeGreaterThan(ep.indexOf('# --- Apache'));
     expect(call).toBeLessThan(ep.lastIndexOf('exec "$@"'));
-    const block = ep.slice(ep.lastIndexOf('\n', ep.lastIndexOf('if ', call)), ep.indexOf('\nfi', call) + 3);
-    expect(block).toContain('if [ -x /root/lib/claude/ops/restore-claude-host.sh ]');
-    expect(block).toMatch(/\|\| log "WARN: lib: restore-claude-host\.sh failed/);
+    const line = ep.slice(call, ep.indexOf('\n', call));
+    expect(line).toBe('/usr/local/libexec/lib-restore-wait.sh /root/lib /var/www/html/lib 86400 30 /tmp/restore-claude-host.log &');
     // 秘密の値はコマンドラインに出さない(環境変数で引き継ぐ)。
-    expect(block).not.toMatch(/\$\{?(ORIGIN_HMAC_SECRET|MUSE_API_KEY)/);
+    expect(line).not.toMatch(/\$\{?(ORIGIN_HMAC_SECRET|MUSE_API_KEY)/);
+    // 起動時に一度だけ見て終わる旧い呼び方は残さない。
+    expect(ep).not.toContain('if [ -x /root/lib/claude/ops/restore-claude-host.sh ]');
+  });
+
+  it('Dockerfile が待つスクリプトを実行できる形で置く', () => {
+    const dockerfile = readFileSync('containers/demo/Dockerfile', 'utf8');
+    expect(dockerfile).toContain('COPY lib-restore-wait.sh /usr/local/libexec/lib-restore-wait.sh');
+    expect(dockerfile).toMatch(/chmod (?:\+x|755) [^\n]*\/usr\/local\/libexec\/lib-restore-wait\.sh/);
   });
 });

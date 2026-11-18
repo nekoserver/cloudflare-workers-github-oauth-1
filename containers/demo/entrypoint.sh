@@ -382,15 +382,10 @@ fi
 # --- lib の復元(/root/lib/claude/ops/restore-claude-host.sh、nekoserver/lib) ---
 # libはイメージに入れない。コンテナに置かれた /root/lib の起動処理で、tunnels API・LLM worker・会話observer・
 # ストリーム・Claude Code のhookを毎回の起動で戻す。ORIGIN_HMAC_SECRET・MUSE_API_KEY・起動オプション
-# LIB_ROUTE_ACCESS_CONTROL は Worker から環境変数で届き、コマンドラインには出さない。Apacheを起動した後に、
-# 準備完了を遅らせないよう裏で動かす。失敗しても起動は続ける。
-if [ -x /root/lib/claude/ops/restore-claude-host.sh ]; then
-  ( /root/lib/claude/ops/restore-claude-host.sh >/tmp/restore-claude-host.log 2>&1 \
-      && log "lib: restore-claude-host.sh done (see /tmp/restore-claude-host.log)" \
-      || log "WARN: lib: restore-claude-host.sh failed (see /tmp/restore-claude-host.log)" ) &
-else
-  log "lib: no /root/lib/claude/ops/restore-claude-host.sh, lib services not restored"
-fi
+# LIB_ROUTE_ACCESS_CONTROL は Worker から環境変数で届き、コマンドラインには出さない。
+# /root/lib は起動より後に置かれることがある(2026-11-18 は約2時間後)ので、届くまで裏で待つ(30秒ごと、1日で諦める。待つ間は眠っているだけ)。
+# 届いたら、上の bind mount がまだなら行ってから復元する。準備完了を遅らせず、失敗しても起動は続ける。
+/usr/local/libexec/lib-restore-wait.sh /root/lib /var/www/html/lib 86400 30 /tmp/restore-claude-host.log &
 
 # Restore the versioned Codex Japanese hooks at boot; preserve other hooks and trust.
 if ! /usr/bin/python3 /usr/local/share/codex-harness/restore.py; then
