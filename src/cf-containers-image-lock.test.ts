@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 // 対象: demoコンテナのイメージの作り方(wrangler.toml の [[containers]])と、戻すためのイメージの記録(containers/demo/image.lock.json)。
 // 経緯: 2026-11-11、Workers BuildsのDockerビルドが「runc ... mounting "proc" ... operation not permitted」で落ち続けたため、
@@ -25,5 +26,14 @@ describe('demoコンテナのイメージは Workers Builds が Dockerfile か�
   it('戻す先のイメージ(最後に動いたもの)をdigestで記録している', () => {
     expect(lock.image).toMatch(/^registry\.cloudflare\.com\/[0-9a-f]{32}\/cloudflare-workers-github-oauth-1-democontainer@sha256:[0-9a-f]{64}$/);
     expect(lock.builtFrom).toBeTruthy();
+  });
+});
+
+describe('前提チェック: ロックと現在の入力の一致(2026-11-18、利用者決定)', () => {
+  // ピンだけ進んでロック(最後に動いたイメージの記録)が古いまま通るのを止める。
+  // ビルドが成功してロックを記録し直すまで、このテストは落ち続けるのが正しい姿。
+  it('demo-image-lock.mjs --check が実リポジトリで 0 を返す', () => {
+    const r = spawnSync('node', ['scripts/demo-image-lock.mjs', '--check'], { encoding: 'utf8' });
+    expect(r.status, `stdout: ${r.stdout} stderr: ${r.stderr}`).toBe(0);
   });
 });
