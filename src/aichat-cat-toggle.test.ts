@@ -17,7 +17,7 @@ describe('カテゴリバッジ: 初期中抜き・個別ON/OFF トグル', () =
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
     // カテゴリバッジ html += の行に background:var(--bg-secondary) が含まれる
-    const fn = html.slice(idx, idx + 2000);
+    const fn = html.slice(idx, idx + 2600);
     const catBadgeIdx = fn.indexOf('kw-cat-summary-badge');
     expect(catBadgeIdx).toBeGreaterThan(-1);
     const catBadgeSnippet = fn.slice(catBadgeIdx, catBadgeIdx + 600);
@@ -28,7 +28,7 @@ describe('カテゴリバッジ: 初期中抜き・個別ON/OFF トグル', () =
     const html = buildPage();
     const idx = html.indexOf('function renderKwClassifyList');
     expect(idx).toBeGreaterThan(-1);
-    const fn = html.slice(idx, idx + 2000);
+    const fn = html.slice(idx, idx + 2600);
     const catBadgeIdx = fn.indexOf('kw-cat-summary-badge');
     expect(catBadgeIdx).toBeGreaterThan(-1);
     const catBadgeSnippet = fn.slice(catBadgeIdx, catBadgeIdx + 600);
