@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 // SPEC.cloudflare-workers-github-oauth-1.container-image-explicit-build:
 // デプロイは wrangler の変更判定に頼らず、明示ビルド付きスクリプトを通る。
 // 注記: イメージのビルド成否と失敗ステップは Workers Builds のログでのみ確認できる。
+// ビルド失敗時は image.lock.json のイメージへフォールバックしてデプロイされる。
 const SCRIPT = 'scripts/deploy-with-container-build.sh';
 
 describe('明示ビルド付きデプロイスクリプト', () => {
