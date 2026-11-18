@@ -15,6 +15,7 @@ const serverJs = readFileSync('containers/demo/server.js', 'utf8');
 const libConf = readFileSync('containers/demo/apache-lib.conf', 'utf8');
 const demoConf = readFileSync('containers/demo/apache-demo.conf', 'utf8');
 const dockerfile = readFileSync('containers/demo/Dockerfile', 'utf8');
+const entrypoint = readFileSync('containers/demo/entrypoint.sh', 'utf8');
 
 describe('前提チェック: lib経路の配線(server.js → Apache lib VirtualHost)', () => {
   it('server.js の LIB_PORT と apache-lib.conf の Listen / VirtualHost のポートが一致する', () => {
@@ -72,5 +73,34 @@ describe('前提チェック: トンネル側(8443)は lib を拒否したまま
     const libPort = serverJs.match(/const LIB_PORT = (\d+);/)![1];
     expect(demoConf).toMatch(/^Listen 8443$/m);
     expect(demoConf).not.toContain(`:${libPort}`);
+  });
+});
+
+// REQ-LW-010: 証明書は自己署名で検証もされないため、起動時の毎回生成は失敗の分岐だけを生む。
+// ビルド時に焼き込み、最終形の設定はビルド時の configtest で落とす(落ちる設定はイメージにならない)。
+describe('前提チェック: 証明書の焼き込みと最終形 configtest (REQ-LW-010)', () => {
+  it('Dockerfile がビルド時に自己署名証明書を /etc/apache2/tls へ生成する', () => {
+    expect(dockerfile).toMatch(/openssl req -x509/);
+    expect(dockerfile).toContain('-keyout /etc/apache2/tls/nekoroot.key');
+    expect(dockerfile).toContain('-out /etc/apache2/tls/nekoroot.crt');
+  });
+
+  it('証明書生成と最終形の apache2 -t は、最終ステージの a2ensite より後にある', () => {
+    // コメント行は対象外にする(説明文中の "apache2 -t" の言及を実装と数えない)。
+    const finalStage = dockerfile
+      .slice(dockerfile.lastIndexOf('\nFROM '))
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .join('\n');
+    const ensiteAt = finalStage.indexOf('a2ensite');
+    const certAt = finalStage.indexOf('openssl req');
+    const testAt = finalStage.indexOf('apache2 -t', ensiteAt);
+    expect(ensiteAt).toBeGreaterThanOrEqual(0);
+    expect(certAt, '最終ステージの a2ensite より後に証明書生成が無い').toBeGreaterThan(ensiteAt);
+    expect(testAt, '最終ステージの a2ensite より後に apache2 -t が無い').toBeGreaterThan(certAt);
+  });
+
+  it('entrypoint の証明書生成は、存在チェック付きの予備のままである', () => {
+    expect(entrypoint).toContain('if [ ! -f "$TLS_DIR/nekoroot.crt" ]');
   });
 });
