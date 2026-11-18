@@ -131,16 +131,8 @@ describe('scripts/demo-packages-apply.mjs', () => {
 
 describe('ワークフロー', () => {
   const secretsOf = (y: string) => new Set([...y.matchAll(/secrets\.([A-Z_]+)/g)].map((m) => m[1]));
-  it('container-image: 入力が固定と同じなら作り直さず、承認したシークレットだけを使い、buildArgs でビルドし、テストを通してから PR を出す', () => {
-    const y = readFileSync(join(ROOT, '.github/workflows/container-image.yml'), 'utf8');
-    expect(y).toContain('workflow_dispatch');
-    expect(y).toContain('node scripts/demo-image-lock.mjs --check');
-    expect(y).toContain('--build-arg');
-    expect(y).toContain('npx wrangler containers push');
-    expect(y).toContain('node scripts/demo-image-lock.mjs --write');
-    expect(y).toContain('npx vitest run src/cf-containers');
-    expect(y.indexOf('npx vitest run src/cf-containers')).toBeLessThan(y.indexOf('gh pr create'));
-    expect(secretsOf(y)).toEqual(new Set(['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'GITHUB_TOKEN']));
+  it('container-image: ワークフローは存在しない(GitHub Actions は使わない。2026-11-18 に利用者が削除)', () => {
+    expect(existsSync(join(ROOT, '.github/workflows/container-image.yml'))).toBe(false);
   });
   it('demo-packages: ubuntu:26.04 のコンテナでビルドスクリプトを動かし、更新を適用してテストを通してから PR を出す', () => {
     const y = readFileSync(join(ROOT, '.github/workflows/demo-packages.yml'), 'utf8');
