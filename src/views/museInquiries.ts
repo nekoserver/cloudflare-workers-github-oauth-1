@@ -236,6 +236,30 @@ export const MUSE_INQUIRIES_SCRIPT = `
         box.appendChild(result);
         body.appendChild(box);
       }
+      // 採否の判断材料(ユーザー指定、2026-11-14)。利点・副作用・破壊的変更・元に戻せるかを決まった形で出し、未記入も見せる。
+      var INQ_BREAKING_LABELS = { none: ['なし', 'ok'], possible: ['ありうる', 'warn'], yes: ['あり', 'danger'] };
+      var INQ_REVERSIBLE_LABELS = { yes: ['戻せる', 'ok'], partial: ['一部だけ戻せる', 'warn'], no: ['戻せない', 'danger'] };
+      function renderAssessment(body, panel) {
+        var box = el(doc, 'div', 'inq-assessment');
+        box.setAttribute('data-field', 'assessment');
+        box.appendChild(el(doc, 'div', 'inq-field-label', '採否の判断材料'));
+        var list = el(doc, 'dl', 'inq-assessment-list');
+        function item(key, label, text, level) {
+          list.appendChild(el(doc, 'dt', '', label));
+          var dd = el(doc, 'dd', 'inq-assessment-value', text || '未記入');
+          dd.setAttribute('data-assessment', key);
+          dd.setAttribute('data-level', text ? level : 'unset');
+          list.appendChild(dd);
+        }
+        item('benefits', '承認でもたらされる利点', panel.benefits, 'ok');
+        item('side-effects', '起こりうる副作用', panel.sideEffects, 'warn');
+        var b = INQ_BREAKING_LABELS[panel.breakingChange];
+        item('breaking-change', '破壊的変更(既存の動作・データ・設定が変わるか)', b ? b[0] : '', b ? b[1] : 'unset');
+        var r = INQ_REVERSIBLE_LABELS[panel.reversible];
+        item('reversible', '元に戻せるか', r ? r[0] : '', r ? r[1] : 'unset');
+        box.appendChild(list);
+        body.appendChild(box);
+      }
       function openProposal(panel) {
         var body = openModal('提案');
         var c = caseById(panel.caseId);
@@ -244,6 +268,7 @@ export const MUSE_INQUIRIES_SCRIPT = `
         field(body, '状態', INQ_PROPOSAL_STATUS_LABELS[panel.status] || panel.status);
         field(body, '理由', panel.reason, true);
         field(body, '提案者', agentLabel(panel.proposedBy));
+        renderAssessment(body, panel);
         if (panel.entryId) {
           var button = el(doc, 'button', 'inq-link-btn', '発端の問い合わせを開く');
           button.type = 'button';
@@ -392,6 +417,12 @@ export const MUSE_INQUIRIES_SCRIPT = `
         if (panel.type === 'entry') labels.appendChild(badge(doc, INQ_ENTRY_STATUS_LABELS[panel.status] || '状態未確認', panel.status === 'failed' ? 'ng' : 'muted'));
         if (panel.type === 'proposal' && panel.status === 'rejected') labels.appendChild(badge(doc, '不採用', 'muted'));
         if (panel.type === 'proposal' && panel.status === 'adopted') labels.appendChild(badge(doc, '採用・実施中', 'muted'));
+        // 破壊的変更が「あり」「ありうる」の提案は、カードでも分かるようにする(ユーザー指定、2026-11-14)
+        if (panel.type === 'proposal' && (panel.breakingChange === 'yes' || panel.breakingChange === 'possible')) {
+          var breakingMark = badge(doc, panel.breakingChange === 'yes' ? '⚠ 破壊的変更あり' : '⚠ 破壊的変更ありうる', panel.breakingChange === 'yes' ? 'ng' : 'warn');
+          breakingMark.setAttribute('data-breaking-mark', panel.breakingChange);
+          labels.appendChild(breakingMark);
+        }
         return labels;
       }
       function recordId(panel) { return 'inq-record-' + encodeURIComponent(panelKey(panel)); }
@@ -835,6 +866,15 @@ export function getMuseInquiriesPage(): string {
     .inq-badge-warn { background: #9a6700; }
     .inq-badge-ng { background: #cf222e; }
     .inq-badge-muted { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border-color); }
+    .inq-assessment { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary); }
+    .inq-assessment-list { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 6px 0 0; font-size: 13px; }
+    .inq-assessment-list dt { color: var(--text-secondary); }
+    .inq-assessment-list dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
+    .inq-assessment-value[data-level="ok"] { color: var(--success-color, #1a7f37); }
+    .inq-assessment-value[data-level="warn"] { color: var(--warning-color, #9a6700); }
+    .inq-assessment-value[data-level="danger"] { color: var(--danger-color); }
+    .inq-assessment-value[data-level="unset"] { color: var(--text-secondary); font-weight: 400; font-style: italic; }
+    @media (max-width: 520px) { .inq-assessment-list { grid-template-columns: minmax(0, 1fr); } }
     span.inq-blocking:not(.inq-badge) { color: var(--danger-color); font-weight: 600; }
     #inq-notice { color: var(--text-primary); background: var(--card-bg); border-left: 4px solid var(--danger-color); padding: 8px 12px; margin: 0 0 12px; }
     button, select { min-height: 32px; font: inherit; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; }

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { loadInquiryBoard, loadInquiryCase, decideInquiryProposal, INQUIRY_CASE_ID_RE, INQUIRY_PHASES, INQUIRY_STAGES } from './museInquiryBoard';
 
 // ユーザー指定(2026-11-07): Museとの協議内容(D1 agent-inquiries)を、本体ワーカーのページでカンバン形式に表示する。
@@ -76,6 +78,29 @@ describe('協議のカンバンのデータ', () => {
       createdAt: '2026-11-08T01:00:00Z', sourceEntry: { id: CASE.id + '-e2', seq: 2, title: '協議する' },
     });
     expect(calls.some((c) => /\banswer\b/.test(c.sql))).toBe(false);
+  });
+
+  // ユーザー指定(2026-11-14): 提案に「承認でもたらされる利点」「起こりうる副作用」「破壊的変更」「元に戻せるか」を判断材料として持たせる。
+  it('提案の判断材料(利点・副作用・破壊的変更・元に戻せるか)を一覧と詳細で返し、未知の値や未記入はnull', async () => {
+    const filled = { ...TABLES.inquiry_proposals[0], benefits: '採決の手間が減る', side_effects: '表が1つ増える', breaking_change: 'possible', reversible: 'yes' };
+    const blank = { ...TABLES.inquiry_proposals[0], id: 'p-blank', benefits: null, side_effects: '', breaking_change: 'maybe', reversible: null };
+    const { db, calls } = fakeDb({ ...TABLES, inquiry_proposals: [filled, blank] });
+    const board = await loadInquiryBoard(db);
+    const panels = board.phases.find((p) => p.key === 'proposed')!.panels;
+    expect(panels.find((x: any) => x.id === filled.id)).toMatchObject({ benefits: '採決の手間が減る', sideEffects: '表が1つ増える', breakingChange: 'possible', reversible: 'yes' });
+    expect(panels.find((x: any) => x.id === 'p-blank')).toMatchObject({ benefits: null, sideEffects: null, breakingChange: null, reversible: null });
+    const detail = await loadInquiryCase(fakeDb({ ...TABLES, inquiry_cases: [CASE], inquiry_proposals: [filled] }).db, CASE.id);
+    expect(detail!.proposals[0]).toMatchObject({ benefits: '採決の手間が減る', sideEffects: '表が1つ増える', breakingChange: 'possible', reversible: 'yes' });
+    const proposalSql = calls.filter((c) => /FROM inquiry_proposals\b/.test(c.sql)).map((c) => c.sql).join('\n');
+    for (const col of ['benefits', 'side_effects', 'breaking_change', 'reversible']) expect(proposalSql).toContain(col);
+  });
+
+  it('判断材料の欄はマイグレーションで足す。表の作り直しはせず、SQLにコメントを書かない', () => {
+    const sql = readFileSync(join(__dirname, '../../migrations-agent-inquiries/0013_add_proposal_assessment.sql'), 'utf8');
+    for (const col of ['benefits TEXT', 'side_effects TEXT', "breaking_change TEXT CHECK (breaking_change IN ('none', 'possible', 'yes'))", "reversible TEXT CHECK (reversible IN ('yes', 'partial', 'no'))"]) {
+      expect(sql).toContain('ALTER TABLE inquiry_proposals ADD COLUMN ' + col + ';');
+    }
+    expect(sql).not.toMatch(/--|DROP|CREATE TABLE/);
   });
 
   it('ケースの詳細は、問い合わせを順番どおり、回答の全文・キー・提案と一緒に返す。IDはパラメータで渡す', async () => {

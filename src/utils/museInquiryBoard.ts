@@ -75,13 +75,32 @@ export type InquiryPanel =
 const ENTRY_DONE_STATUSES = ['answered', 'failed', 'withdrawn'];
 const PROPOSAL_PHASE: Record<string, InquiryPhaseKey> = { proposed: 'proposed', adopted: 'adopted', done: 'done', rejected: 'rejected' };
 
+// 提案の採否の判断材料(ユーザー指定、2026-11-14)。migrations-agent-inquiries/0013_add_proposal_assessment.sql で足した欄。
+const ASSESSMENT_COLUMNS = 'benefits, side_effects, breaking_change, reversible';
+const BREAKING_CHANGES = ['none', 'possible', 'yes'] as const;
+const REVERSIBLES = ['yes', 'partial', 'no'] as const;
+export type InquiryBreakingChange = typeof BREAKING_CHANGES[number];
+export type InquiryReversible = typeof REVERSIBLES[number];
+/** 利点・副作用・破壊的変更・元に戻せるか。空文字・未記入・知らない値はnull(推測で埋めない)。 */
+function toAssessment(p: Row): { benefits: string | null; sideEffects: string | null; breakingChange: InquiryBreakingChange | null; reversible: InquiryReversible | null } {
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+  const breaking = str(p.breaking_change) as InquiryBreakingChange;
+  const reversible = str(p.reversible) as InquiryReversible;
+  return {
+    benefits: text(p.benefits),
+    sideEffects: text(p.side_effects),
+    breakingChange: BREAKING_CHANGES.includes(breaking) ? breaking : null,
+    reversible: REVERSIBLES.includes(reversible) ? reversible : null,
+  };
+}
+
 export async function loadInquiryBoard(db: D1Database): Promise<{ cases: InquiryCard[]; phases: Array<{ key: InquiryPhaseKey; label: string; panels: InquiryPanel[] }> }> {
   // 一覧では回答の全文(answer)を読まない。パネルを開いたときにloadInquiryCaseで読む。
   const [{ results: caseRows }, { results: entries }, { results: keys }, { results: proposals }] = await Promise.all([
     db.prepare(`${CARD_SQL} ORDER BY COALESCE((SELECT MAX(e.created_at) FROM inquiry_entries e WHERE e.case_id = c.id), c.created_at) DESC`).all<Row>(),
     db.prepare("SELECT id, case_id, seq, clue, agent, asked_by, info, progress, status, duration_seconds, created_at FROM inquiry_entries WHERE status != 'withdrawn' ORDER BY created_at DESC, seq DESC").all<Row>(),
     db.prepare("SELECT case_id, id, kind, text, status, blocking, mutating FROM inquiry_keys WHERE status = 'open' ORDER BY blocking DESC, created_at").all<Row>(),
-    db.prepare('SELECT case_id, id, entry_id, proposed_by, text, status, reason, created_at FROM inquiry_proposals ORDER BY created_at DESC, id').all<Row>(),
+    db.prepare(`SELECT case_id, id, entry_id, proposed_by, text, status, reason, created_at, ${ASSESSMENT_COLUMNS} FROM inquiry_proposals ORDER BY created_at DESC, id`).all<Row>(),
   ]);
   const panels: Record<InquiryPhaseKey, InquiryPanel[]> = { inquiry: [], 'open-keys': [], proposed: [], adopted: [], done: [], rejected: [] };
   const entriesById = new Map((entries ?? []).filter((e) => e.id).map((e) => [str(e.id), e]));
@@ -100,7 +119,7 @@ export async function loadInquiryBoard(db: D1Database): Promise<{ cases: Inquiry
     const phase = PROPOSAL_PHASE[str(p.status)];
     if (!phase) continue;
     const entry = entriesById.get(str(p.entry_id));
-    panels[phase].push({ type: 'proposal', caseId: str(p.case_id), id: str(p.id), title: str(p.text), status: str(p.status), reason: strOrNull(p.reason), proposedBy: str(p.proposed_by), entryId: strOrNull(p.entry_id), createdAt: str(p.created_at),
+    panels[phase].push({ type: 'proposal', caseId: str(p.case_id), id: str(p.id), title: str(p.text), status: str(p.status), reason: strOrNull(p.reason), proposedBy: str(p.proposed_by), entryId: strOrNull(p.entry_id), createdAt: str(p.created_at), ...toAssessment(p),
       sourceEntry: entry && entry.case_id === p.case_id ? { id: str(entry.id), seq: num(entry.seq), title: str(entry.clue) } : null,
     });
   }
@@ -116,7 +135,7 @@ export async function loadInquiryCase(db: D1Database, caseId: string) {
   const [{ results: entries }, { results: keys }, { results: proposals }] = await Promise.all([
     db.prepare('SELECT id, seq, clue, asked_by, agent, ask_id, question, answer, info, progress, status, error, duration_seconds, created_at FROM inquiry_entries WHERE case_id = ? ORDER BY seq').bind(caseId).all<Row>(),
     db.prepare('SELECT id, kind, text, status, blocking, mutating, opened_by_entry_id, closed_by_entry_id FROM inquiry_keys WHERE case_id = ? ORDER BY created_at, id').bind(caseId).all<Row>(),
-    db.prepare('SELECT id, entry_id, proposed_by, text, status, reason, created_at FROM inquiry_proposals WHERE case_id = ? ORDER BY created_at, id').bind(caseId).all<Row>(),
+    db.prepare(`SELECT id, entry_id, proposed_by, text, status, reason, created_at, ${ASSESSMENT_COLUMNS} FROM inquiry_proposals WHERE case_id = ? ORDER BY created_at, id`).bind(caseId).all<Row>(),
   ]);
   return {
     case: toCard(caseRows[0]),
@@ -128,7 +147,7 @@ export async function loadInquiryCase(db: D1Database, caseId: string) {
     })),
     keys: (keys ?? []).map((k) => ({ id: str(k.id), kind: str(k.kind), text: str(k.text), status: str(k.status), blocking: num(k.blocking) === 1, mutating: num(k.mutating) === 1,
       openedByEntryId: strOrNull(k.opened_by_entry_id), closedByEntryId: strOrNull(k.closed_by_entry_id) })),
-    proposals: (proposals ?? []).map((p) => ({ id: str(p.id), proposedBy: str(p.proposed_by), text: str(p.text), status: str(p.status), reason: strOrNull(p.reason), entryId: strOrNull(p.entry_id), createdAt: strOrNull(p.created_at) })),
+    proposals: (proposals ?? []).map((p) => ({ id: str(p.id), proposedBy: str(p.proposed_by), text: str(p.text), status: str(p.status), reason: strOrNull(p.reason), entryId: strOrNull(p.entry_id), createdAt: strOrNull(p.created_at), ...toAssessment(p) })),
   };
 }
 
