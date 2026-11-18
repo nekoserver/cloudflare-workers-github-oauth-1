@@ -10,11 +10,17 @@ import { readFileSync } from 'node:fs';
 // 突き合わせる前提チェックで炙り出す(フィクスチャではなく実物を見る。2026-11-18、利用者指示)。
 // 故障想定: LIB_PORT と Listen の不一致 / apache-lib.conf を置いたが a2ensite し忘れる /
 // 8443 側の /lib 拒否が外れてトンネルから lib が見える / lib の VirtualHost がループバック以外で待ち受ける。
+// 同じ日、Apache 本体が起動していない真因も判明した: entrypoint の apache2ctl の start が、
+// systemd が居るとの判定で systemctl へ委譲され、systemctl は chroot 環境で start を無視して
+// 正常終了する(実機の /tmp/apache.log で確認)。設定・配置・証明書が全て正しくても Apache だけが
+// 上がらず、終了コードが正常なため WARN も出ない。起動方法も前提チェックで固定する
+// (SPEC.cloudflare-workers-github-oauth-1.lib-apache-wiring の REQ-LW-011)。
 
 const serverJs = readFileSync('containers/demo/server.js', 'utf8');
 const libConf = readFileSync('containers/demo/apache-lib.conf', 'utf8');
 const demoConf = readFileSync('containers/demo/apache-demo.conf', 'utf8');
 const dockerfile = readFileSync('containers/demo/Dockerfile', 'utf8');
+const entrypoint = readFileSync('containers/demo/entrypoint.sh', 'utf8');
 
 describe('前提チェック: lib経路の配線(server.js → Apache lib VirtualHost)', () => {
   it('server.js の LIB_PORT と apache-lib.conf の Listen / VirtualHost のポートが一致する', () => {
@@ -72,5 +78,30 @@ describe('前提チェック: トンネル側(8443)は lib を拒否したまま
     const libPort = serverJs.match(/const LIB_PORT = (\d+);/)![1];
     expect(demoConf).toMatch(/^Listen 8443$/m);
     expect(demoConf).not.toContain(`:${libPort}`);
+  });
+});
+
+describe('前提チェック: entrypoint の Apache 起動方法(REQ-LW-011)', () => {
+  it('apache2ctl のサービス制御(start・stop・restart 等)を使わない', () => {
+    expect(entrypoint).not.toMatch(/apache2ctl\s+(start|stop|restart|graceful)/);
+  });
+
+  it('envvars を読み込んでから httpd 本体を直接起動する', () => {
+    const envvarsAt = entrypoint.search(/(?:\.|source)\s+\/etc\/apache2\/envvars\b/);
+    const startAt = entrypoint.indexOf('/usr/sbin/apache2 -k start');
+    expect(envvarsAt, 'entrypoint に /etc/apache2/envvars の読み込みが無い').toBeGreaterThanOrEqual(0);
+    expect(startAt, 'entrypoint に /usr/sbin/apache2 -k start が無い').toBeGreaterThanOrEqual(0);
+    expect(startAt).toBeGreaterThan(envvarsAt);
+  });
+
+  it('起動後に両ポートの待ち受けを確認し、確認できない場合は失敗を明示する', () => {
+    const libPort = serverJs.match(/const LIB_PORT = (\d+);/)![1];
+    const demoPort = demoConf.match(/^Listen (\d+)$/m)![1];
+    const startAt = entrypoint.indexOf('/usr/sbin/apache2 -k start');
+    expect(startAt, 'entrypoint に /usr/sbin/apache2 -k start が無い').toBeGreaterThanOrEqual(0);
+    const after = entrypoint.slice(startAt);
+    expect(after, '起動後に demo 側ポートの待ち受け確認が無い').toContain(`/dev/tcp/127.0.0.1/${demoPort}`);
+    expect(after, '起動後に lib 専用ポートの待ち受け確認が無い').toContain(`/dev/tcp/127.0.0.1/${libPort}`);
+    expect(after, '待ち受けを確認できない場合の WARN が無い').toMatch(/WARN: apache2/);
   });
 });
