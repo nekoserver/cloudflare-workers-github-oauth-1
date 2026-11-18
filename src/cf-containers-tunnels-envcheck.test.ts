@@ -42,11 +42,22 @@ describe('Tunnel一覧の環境変数確認', () => {
     vi.stubGlobal('fetch', cfFetch({ verifyOk: true, tunnels: [{ id: 't1', name: 'nekoroot', connections: [{}] }] }));
     const res = await getTunnels({ CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID, CF_CONTAINER_API_TOKEN: 'tok' });
     expect(res.status).toBe(200);
-    const data = await res.json() as { tunnels: unknown[]; envCheck: { accountIdSet: boolean; tokenSource: string | null; tokenVerify: string | null } };
+    const data = await res.json() as { tunnels: unknown[]; envCheck: { accountIdSet: boolean; tokenSource: string | null; tokenVerify: string | null; containerApiToken: { set: boolean; verify: string | null } } };
     expect(data.tunnels).toHaveLength(1);
     expect(data.envCheck.accountIdSet).toBe(true);
     expect(data.envCheck.tokenSource).toBe('CF_CONTAINER_API_TOKEN');
     expect(data.envCheck.tokenVerify).toContain('active');
+    expect(data.envCheck.containerApiToken.set).toBe(true);
+    expect(data.envCheck.containerApiToken.verify).toContain('active');
+  });
+
+  it('CF_CONTAINER_API_TOKEN が無くフォールバックで動いていても、そのことが分かる', async () => {
+    vi.stubGlobal('fetch', cfFetch({ verifyOk: true, tunnels: [] }));
+    const res = await getTunnels({ CLOUDFLARE_ACCOUNT_ID: ACCOUNT_ID, CLOUDFLARE_API_TOKEN: 'fallback-tok' });
+    const data = await res.json() as { envCheck: { tokenSource: string | null; containerApiToken: { set: boolean; verify: string | null } } };
+    expect(data.envCheck.tokenSource).toBe('CLOUDFLARE_API_TOKEN');
+    expect(data.envCheck.containerApiToken.set).toBe(false);
+    expect(data.envCheck.containerApiToken.verify).toBeNull();
   });
 
   it('トークンが無効なら、検証結果のNGが envCheck に出る(一覧の成否と切り分ける)', async () => {
@@ -59,17 +70,19 @@ describe('Tunnel一覧の環境変数確認', () => {
   it('環境変数が未設定なら、エラーと一緒に envCheck で未設定が分かる', async () => {
     vi.stubGlobal('fetch', cfFetch({ verifyOk: true }));
     const res = await getTunnels({});
-    const data = await res.json() as { error?: string; envCheck: { accountIdSet: boolean; tokenSource: string | null; tokenVerify: string | null } };
+    const data = await res.json() as { error?: string; envCheck: { accountIdSet: boolean; tokenSource: string | null; tokenVerify: string | null; containerApiToken: { set: boolean; verify: string | null } } };
     expect(data.error).toContain('未設定');
     expect(data.envCheck.accountIdSet).toBe(false);
     expect(data.envCheck.tokenSource).toBeNull();
     expect(data.envCheck.tokenVerify).toBeNull();
+    expect(data.envCheck.containerApiToken.set).toBe(false);
   });
 
   it('画面のスクリプトが envCheck を表示する', async () => {
     const { readFileSync } = await import('node:fs');
     const view = readFileSync('src/views/cfContainers.ts', 'utf8');
     expect(view).toContain('envCheck');
-    expect(view).toContain('環境変数');
+    expect(view).toContain('containerApiToken');
+    expect(view).toContain('CF_CONTAINER_API_TOKEN=');
   });
 });

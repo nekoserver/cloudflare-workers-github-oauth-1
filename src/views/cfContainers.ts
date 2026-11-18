@@ -1851,8 +1851,11 @@ table.health-table th, table.health-table td, table.tunnel-table th, table.tunne
       .then(readJsonOrText)
       .then(function (data) {
         var ec = data.envCheck || {};
-        var envText = '環境変数: アカウントID=' + (ec.accountIdSet ? '設定済み' : '未設定') +
-          '、トークン=' + (ec.tokenSource || '未設定') +
+        var cat = ec.containerApiToken || {};
+        var envText = '環境変数: CF_CONTAINER_API_TOKEN=' + (cat.set ? '設定済み' : '未設定') +
+          (cat.verify ? '、検証: ' + cat.verify : '') +
+          '、アカウントID=' + (ec.accountIdSet ? '設定済み' : '未設定') +
+          '、使用トークン=' + (ec.tokenSource || '未設定') +
           (ec.tokenVerify ? '、検証: ' + ec.tokenVerify : '');
         if (data.error) {
           tunnelLog.textContent = 'エラー: ' + data.error + '（' + envText + '）';
