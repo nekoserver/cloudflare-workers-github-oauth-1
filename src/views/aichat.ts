@@ -5493,6 +5493,7 @@ ${AICHAT_PENDING_CSS}
     var kwClassifyListClose = document.getElementById('kwClassifyListClose');
     var kwClassifyListBody = document.getElementById('kwClassifyListBody');
     var kwClassifySearchInput = document.getElementById('kwClassifySearchInput');
+    var kwMidCatCollapsed = false;
 
     function applyKwClassifySearchFilter() {
       var q = kwClassifySearchInput.value.trim().toLowerCase();
@@ -5672,9 +5673,12 @@ ${AICHAT_PENDING_CSS}
         var html = '';
         if (cats.length > 0) {
           html += '<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border-color);">';
+          html += '<button id="kwMidCatToggle" type="button" title="中分類カテゴリを開閉" style="font-size:10px;padding:2px 7px;margin:1px 4px 1px 1px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;vertical-align:top;">▲▼</button>';
+          html += '<span id="kwMidCatBadges"' + (kwMidCatCollapsed ? ' style="display:none;"' : '') + '>';
           cats.forEach(function(cat) {
             html += '<span class="kw-cat-summary-badge" data-cat-id="' + escHtml(String(cat.id)) + '" data-cat-color="' + escHtml(cat.color || '#6366f1') + '" style="display:inline-block;font-size:11px;padding:3px 11px;border-radius:2px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-muted);cursor:pointer;white-space:nowrap;margin:1px;">' + escHtml(cat.name) + ' (' + cat.kw_count + ')</span>';
           });
+          html += '</span>';
           html += '<div id="kwMidSoloReleaseWrap" style="display:none;text-align:center;margin-top:8px;"><button id="kwMidSoloReleaseBtn" type="button">解除する</button></div>';
           html += '</div>';
         }
@@ -5720,6 +5724,14 @@ ${AICHAT_PENDING_CSS}
         var kwMidSoloReleaseBtn = document.getElementById('kwMidSoloReleaseBtn');
         if (kwMidSoloReleaseBtn) {
           kwMidSoloReleaseBtn.addEventListener('click', function() { exitKwMidSoloMode(); });
+        }
+        var kwMidCatToggle = document.getElementById('kwMidCatToggle');
+        if (kwMidCatToggle) {
+          kwMidCatToggle.addEventListener('click', function() {
+            kwMidCatCollapsed = !kwMidCatCollapsed;
+            var kwMidCatBadges = document.getElementById('kwMidCatBadges');
+            if (kwMidCatBadges) kwMidCatBadges.style.display = kwMidCatCollapsed ? 'none' : '';
+          });
         }
         kwClassifyListBody.querySelectorAll('.kw-cat-summary-badge').forEach(function(catEl) {
           catEl.addEventListener('click', function() {
