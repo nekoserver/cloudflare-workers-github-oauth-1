@@ -15,7 +15,7 @@ describe('container tools: verified precompiled releases',()=>{
   expect(arg('TAILSCALE_SHA256')).toBe('e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c');
   expect(arg('PREPRINT_SHA256')).toBe('451a0ec62252e8747080daa4f8dc08c85949db9fea67ecedac45d4ce56e3ba9f');
   expect(arg('CHROME_SHA256')).toBe('a62b277dc03da2cff50cc04589deb66f6875be339c066d46adb49b49eedb629d');
-  expect(arg('CLAUDE_NATIVE_SHA256')).toBe('604d29a6869409106b6a1110bdadcc8b72e8654a5a865d23258f938a696e348e');
+  expect(arg('CLAUDE_NATIVE_SHA256')).toBe('343c744baa14bfd38286a7cb90871051f04379956da6c5b803a9e66019a76ac9');
   for(const name of ['TAILSCALE','PREPRINT','CHROME','CLAUDE_NATIVE'])expect(df).toContain('${'+name+'_SHA256}');
  });
  it('uses official Tailscale binaries without a Go build',()=>{
