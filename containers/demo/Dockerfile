@@ -188,10 +188,10 @@ RUN curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors -o /tmp/node22.tar.x
     && echo "${NODE_SHA256}  /tmp/node22.tar.xz" | sha256sum -c - \
     && mkdir -p /opt/node22 && tar -xJf /tmp/node22.tar.xz -C /opt/node22 --strip-components=1 \
     && rm -f /tmp/node22.tar.xz \
-    && node --version
+    && test "$(node --version)" = "v${NODE_VERSION}"
 RUN npm cache clean --force \
     && npm install -g npm@${NPM_VERSION} --ignore-scripts \
-    && /opt/node22/bin/npm --version \
+    && test "$(/opt/node22/bin/npm --version)" = "${NPM_VERSION}" \
     && /opt/node22/bin/npm cache clean --force
 RUN npm config set fetch-retries 5 && npm config set fetch-retry-mintimeout 10000 \
     && npm install -g @openai/codex@${CODEX_VERSION} \
@@ -214,14 +214,14 @@ ARG INSTALL_VITEST=true
 RUN case "$INSTALL_VITEST" in true|false) ;; *) echo "INSTALL_VITEST must be true or false" >&2; exit 1 ;; esac; \
     if [ "$INSTALL_VITEST" = "true" ]; then \
     npm install -g vitest@${VITEST_VERSION} --ignore-scripts \
-    && vitest --version \
+    && test "$(vitest --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)" = "${VITEST_VERSION}" \
     && npm cache clean --force; \
     fi
 ARG INSTALL_TYPESCRIPT=true
 RUN case "$INSTALL_TYPESCRIPT" in true|false) ;; *) echo "INSTALL_TYPESCRIPT must be true or false" >&2; exit 1 ;; esac; \
     if [ "$INSTALL_TYPESCRIPT" = "true" ]; then \
     npm install -g typescript@${TYPESCRIPT_VERSION} --ignore-scripts \
-    && tsc --version \
+    && tsc --version | grep -Fx "Version ${TYPESCRIPT_VERSION}" \
     && npm cache clean --force; \
     fi
 # SSHのセッションはDockerのENV PATHを引き継がず/opt/node22/binが見えない(which codexが空になる)。
@@ -234,7 +234,7 @@ ARG CLAUDE_NATIVE_SHA256=604d29a6869409106b6a1110bdadcc8b72e8654a5a865d23258f938
 RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && echo "${CLAUDE_NATIVE_SHA256}  /opt/node22/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum -c - \
-    && claude --version \
+    && claude --version | grep -Fx "${CLAUDE_VERSION} (Claude Code)" \
     && /opt/node22/bin/npm cache clean --force
 # Real browser for preprint; use Google's published Debian package checksum.
 ARG CHROME_VERSION=157.0.8103.38-1
