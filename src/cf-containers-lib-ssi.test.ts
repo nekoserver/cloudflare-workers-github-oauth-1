@@ -48,6 +48,41 @@ describe('内部専用の受け口(127.0.0.1:8445)', () => {
   });
 });
 
+// 対象: tree-viewのワーカータブ(dynamicneko → 本体 /api/tree-view/conversation-stream-external/lib/* → server.js → 8445)の会話ストリーム。
+// 2026-11-13の修正はこの中継を前提にしたが、作業ツリーの未コミットの変更のままで、11-13以降にDockerfileから作ったイメージには無かった
+// (2026-11-18、8445で /lib/api/chat/session が404、/lib/conversation-embed.html は8092を通らない静的なファイルだった)。
+// 故障想定: 中継が無く会話のセッション・ストリームが404になる / 静的な埋め込みページが認証なしで返る / Hostが書き換わりlibのorigin照合が403になる /
+// 中継先がloopbackの外になる / 待ち受けが127.0.0.1の外に広がる。
+describe('内部の受け口(8445)は、会話ストリームの経路だけをlibのストリームのサーバーへ中継する', () => {
+  const proxies = [...libConf.matchAll(/^\s*ProxyPass (\S+) (\S+)/gm)].map((m) => [m[1], m[2]]);
+  it('会話ストリームの4経路を、127.0.0.1の8091(WebSocket)・8092(HTTP)へ中継する', () => {
+    expect(proxies).toEqual(expect.arrayContaining([
+      ['/lib/api/chat/ws', 'ws://127.0.0.1:8091/lib/api/chat/ws'],
+      ['/lib/api/chat/', 'http://127.0.0.1:8092/lib/api/chat/'],
+      ['/lib/conversation-embed.html', 'http://127.0.0.1:8092/lib/conversation-embed.html'],
+      ['/lib/chat/', 'http://127.0.0.1:8092/lib/chat/'],
+      ['/lib/t/', 'http://127.0.0.1:8092/lib/t/'],
+    ]));
+  });
+  it('WebSocketの規則を、より短い /lib/api/chat/ の規則より前に置く(ProxyPassは先に一致したものを使う)', () => {
+    const order = proxies.map(([path]) => path);
+    expect(order.indexOf('/lib/api/chat/ws')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('/lib/api/chat/ws')).toBeLessThan(order.indexOf('/lib/api/chat/'));
+  });
+  it('中継先はloopbackだけで、それ以外の/libは中継しない', () => {
+    for (const [path, target] of proxies) {
+      expect(target, path).toMatch(/^(?:ws|http):\/\/127\.0\.0\.1:(?:8091|8092)\//);
+      expect(path, path).toMatch(/^\/lib\/(?:api\/chat\/|conversation-embed\.html$|chat\/$|t\/$)/);
+    }
+  });
+  it('Hostを保つ(libのセッションはHostからHTTPSのoriginを導く。書き換えると認証後の確認が403になる)', () => {
+    expect(libConf).toMatch(/^\s*ProxyPreserveHost On$/m);
+  });
+  it('中継に要るモジュールをDockerfileが有効にする', () => {
+    expect(dockerfile).toMatch(/a2enmod [^\n]*\bproxy_http\b[^\n]*\bproxy_wstunnel\b/);
+  });
+});
+
 describe('server.jsが/libを127.0.0.1:8445へ中継する', () => {
   const servers: http.Server[] = [];
   afterEach(() => { for (const s of servers.splice(0)) s.close(); });
