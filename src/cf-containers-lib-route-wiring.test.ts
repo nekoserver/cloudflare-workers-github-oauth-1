@@ -113,10 +113,11 @@ describe('前提チェック: 実行経路の BASE 共有の Apache 側前提(RE
     expect(libConf).toMatch(/^\s*SetEnv\s+MUSE_SDK_HOME\s+\/root\s*$/m);
   });
 
-  it('entrypoint が BASE の実体と既定ワークスペースを用意する', () => {
+  it('entrypoint が BASE の実体を用意する', () => {
     expect(entrypoint).toMatch(/mkdir -p \/var\/lib\/muse-sdk\b/);
     expect(entrypoint).toMatch(/chown www-data:www-data \/var\/lib\/muse-sdk\b/);
-    expect(entrypoint).toMatch(/mkdir -p \/root\/sdk-ask-workspace\b/);
+    // 既定ワークスペースは BASE 配下に受付が作る(版4)。/root 配下は作らない
+    expect(entrypoint).not.toMatch(/sdk-ask-workspace/);
   });
 });
 
