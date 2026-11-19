@@ -500,6 +500,7 @@ import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
 import { listMuseSearchKeys, recordSearchedKey } from './utils/museSearchKeys';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
+import { MUSE_THREAD_ID_MAX, fetchMuseThreadLast, fetchMuseThreadList, toParagraphs } from './utils/museThreads';
 import { MUSE_ANSWER_ID_MAX, buildHighlightSegments, fetchMuseAnswer, listAnswerKeys, truncateAnswer } from './utils/museAnswerView';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
@@ -20902,6 +20903,37 @@ app.get('/api/muse-search/answer', authMiddleware, cfDashboardAdminMiddleware, a
   }
   const { content, truncated } = truncateAnswer(result.data.content);
   return c.json({ answerId: result.data.answerId, chatId: result.data.chatId, createdAt: result.data.createdAt, keys, truncated, segments: buildHighlightSegments(content, keys) });
+});
+
+/**
+ * 初期画面のスレッド一覧。スレッドのタイトルのリンクを、最終書き込みの新しい順に並べるための一覧(dynamicneko が並べた順のまま返す)。
+ * 失敗は、空の一覧にせず理由つきで返す。タイトルは、根の投稿の最初の行(スレッドにタイトル列は無い)。
+ */
+app.get('/api/muse-search/threads', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await fetchMuseThreadList(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET);
+  if (!result.ok) {
+    const notConfigured = result.errorCode === 'binding_missing' || result.errorCode === 'secret_missing';
+    logger.warn('muse-search: スレッドの一覧を取れませんでした', { errorCode: result.errorCode });
+    return c.json({ errorCode: result.errorCode, detail: result.detail }, notConfigured ? 503 : 502);
+  }
+  return c.json({ threads: result.data.threads });
+});
+
+/** スレッドのタイトルのリンクを押したときの、最終書き込み。空行で段落に分けて返す(本文は10万文字で切る)。失敗は理由つき。 */
+app.get('/api/muse-search/thread', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const threadId = (c.req.query('threadId') ?? '').trim();
+  if (!threadId) return c.json({ error: 'スレッドIDが必要です' }, 400);
+  if (threadId.length > MUSE_THREAD_ID_MAX) return c.json({ error: `スレッドIDは${MUSE_THREAD_ID_MAX}文字までです` }, 400);
+  const result = await fetchMuseThreadLast(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET, threadId);
+  if (!result.ok) {
+    const notConfigured = result.errorCode === 'binding_missing' || result.errorCode === 'secret_missing';
+    logger.warn('muse-search: スレッドの最終書き込みを取れませんでした', { errorCode: result.errorCode });
+    return c.json({ errorCode: result.errorCode, detail: result.detail }, notConfigured ? 503 : 502);
+  }
+  const { content, truncated } = truncateAnswer(result.data.content);
+  return c.json({ threadId: result.data.threadId, chatId: result.data.chatId, role: result.data.role, createdAt: result.data.createdAt, truncated, paragraphs: toParagraphs(content) });
 });
 
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {

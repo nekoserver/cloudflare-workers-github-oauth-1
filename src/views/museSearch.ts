@@ -564,6 +564,92 @@ export const MUSE_SEARCH_SCRIPT = `
       showKeys();
     }
 
+    // 初期画面のスレッド一覧。各スレッドへの最終書き込みの日時が新しいほうから順に(APIの順のまま)、スレッドタイトルのリンクだけを並べる。
+    // リンクを押すと、そのスレッドへの最終書き込みを、リンクの下に、段落ごとの <p> で出す。もう一度押すと閉じる。開き直しでは取り直さない。
+    var MUSE_THREAD_ROLE_LABELS = { user: '質問', assistant: '回答' };
+    function failText(r, what) {
+      var why = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
+      return what + 'を読み込めませんでした(HTTP ' + r.status + ')' + (why ? ': ' + why : '');
+    }
+    function renderMuseThreadLast(doc, data) {
+      var wrap = museSearchEl(doc, 'div', 'muse-thread-body');
+      wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '最終書き込み: ' + formatMuseSearchTime(data.createdAt) + '・' + (MUSE_THREAD_ROLE_LABELS[data.role] || data.role) + '・チャット ' + data.chatId));
+      data.paragraphs.forEach(function (paragraph) {
+        wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-paragraph', paragraph));
+      });
+      if (data.truncated) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '本文が長いため、途中までを表示しています。'));
+      return wrap;
+    }
+    function toggleMuseThread(doc, fetchFn, link, item) {
+      var panel = item.querySelector('.muse-thread-last');
+      if (panel) {
+        // 開いている・閉じている → 切り替える。取れていない(読み込み中・失敗)ときは、取り直す。
+        if (panel.getAttribute('data-state') === 'loaded' || panel.getAttribute('data-state') === 'loading') {
+          panel.hidden = !panel.hidden;
+          link.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
+          return;
+        }
+      } else {
+        panel = museSearchEl(doc, 'div', 'muse-thread-last');
+        item.appendChild(panel);
+      }
+      panel.hidden = false;
+      panel.setAttribute('data-state', 'loading');
+      panel.textContent = '読み込んでいます…';
+      link.setAttribute('aria-expanded', 'true');
+      fetchFn('/api/muse-search/thread?threadId=' + encodeURIComponent(link.getAttribute('data-thread-id'))).then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+      }).then(function (r) {
+        if (!r.ok) {
+          panel.setAttribute('data-state', 'failed');
+          panel.textContent = failText(r, '最終書き込み');
+          return;
+        }
+        panel.setAttribute('data-state', 'loaded');
+        panel.textContent = '';
+        panel.appendChild(renderMuseThreadLast(doc, r.data));
+      }).catch(function (error) {
+        panel.setAttribute('data-state', 'failed');
+        panel.textContent = '最終書き込みを読み込めませんでした: ' + (error && error.message ? error.message : String(error));
+      });
+    }
+    function loadMuseThreads(doc, fetchFn, container) {
+      container.textContent = '読み込んでいます…';
+      fetchFn('/api/muse-search/threads').then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+      }).then(function (r) {
+        container.textContent = '';
+        if (!r.ok) {
+          container.appendChild(museSearchEl(doc, 'p', 'muse-search-error', failText(r, 'スレッドの一覧')));
+          return;
+        }
+        if (!r.data || !Array.isArray(r.data.threads)) {
+          container.appendChild(museSearchEl(doc, 'p', 'muse-search-error', 'スレッドの一覧を読み込めませんでした(応答の形が想定と違います)'));
+          return;
+        }
+        if (r.data.threads.length === 0) {
+          container.appendChild(museSearchEl(doc, 'p', 'muse-search-status', 'スレッドがまだありません。'));
+          return;
+        }
+        var list = museSearchEl(doc, 'ul', 'muse-thread-list');
+        r.data.threads.forEach(function (thread) {
+          var item = museSearchEl(doc, 'li', 'muse-thread-item');
+          var link = museSearchEl(doc, 'a', 'muse-thread-link', thread.title);
+          link.setAttribute('href', '#');
+          link.setAttribute('data-thread-id', thread.threadId);
+          link.setAttribute('aria-expanded', 'false');
+          link.title = '最終書き込み: ' + formatMuseSearchTime(thread.lastPostAt);
+          link.addEventListener('click', function (event) { event.preventDefault(); toggleMuseThread(doc, fetchFn, link, item); });
+          item.appendChild(link);
+          list.appendChild(item);
+        });
+        container.appendChild(list);
+      }).catch(function (error) {
+        container.textContent = '';
+        container.appendChild(museSearchEl(doc, 'p', 'muse-search-error', 'スレッドの一覧を読み込めませんでした: ' + (error && error.message ? error.message : String(error))));
+      });
+    }
+
     function initMuseSearchPage(doc, fetchFn) {
       var form = doc.querySelector('form');
       var input = doc.querySelector('input[name="q"]');
@@ -573,6 +659,8 @@ export const MUSE_SEARCH_SCRIPT = `
       var busy = false;
       var keysButton = doc.querySelector('button[data-action="keys"]');
       keysButton.addEventListener('click', function () { openMuseKeysModal(doc, fetchFn, keysButton); });
+      var threads = doc.querySelector('[data-field="threads"]');
+      loadMuseThreads(doc, fetchFn, threads);
 
       function clearResults() {
         while (list.firstChild) list.removeChild(list.firstChild);
@@ -595,6 +683,7 @@ export const MUSE_SEARCH_SCRIPT = `
         }
         busy = true;
         button.disabled = true;
+        threads.hidden = true;
         status.className = 'muse-search-status';
         status.textContent = '検索しています…';
         fetchFn('/api/muse-search?q=' + encodeURIComponent(query)).then(function (res) {
@@ -651,6 +740,12 @@ export function getMuseSearchPage(): string {
     .muse-search-note { color: var(--text-muted); font-size: 13px; margin: 8px 0 0; }
     .muse-search-status { color: var(--text-secondary); margin: 16px 0 8px; }
     .muse-search-error { color: var(--danger-color); }
+    .muse-threads { margin: 16px 0 0; }
+    .muse-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+    .muse-thread-link { color: var(--accent-color); text-decoration: none; overflow-wrap: anywhere; }
+    .muse-thread-last { margin: 6px 0 4px 4px; padding: 6px 0 2px 12px; border-left: 2px solid var(--border-color); color: var(--text-primary); }
+    .muse-thread-meta { margin: 0 0 8px; font-size: 12px; color: var(--text-secondary); }
+    .muse-thread-paragraph { margin: 0 0 10px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
     .muse-search-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
     .muse-search-item { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; min-width: 0; }
     .muse-search-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13px; }
@@ -717,6 +812,7 @@ export function getMuseSearchPage(): string {
     <p class="muse-search-note">質問と回答の両方を探します(大文字と小文字は区別しません)。新しい順に、最大100件まで表示します。</p>
     <p class="muse-search-status" data-field="status" role="status" aria-live="polite"></p>
     <ul class="muse-search-results" data-field="results"></ul>
+    <section class="muse-threads" data-field="threads" aria-label="スレッド(最終書き込みの新しい順)"></section>
   </main>
   <script>${MUSE_SEARCH_SCRIPT}
     initMuseSearchPage(document, function (url) { return fetch(url, { headers: { Accept: 'application/json' } }); });
