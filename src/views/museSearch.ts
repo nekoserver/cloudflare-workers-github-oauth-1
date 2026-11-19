@@ -662,6 +662,27 @@ export const MUSE_SEARCH_SCRIPT = `
       var threads = doc.querySelector('[data-field="threads"]');
       loadMuseThreads(doc, fetchFn, threads);
 
+      // スマホ幅の縦並びの設定(ユーザー指定 2026-11-19)。初期値はOFF(今までの表のまま)。この端末のブラウザにだけ保存する(サーバーには送らない)。
+      // ONのときだけ <html> に muse-stacked を付け、幅560px以下の検索キーの表が縦並びになる。ブラウザの保存が使えなくても、スイッチはその場で効く。
+      var MUSE_STACKED_KEY = 'museSearchStackedTables';
+      var stackedToggle = doc.querySelector('input[data-setting="stacked"]');
+      function readStackedSetting() {
+        try { return doc.defaultView.localStorage.getItem(MUSE_STACKED_KEY) === '1'; } catch (error) { return false; }
+      }
+      function applyStackedSetting(on) {
+        doc.documentElement.classList.toggle('muse-stacked', on);
+      }
+      stackedToggle.checked = readStackedSetting();
+      applyStackedSetting(stackedToggle.checked);
+      stackedToggle.addEventListener('change', function () {
+        var on = stackedToggle.checked;
+        applyStackedSetting(on);
+        try {
+          if (on) doc.defaultView.localStorage.setItem(MUSE_STACKED_KEY, '1');
+          else doc.defaultView.localStorage.removeItem(MUSE_STACKED_KEY);
+        } catch (error) { /* 保存できなくても、この画面では効いている */ }
+      });
+
       function clearResults() {
         while (list.firstChild) list.removeChild(list.firstChild);
       }
@@ -740,6 +761,8 @@ export function getMuseSearchPage(): string {
     .muse-search-note { color: var(--text-muted); font-size: 13px; margin: 8px 0 0; }
     .muse-search-status { color: var(--text-secondary); margin: 16px 0 8px; }
     .muse-search-error { color: var(--danger-color); }
+    .muse-setting { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 4px; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
+    .muse-setting input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-color); }
     .muse-threads { margin: 16px 0 0; }
     .muse-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
     .muse-thread-link { color: var(--accent-color); text-decoration: none; overflow-wrap: anywhere; }
@@ -788,16 +811,16 @@ export function getMuseSearchPage(): string {
     .muse-search-form button[data-action="keys"] { padding: 0 12px; }
     .muse-search-snippet mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
     @media (max-width: 560px) {
-      .muse-keys-list, .muse-keys-list tbody, .muse-keys-list tr, .muse-keys-list td { display: block; }
-      .muse-keys-list thead { display: block; }
-      .muse-keys-list thead tr { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 0 8px; border-bottom: 1px solid var(--border-color); }
-      .muse-keys-list thead th { display: block; position: static; padding: 0; border: 0; font-size: 13px; text-align: left; }
-      .muse-keys-list tr { padding: 8px 0; border-bottom: 1px solid var(--border-light); }
-      .muse-keys-list td { border: 0; padding: 2px 0; text-align: left; min-width: 0; white-space: normal; }
-      .muse-keys-list td[data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; text-align: right; }
-      .muse-keys-list td.muse-keys-num, .muse-keys-list td.muse-keys-time { min-width: 0; white-space: normal; }
-      .muse-keys-list td[data-label]::before { content: attr(data-label); flex: 0 0 auto; text-align: left; color: var(--text-secondary); }
-      .muse-keys-list td.muse-keys-key { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+      .muse-stacked .muse-keys-list, .muse-stacked .muse-keys-list tbody, .muse-stacked .muse-keys-list tr, .muse-stacked .muse-keys-list td { display: block; }
+      .muse-stacked .muse-keys-list thead { display: block; }
+      .muse-stacked .muse-keys-list thead tr { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 0 8px; border-bottom: 1px solid var(--border-color); }
+      .muse-stacked .muse-keys-list thead th { display: block; position: static; padding: 0; border: 0; font-size: 13px; text-align: left; }
+      .muse-stacked .muse-keys-list tr { padding: 8px 0; border-bottom: 1px solid var(--border-light); }
+      .muse-stacked .muse-keys-list td { border: 0; padding: 2px 0; text-align: left; min-width: 0; white-space: normal; }
+      .muse-stacked .muse-keys-list td[data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; text-align: right; }
+      .muse-stacked .muse-keys-list td.muse-keys-num, .muse-stacked .muse-keys-list td.muse-keys-time { min-width: 0; white-space: normal; }
+      .muse-stacked .muse-keys-list td[data-label]::before { content: attr(data-label); flex: 0 0 auto; text-align: left; color: var(--text-secondary); }
+      .muse-stacked .muse-keys-list td.muse-keys-key { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
     }
   </style>
 </head>
@@ -810,6 +833,7 @@ export function getMuseSearchPage(): string {
       <button type="button" data-action="keys" aria-label="検索キーの一覧を開く" title="検索キーの一覧(AIチャットでの出現回数の順)">🔑</button>
     </form>
     <p class="muse-search-note">質問と回答の両方を探します(大文字と小文字は区別しません)。新しい順に、最大100件まで表示します。</p>
+    <label class="muse-setting"><input type="checkbox" data-setting="stacked"> スマホ幅(幅560px以下)で、検索キーの表を縦並びにする</label>
     <p class="muse-search-status" data-field="status" role="status" aria-live="polite"></p>
     <ul class="muse-search-results" data-field="results"></ul>
     <section class="muse-threads" data-field="threads" aria-label="スレッド(最終書き込みの新しい順)"></section>
