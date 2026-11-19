@@ -241,8 +241,13 @@ fi
 # Apache が起動していないのに成功扱いになる(2026-11-18、実機の /tmp/apache.log で確認:
 # "Running in chroot, ignoring command 'start'")。envvars を読み込んで httpd 本体を直接
 # 起動し、起動後は待ち受けを実測で確認する(終了コードは成功の根拠にしない)。
+# envvars を読むサブシェルでは、先に set +u で nounset を解除する。このスクリプトは
+# set -u で動作し、サブシェルがそれを継承する。envvars は未設定の APACHE_CONFDIR を
+# 展開するため、解除しないと読み込みの時点でサブシェルが異常終了し、httpd が実行
+# されない(2026-11-19、実機の /tmp/apache.log で確認: "envvars: line 7:
+# APACHE_CONFDIR: unbound variable")。apache2ctl は別プロセスのため影響を受けない。
 if apache2ctl configtest >/tmp/apache-configtest.log 2>&1; then
-  ( . /etc/apache2/envvars; /usr/sbin/apache2 -k start ) >/tmp/apache.log 2>&1
+  ( set +u; . /etc/apache2/envvars; /usr/sbin/apache2 -k start ) >/tmp/apache.log 2>&1
   apache_listening=""
   for _ in 1 2 3 4 5; do
     if (exec 3<>/dev/tcp/127.0.0.1/8443) 2>/dev/null && (exec 3<>/dev/tcp/127.0.0.1/8445) 2>/dev/null; then
