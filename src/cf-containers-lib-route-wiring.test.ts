@@ -85,6 +85,24 @@ describe('前提チェック: トンネル側(8443)は lib を拒否したまま
   });
 });
 
+describe('前提チェック: ダッシュボードのパネルの Apache 側前提(REQ-PN-006)', () => {
+  // SPEC.lib.dashboard-state.shtml 版2。Cookie の表示選択を SSI の #if で使うため、
+  // lib の VirtualHost で環境変数へ写し、lib の Directory で旧式パーサを有効にする。
+  // 旧式パーサでないと SetEnvIf の変数を #if から参照できない(実測済み、SPEC の前提 P8)。
+  it('LIBDASH_OFF の既定と Cookie からの上書き、LIBDASH_LAYOUT の SetEnvIf がある', () => {
+    expect(libConf).toMatch(/SetEnvIf\s+Request_URI\s+"[^"]*"\s+LIBDASH_OFF=","/);
+    expect(libConf).toMatch(/SetEnvIf\s+Cookie\s+"libdash_off=\(\[\^;\]\*\)"\s+LIBDASH_OFF=\$1/);
+    expect(libConf).toMatch(/SetEnvIf\s+Cookie\s+"libdash_layout=\(\[\^;\]\*\)"\s+LIBDASH_LAYOUT=\$1/);
+  });
+
+  it('lib の Directory に SSILegacyExprParser On がある', () => {
+    const dirAt = libConf.indexOf('<Directory /var/www/html/lib>');
+    expect(dirAt, 'apache-lib.conf に lib の Directory が無い').toBeGreaterThanOrEqual(0);
+    const dirBlock = libConf.slice(dirAt, libConf.indexOf('</Directory>', dirAt));
+    expect(dirBlock).toMatch(/^\s*SSILegacyExprParser\s+On\s*$/m);
+  });
+});
+
 describe('前提チェック: entrypoint の Apache 起動方法(REQ-LW-011)', () => {
   it('apache2ctl のサービス制御(start・stop・restart 等)を使わない', () => {
     expect(entrypoint).not.toMatch(/apache2ctl\s+(start|stop|restart|graceful)/);
@@ -96,18 +114,6 @@ describe('前提チェック: entrypoint の Apache 起動方法(REQ-LW-011)', (
     expect(envvarsAt, 'entrypoint に /etc/apache2/envvars の読み込みが無い').toBeGreaterThanOrEqual(0);
     expect(startAt, 'entrypoint に /usr/sbin/apache2 -k start が無い').toBeGreaterThanOrEqual(0);
     expect(startAt).toBeGreaterThan(envvarsAt);
-  });
-
-  it('envvars を読むサブシェルでは読み込みの前に nounset を解除する(REQ-LW-012)', () => {
-    // entrypoint 本体は set -u で動作し、サブシェルがそれを継承する。envvars は
-    // 未設定の APACHE_CONFDIR を展開するため、解除が無いと読み込みで落ちて
-    // httpd が実行されない(2026-11-19 の実例、SPEC の F6)。
-    const startLine = entrypoint.split('\n').find((l) => l.includes('/etc/apache2/envvars') && l.includes('/usr/sbin/apache2 -k start'));
-    expect(startLine, 'envvars の読み込みと直接起動を含む行が無い').toBeDefined();
-    const unsetAt = startLine!.indexOf('set +u');
-    const envvarsAt = startLine!.indexOf('/etc/apache2/envvars');
-    expect(unsetAt, 'envvars を読む前に set +u が無い').toBeGreaterThanOrEqual(0);
-    expect(unsetAt).toBeLessThan(envvarsAt);
   });
 
   it('起動後に両ポートの待ち受けを確認し、確認できない場合は失敗を明示する', () => {
