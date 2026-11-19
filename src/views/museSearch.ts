@@ -69,32 +69,70 @@ export const MUSE_SEARCH_SCRIPT = `
       return max + 100;
     }
 
-    function museKeysCell(doc, text, className) {
+    // label は、スマホ幅で表を縦並び(項目名: 値)にするときの項目名(CSSの ::before で出す)。無ければ、行の見出しとして扱う。
+    function museKeysCell(doc, text, className, label) {
       var td = museSearchEl(doc, 'td', className, text);
+      if (label) td.setAttribute('data-label', label);
       return td;
     }
 
-    function renderMuseKeysTable(doc, keys) {
-      var table = museSearchEl(doc, 'table', 'muse-keys-table');
+    // 検索キーの並べ替え。sort は { key: 'searchKey' | 'aiChatCount' | 'treeViewCount' | 'searchCount' | 'lastSearchedAt', dir: 'asc' | 'desc' }。
+    // tree-viewでの出現回数が未取得(null)のキーは、どちらの向きでも最後。同じ値のときは、AIチャットでの出現回数なら「tree-viewでの回数の多い順 → 最後に検索した新しい順 → キー」(サーバーの並びと同じ)、それ以外は「最後に検索した新しい順 → キー」。
+    function museKeyValue(item, key) {
+      return key === 'lastSearchedAt' ? Date.parse(item.lastSearchedAt) : item[key];
+    }
+    function compareMuseValues(a, b, sign) {
+      if (a === null && b === null) return 0;
+      if (a === null) return 1;
+      if (b === null) return -1;
+      if (typeof a === 'string') return a.localeCompare(b, 'ja') * sign;
+      return (a < b ? -1 : (a > b ? 1 : 0)) * sign;
+    }
+    function sortMuseKeys(keys, sort) {
+      var sign = sort.dir === 'desc' ? -1 : 1;
+      return keys.slice().sort(function (a, b) {
+        var primary = compareMuseValues(museKeyValue(a, sort.key), museKeyValue(b, sort.key), sign);
+        if (primary !== 0) return primary;
+        if (sort.key === 'aiChatCount') {
+          var tree = compareMuseValues(a.treeViewCount, b.treeViewCount, -1);
+          if (tree !== 0) return tree;
+        }
+        var last = compareMuseValues(Date.parse(a.lastSearchedAt), Date.parse(b.lastSearchedAt), -1);
+        if (last !== 0) return last;
+        return compareMuseValues(a.searchKey, b.searchKey, 1);
+      });
+    }
+
+    function renderMuseKeysTable(doc, keys, sort, onSort) {
+      var table = museSearchEl(doc, 'table', 'muse-keys-table muse-keys-list');
       var head = doc.createElement('thead');
       var headRow = doc.createElement('tr');
-      ['検索キー', 'AIチャットでの出現回数', 'tree-viewでの出現回数', '検索回数', '最後に検索した日時(日本時間)'].forEach(function (label, index) {
-        var th = museSearchEl(doc, 'th', index > 0 && index < 4 ? 'muse-keys-num' : '', label);
+      [['検索キー', 'searchKey'], ['AIチャットでの出現回数', 'aiChatCount'], ['tree-viewでの出現回数', 'treeViewCount'], ['検索回数', 'searchCount'], ['最後に検索した日時(日本時間)', 'lastSearchedAt']].forEach(function (column, index) {
+        var th = museSearchEl(doc, 'th', index > 0 && index < 4 ? 'muse-keys-num' : '');
         th.setAttribute('scope', 'col');
+        var active = sort.key === column[1];
+        th.setAttribute('aria-sort', active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+        var sortButton = museSearchEl(doc, 'button', 'muse-sort');
+        sortButton.type = 'button';
+        sortButton.setAttribute('data-sort-key', column[1]);
+        sortButton.appendChild(doc.createTextNode(column[0]));
+        sortButton.appendChild(museSearchEl(doc, 'span', 'muse-sort-indicator', active ? (sort.dir === 'asc' ? '▲' : '▼') : ''));
+        sortButton.addEventListener('click', function () { onSort(column[1]); });
+        th.appendChild(sortButton);
         headRow.appendChild(th);
       });
       head.appendChild(headRow);
       table.appendChild(head);
       var body = doc.createElement('tbody');
-      keys.forEach(function (item) {
+      sortMuseKeys(keys, sort).forEach(function (item) {
         var row = doc.createElement('tr');
         row.appendChild(museKeysCell(doc, item.searchKey, 'muse-keys-key'));
-        row.appendChild(museKeysCell(doc, String(item.aiChatCount), 'muse-keys-num'));
-        var tree = museKeysCell(doc, item.treeViewCount === null ? '—' : String(item.treeViewCount), 'muse-keys-num');
+        row.appendChild(museKeysCell(doc, String(item.aiChatCount), 'muse-keys-num', 'AIチャットでの出現回数'));
+        var tree = museKeysCell(doc, item.treeViewCount === null ? '—' : String(item.treeViewCount), 'muse-keys-num', 'tree-viewでの出現回数');
         if (item.treeViewCount === null) tree.title = 'tree-viewでの出現回数を取得できませんでした';
         row.appendChild(tree);
-        row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num'));
-        row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), 'muse-keys-time'));
+        row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num', '検索回数'));
+        row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), 'muse-keys-time', '最後に検索した日時(日本時間)'));
         body.appendChild(row);
       });
       table.appendChild(body);
@@ -442,6 +480,28 @@ export const MUSE_SEARCH_SCRIPT = `
       var view = 'keys';
       var requestNumber = 0;
       var KEYS_TITLE = '検索キー(AIチャットでの出現回数の多い順)';
+      var KEYS_SORT_LABELS = { searchKey: '検索キー', aiChatCount: 'AIチャットでの出現回数', treeViewCount: 'tree-viewでの出現回数', searchCount: '検索回数', lastSearchedAt: '最後に検索した日時' };
+      // 検索キーの並べ替えの基準。最初は、AIチャットでの出現回数の降順(これまでと同じ)。🗒️へ切り替えて戻っても覚えている(モーダルを閉じたら最初に戻る)。
+      var keysSort = { key: 'aiChatCount', dir: 'desc' };
+      var keysData = null;
+      function keysTitle() {
+        if (keysSort.key === 'aiChatCount' && keysSort.dir === 'desc') return KEYS_TITLE;
+        return '検索キー(' + KEYS_SORT_LABELS[keysSort.key] + 'の' + (keysSort.dir === 'asc' ? '昇順' : '降順') + ')';
+      }
+      function buildKeys() {
+        var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
+        scroll.appendChild(renderMuseKeysTable(doc, keysData, keysSort, onSortKeys));
+        return scroll;
+      }
+      // 見出しを押すたびに、その列の降順/昇順をトグルして、表を作り直す。別の列は降順から始める。押した見出しにフォーカスを残す。
+      function onSortKeys(key) {
+        if (keysSort.key === key) keysSort.dir = keysSort.dir === 'asc' ? 'desc' : 'asc';
+        else { keysSort.key = key; keysSort.dir = 'desc'; }
+        show(buildKeys());
+        title.textContent = keysTitle();
+        var again = content.querySelector('button[data-sort-key="' + key + '"]');
+        if (again) again.focus();
+      }
       var SORT_LABELS = { createdAt: '回答日時', occurrences: '出現回数' };
       // 🗒️の並べ替えの基準。最初は回答日時の昇順。🔑へ戻って開き直しても覚えている(モーダルを閉じたら最初に戻る)。
       var sortState = { key: 'createdAt', dir: 'asc' };
@@ -483,12 +543,11 @@ export const MUSE_SEARCH_SCRIPT = `
       }
       function showKeys() {
         markView('keys');
-        title.textContent = KEYS_TITLE;
+        title.textContent = keysTitle();
         load('/api/muse-search/keys', '検索キーの一覧を読み込めませんでした', function (data) {
           if (data.keys.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。');
-          var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
-          scroll.appendChild(renderMuseKeysTable(doc, data.keys));
-          return scroll;
+          keysData = data.keys;
+          return buildKeys();
         });
       }
       function showAnswers() {
@@ -614,6 +673,7 @@ export function getMuseSearchPage(): string {
     .muse-recent-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-answers-link { color: var(--accent-color); text-decoration: none; }
     .muse-sort { font: inherit; font-weight: 600; line-height: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; min-height: 0; min-width: 0; height: auto; cursor: pointer; text-align: inherit; white-space: nowrap; }
+    .muse-keys-list .muse-sort { white-space: normal; }
     .muse-sort-indicator { display: inline-block; min-width: 1.2em; font-size: 11px; color: var(--accent-color); }
     .muse-answer-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: 14px; }
     .muse-answer-text mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
@@ -632,6 +692,18 @@ export function getMuseSearchPage(): string {
     .muse-keys-table .muse-keys-time { white-space: nowrap; }
     .muse-search-form button[data-action="keys"] { padding: 0 12px; }
     .muse-search-snippet mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
+    @media (max-width: 560px) {
+      .muse-keys-list, .muse-keys-list tbody, .muse-keys-list tr, .muse-keys-list td { display: block; }
+      .muse-keys-list thead { display: block; }
+      .muse-keys-list thead tr { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 0 8px; border-bottom: 1px solid var(--border-color); }
+      .muse-keys-list thead th { display: block; position: static; padding: 0; border: 0; font-size: 13px; text-align: left; }
+      .muse-keys-list tr { padding: 8px 0; border-bottom: 1px solid var(--border-light); }
+      .muse-keys-list td { border: 0; padding: 2px 0; text-align: left; min-width: 0; white-space: normal; }
+      .muse-keys-list td[data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; text-align: right; }
+      .muse-keys-list td.muse-keys-num, .muse-keys-list td.muse-keys-time { min-width: 0; white-space: normal; }
+      .muse-keys-list td[data-label]::before { content: attr(data-label); flex: 0 0 auto; text-align: left; color: var(--text-secondary); }
+      .muse-keys-list td.muse-keys-key { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    }
   </style>
 </head>
 <body>

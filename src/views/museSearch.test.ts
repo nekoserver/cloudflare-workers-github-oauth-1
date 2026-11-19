@@ -142,6 +142,29 @@ describe('🔑ボタンのモーダル', () => {
     expect(keysButton().textContent).toContain('🔑');
     expect(keysButton().getAttribute('aria-label')).toBeTruthy();
   });
+  // スマホ幅の表示(2026-11-19、ユーザー指定「直して」): 5列の表が幅に収まらず、右の列が切れていた。スマホ幅では、1行を「項目名: 値」の縦並びにする。
+  it('検索キーの表のセルは、項目名(data-label)を持つ。キーのセルは項目名なし(行の見出し)。表の文字は変えない', async () => {
+    mount(router({ '/api/muse-search/keys': json({ keys: [key({ searchKey: 'alpha', aiChatCount: 30, treeViewCount: null, searchCount: 5 })] }) }));
+    keysButton().click();
+    await flush();
+    const table = document.querySelector('[role="dialog"] table')!;
+    expect(table.classList.contains('muse-keys-list')).toBe(true);
+    const cells = [...table.querySelectorAll('tbody tr:first-child td')];
+    expect(cells.map((td) => td.getAttribute('data-label'))).toEqual([null, 'AIチャットでの出現回数', 'tree-viewでの出現回数', '検索回数', '最後に検索した日時(日本時間)']);
+    expect(cells.slice(0, 4).map((td) => td.textContent)).toEqual(['alpha', '30', '—', '5']);
+  });
+  it('CSS: 狭い幅(560px以下)では、表を縦並び(項目名: 値)にして、横にはみ出させない。固定色は使わない', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    const media = style.slice(style.indexOf('@media (max-width: 560px)'));
+    expect(style).toContain('@media (max-width: 560px)');
+    expect(media).toMatch(/\.muse-keys-list tr, \.muse-keys-list td \{ display: block;/);
+    expect(media).toMatch(/\.muse-keys-list td\[data-label\]::before \{[^}]*content: attr\(data-label\)/);
+    expect(media).toMatch(/\.muse-keys-list thead tr \{[^}]*display: flex; flex-wrap: wrap/);
+    expect(media).not.toMatch(/\.muse-keys-list thead \{[^}]*position: absolute/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
   it('押すと /api/muse-search/keys を読み、モーダルに、AIチャットでの出現回数の順(APIの順)に並べて出す', async () => {
     const fetchFn = router({ '/api/muse-search/keys': json({ keys: [key({ searchKey: 'alpha', aiChatCount: 30, treeViewCount: 4, searchCount: 5 }), key({ searchKey: 'beta', aiChatCount: 2, treeViewCount: 90, searchCount: 1 })] }) });
     mount(fetchFn);
@@ -150,13 +173,127 @@ describe('🔑ボタンのモーダル', () => {
     expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/muse-search/keys');
     expect(dialog()!.getAttribute('aria-modal')).toBe('true');
     expect(dialog()!.getAttribute('aria-labelledby')).toBeTruthy();
-    const headers = [...document.querySelectorAll('[role="dialog"] thead th')].map(th => th.textContent);
+    const headers = [...document.querySelectorAll('[role="dialog"] thead th')].map(th => { const c = th.cloneNode(true) as Element; c.querySelectorAll('.muse-sort-indicator').forEach(el => el.remove()); return c.textContent; });
     expect(headers.indexOf('AIチャットでの出現回数')).toBeGreaterThanOrEqual(0);
     expect(headers.indexOf('tree-viewでの出現回数')).toBeGreaterThan(headers.indexOf('AIチャットでの出現回数'));
     const rows = rowsText();
     expect(rows.map(r => r[0])).toEqual(['alpha', 'beta']);
     expect(rows[0]).toEqual(['alpha', '30', '4', '5', '2026/11/19 12:00:00']);
     expect(rows[1].slice(0, 4)).toEqual(['beta', '2', '90', '1']);
+  });
+  // 見出しで並べ替え(2026-11-19、ユーザー指定): 各thを押すと、その要素の降順/昇順がトグルし、押すたびに表が書き換わる。
+  describe('見出しを押して並べ替える(検索キーの表)', () => {
+    const sortKeys = () => ({ keys: [
+      key({ searchKey: 'alpha', aiChatCount: 30, treeViewCount: 4, searchCount: 5, lastSearchedAt: '2026-11-19T03:00:00.000Z' }),
+      key({ searchKey: 'delta', aiChatCount: 7, treeViewCount: 10, searchCount: 3, lastSearchedAt: '2026-11-19T04:00:00.000Z' }),
+      key({ searchKey: 'gamma', aiChatCount: 7, treeViewCount: null, searchCount: 9, lastSearchedAt: '2026-11-19T02:00:00.000Z' }),
+      key({ searchKey: 'beta', aiChatCount: 2, treeViewCount: 90, searchCount: 1, lastSearchedAt: '2026-11-19T01:00:00.000Z' }),
+    ] });
+    const openSorted = async () => {
+      mount(router({ '/api/muse-search/keys': json(sortKeys()), '/api/muse-search/answers': json({ chats: [] }) }));
+      keysButton().click();
+      await flush();
+    };
+    const sortBtn = (k: string) => document.querySelector<HTMLButtonElement>(`[role="dialog"] thead button[data-sort-key="${k}"]`)!;
+    const order = () => rowsText().map((r) => r[0]);
+    const ariaSort = (k: string) => sortBtn(k).closest('th')!.getAttribute('aria-sort');
+    const title = () => document.querySelector('#muse-keys-title')!.textContent;
+    const press = (k: string) => sortBtn(k).click();
+
+    it('5つの見出しすべてが押せるボタン。最初は、AIチャットでの出現回数の降順(▼)で、タイトルも今までのまま', async () => {
+      await openSorted();
+      expect([...document.querySelectorAll('[role="dialog"] thead th')].map((th) => th.querySelector('button')?.getAttribute('data-sort-key'))).toEqual(['searchKey', 'aiChatCount', 'treeViewCount', 'searchCount', 'lastSearchedAt']);
+      expect(order()).toEqual(['alpha', 'delta', 'gamma', 'beta']);
+      expect(ariaSort('aiChatCount')).toBe('descending');
+      expect(sortBtn('aiChatCount').textContent).toContain('▼');
+      for (const k of ['searchKey', 'treeViewCount', 'searchCount', 'lastSearchedAt']) expect(ariaSort(k)).toBe('none');
+      expect(title()).toBe('検索キー(AIチャットでの出現回数の多い順)');
+    });
+    it('検索キー: 押すたびに 降順 → 昇順', async () => {
+      await openSorted();
+      press('searchKey');
+      expect(order()).toEqual(['gamma', 'delta', 'beta', 'alpha']);
+      expect(ariaSort('searchKey')).toBe('descending');
+      press('searchKey');
+      expect(order()).toEqual(['alpha', 'beta', 'delta', 'gamma']);
+      expect(ariaSort('searchKey')).toBe('ascending');
+    });
+    it('AIチャットでの出現回数: 最初は降順なので、押すと昇順、もう一度で降順。同数はtree-viewでの回数の多い順', async () => {
+      await openSorted();
+      press('aiChatCount');
+      expect(order()).toEqual(['beta', 'delta', 'gamma', 'alpha']);
+      expect(ariaSort('aiChatCount')).toBe('ascending');
+      press('aiChatCount');
+      expect(order()).toEqual(['alpha', 'delta', 'gamma', 'beta']);
+    });
+    it('tree-viewでの出現回数: 降順 → 昇順。未取得(—)は、どちらの向きでも最後', async () => {
+      await openSorted();
+      press('treeViewCount');
+      expect(order()).toEqual(['beta', 'delta', 'alpha', 'gamma']);
+      press('treeViewCount');
+      expect(order()).toEqual(['alpha', 'delta', 'beta', 'gamma']);
+    });
+    it('検索回数: 降順 → 昇順', async () => {
+      await openSorted();
+      press('searchCount');
+      expect(order()).toEqual(['gamma', 'alpha', 'delta', 'beta']);
+      press('searchCount');
+      expect(order()).toEqual(['beta', 'delta', 'alpha', 'gamma']);
+    });
+    it('最後に検索した日時: 降順 → 昇順', async () => {
+      await openSorted();
+      press('lastSearchedAt');
+      expect(order()).toEqual(['delta', 'alpha', 'gamma', 'beta']);
+      press('lastSearchedAt');
+      expect(order()).toEqual(['beta', 'gamma', 'alpha', 'delta']);
+    });
+    it('押すたびに、表を書き換える(行が作り直される)。値は変わらない', async () => {
+      await openSorted();
+      const before = document.querySelector('[role="dialog"] tbody')!;
+      const firstRowBefore = before.querySelector('tr')!;
+      press('searchCount');
+      const after = document.querySelector('[role="dialog"] tbody')!;
+      expect(after).not.toBe(before);
+      expect(after.querySelector('tr')).not.toBe(firstRowBefore);
+      expect(rowsText().find((r) => r[0] === 'alpha')).toEqual(['alpha', '30', '4', '5', script.formatMuseSearchTime(Date.parse('2026-11-19T03:00:00.000Z') / 1000)]);
+      expect(rowsText().find((r) => r[0] === 'gamma')![2]).toBe('—');
+    });
+    it('別の列を押すと、その列の降順から始まる。印(aria-sort・矢印)は押した列だけ。押した見出しにフォーカスが残る。タイトルは基準を示す', async () => {
+      await openSorted();
+      press('searchCount');
+      expect(ariaSort('searchCount')).toBe('descending');
+      expect(ariaSort('aiChatCount')).toBe('none');
+      expect(sortBtn('searchCount').textContent).toContain('▼');
+      expect(sortBtn('aiChatCount').textContent).not.toMatch(/[▲▼]/);
+      expect(document.activeElement).toBe(sortBtn('searchCount'));
+      expect(title()).toBe('検索キー(検索回数の降順)');
+      press('searchCount');
+      expect(title()).toBe('検索キー(検索回数の昇順)');
+      press('aiChatCount');
+      expect(title()).toBe('検索キー(AIチャットでの出現回数の多い順)');
+      press('aiChatCount');
+      expect(title()).toBe('検索キー(AIチャットでの出現回数の昇順)');
+    });
+    it('🗒️へ切り替えて戻っても、選んだ基準を覚えている。モーダルを閉じて開き直したら最初に戻る', async () => {
+      await openSorted();
+      press('searchKey');
+      const notes = document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="answers"]')!;
+      notes.click();
+      await flush();
+      notes.click();
+      await flush();
+      expect(ariaSort('searchKey')).toBe('descending');
+      expect(order()).toEqual(['gamma', 'delta', 'beta', 'alpha']);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      keysButton().click();
+      await flush();
+      expect(ariaSort('aiChatCount')).toBe('descending');
+    });
+    it('Tabは、見出しのボタンにも届く(キーボードで並べ替えられる)', async () => {
+      await openSorted();
+      const items = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].map((el) => el.getAttribute('data-sort-key') ?? el.getAttribute('data-action'));
+      expect(items).toEqual(['answers', 'recent', 'close', 'searchKey', 'aiChatCount', 'treeViewCount', 'searchCount', 'lastSearchedAt']);
+    });
   });
   it('tree-viewでの出現回数が未取得(null)のキーは「—」で出す(0にしない)', async () => {
     mount(router({ '/api/muse-search/keys': json({ keys: [key({ treeViewCount: null })] }) }));
