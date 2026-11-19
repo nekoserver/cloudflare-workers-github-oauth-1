@@ -236,11 +236,11 @@ else
 fi
 
 # --- 実行経路の状態の置き場所(apache-lib.conf の MUSE_SDK_BASE と対、REQ-EP-034) ---
-# 受付(www-data)が書けて承認(root)が読める専用ディレクトリと、既定ワークスペースを
-# 用意する。再作成で消えるため、イメージ側のここで毎回そろえる。
+# 受付(www-data)が書けて承認(root)が読める専用ディレクトリを用意する。
+# 再作成で消えるため、イメージ側のここで毎回そろえる。既定ワークスペースは
+# BASE 配下に受付が作る(execution-path 版4)ため、ここでは作らない。
 mkdir -p /var/lib/muse-sdk
 chown www-data:www-data /var/lib/muse-sdk
-mkdir -p /root/sdk-ask-workspace
 log "lib: muse-sdk base prepared (/var/lib/muse-sdk)"
 
 # --- Apache(server.jsへのTLSプロキシ・Redmineは127.0.0.1:8444で内部待ち受け) ---
