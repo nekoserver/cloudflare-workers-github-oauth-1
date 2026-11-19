@@ -18,7 +18,7 @@ export type RemoteCheckResult<T> =
   | { ok: true; data: T }
   | { ok: false; errorCode: RemoteCheckErrorCode; detail: string };
 
-async function callSignedWorkerEndpoint<T>(
+export async function callSignedWorkerEndpoint<T>(
   fetcher: WorkerFetcher | undefined,
   secret: string | undefined,
   internalBaseUrl: string,
