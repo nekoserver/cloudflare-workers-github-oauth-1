@@ -1,5 +1,9 @@
 # AI問い合わせ・AI過去ログ応答・ai-cache・Jev評価まとめ
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。1〜11節は変えず、本体側の今の状態と11節の課題の状況（12節）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.ai-jev.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.ai-jev.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 1. 全体像
 
 **対象**: dynamicneko(別Worker)からService Binding経由で呼ばれる、本体Worker
@@ -275,3 +279,20 @@ dynamicneko`src/utils/aichatUserToken.ts`。
 - 過去分の回答へのラベルバックフィルは無し(今後の新規評価分から対象。新しい
   ラベルを追加しても既存データと矛盾しない設計のため、後から気が向いた時に
   バックフィルジョブを別途書けばよい)
+
+## 12. 2026-11-19の現状（改訂で追記）
+
+**対象**: 2〜8節の本体Worker側のエンドポイントと、11節の課題（`origin/main` [`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）。dynamicneko側（4節・7節・10節）は本リポジトリでは確かめていない。
+
+- 本書のエンドポイント（`POST /api/aichat/query-external`・`permission-external`・`qsearch-external`・`qsearch-external/latest-answer`・`model-colors-external`・`jev-score-external`・`jev-stats-external`）は、すべて`src/index.ts`にある。
+- 8節のとおり、`jev-score-external`・`jev-stats-external`は本文の`userToken`を`resolveJevUserTokenEmail`（`AICHAT_USER_TOKEN_SECRET`）で検証して、メールアドレスを得る。
+- **11節の課題は残っている。** `query-external`・`qsearch-external`・`permission-external`は、今も本文の`email`をそのまま使い、`userToken`にしていない。
+- 本書の`src/server.ts`・`src/utils/aichatUserToken.ts`・`dynamicneko/src/...`はdynamicnekoのファイル。
+- 関係するテスト4ファイル（`jev-score-external`・`jev-stats-external`・`qsearch-external`・`model-colors-external`のエンドポイント）は、2026-11-19に49件通過した。
+- Jevの評価のテーブルは本書の後に増えた（[`SPEC.cloudflare-workers-github-oauth-1.table-catalog-jev.md`](SPEC.cloudflare-workers-github-oauth-1.table-catalog-jev.md)の「2026-11-19の現状」）。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・12節 | 本体側の今の状態と、11節の課題が残っていることを追加。1〜11節は変えていない | 上の箇条書き |

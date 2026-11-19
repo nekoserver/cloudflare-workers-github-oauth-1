@@ -1,5 +1,9 @@
 # SPEC: cloudflare-workers-github-oauth-1 修正箇所一覧（2026-03-16）
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文は変えず、エンドポイント・文書の今の有無（末尾）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20260316.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20260316.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 本ドキュメントは 2026-03-16 に `cloudflare-workers-github-oauth-1` リポジトリに加えられた修正・追加の仕様をまとめたものである。
 
 ---
@@ -326,3 +330,18 @@ Slack に送信されるセキュリティ通知・Webhook 通知が箇条書き
 | `NOTICE.cloudflare-workers-github-oauth-1.20260316.md` | 新規ドキュメント（知見・注意事項） |
 | `HISTORY.cloudflare-workers-github-oauth-1.latest.md` | ドキュメント更新（コミット履歴） |
 | `SPEC.cloudflare-workers-github-oauth-1.20260316.md` | 本ファイル |
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 1〜13節のエンドポイント・テーブル・文書の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での有無。
+
+- `GET /auth/github/reauthorize`・`GET /api/debug/d1`・`POST /webhook/github`・`GET /api/repo-permissions`・`/repositories`は`src/index.ts`にある。`installation_permissions`は`migrations/0004`。
+- 1節の`GET /github/callback`は`src/index.ts`に無い。コールバックは`GET /auth/github/callback`（`CLAUDE.md`の「本インスタンスの情報」）。
+- 13節の`API.cloudflare-workers-github-oauth-1.latest.md`は無い。2026-09-24の[`21e19624`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/21e19624)で`API.cloudflare-workers-github-oauth-1.20260924.md`として更新された。
+- `ZANZIBAR.cloudflare-workers-github-oauth-1.md`はある。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・末尾 | エンドポイント・文書の有無を追加。本文は変えていない | 上の箇条書き |

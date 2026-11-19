@@ -1,5 +1,9 @@
 # SPEC: cloudflare-workers-github-oauth
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文は2026年3月の記録として変えず、今との違い（末尾の「2026-11-19の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20260313.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20260313.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 > GitHub OAuth 2.0 + JWT認証を提供するCloudflare Workers アプリケーション
 
 ---
@@ -304,3 +308,25 @@ cloudflare-workers-github-oauth/
 - **プロフィール更新**: `PUT /api/profile` は表示名をD1に保存するが、JWTの再発行はしない (次回ログイン時に反映)
 - **CORSミドルウェア**: 全パスに `cors()` を適用
 - **エラーレスポンス**: ブラウザリクエスト (Accept: text/html) にはHTML、APIリクエストにはJSONを返す
+
+---
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 本書（2026-03-13〜17のアプリ全体のスナップショット）の各節と、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）の違い — 本書は当時の記録として残し、今の正は下の表の右の列の置き場所とする。
+
+| 節 | 本書 | 今 | 根拠 |
+|---|---|---|---|
+| 認証フロー | 10段の流れ | 同じ（`GET /auth/github`で`oauth_state`をHttpOnly・Secure・SameSite=Lax・Max-Age=300で保存） | `src/index.ts`の6550行 |
+| GitHub OAuthスコープ | `read:user`・`user:email` | **`read:user user:email repo`**（2026-03-14の[`efa326a3`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/efa326a3)で`repo`が加わった。理由は[`SPEC.cloudflare-workers-github-oauth-1.20260316.md`](SPEC.cloudflare-workers-github-oauth-1.20260316.md)の2節） | `src/index.ts`の`GITHUB_OAUTH_SCOPE` |
+| トークン取得の優先順位 | Bearer → `auth_token` Cookie | 同じ | `src/middleware/auth.ts`の`getToken` |
+| セッション有効期限 | 6つの選択肢、既定1時間 | 同じ（`VALID_SESSION_DURATIONS`）。解決の順番はD1 → Cookie → `1h`（`CLAUDE.md`ルール27） | `src/utils/session.ts` |
+| エンドポイント一覧 | 約17行 | ルートは`src/index.ts`に520本。一覧の正は`src/data/apiEndpointList.ts`と`API.cloudflare-workers-github-oauth-1.20260924.md` | `grep -c '^app\.'` |
+| `[vars]`の`GITHUB_CLIENT_ID` | 「設定済み」 | **`[vars]`に書かない**（`wrangler.toml`の注記、`CLAUDE.md`の「GITHUB_CLIENT_IDを[vars]に平文で書いてはいけない」）。secretだけで管理する | `wrangler.toml`の24行 |
+| シークレット | 9つ | `Bindings`（`src/types.ts`）の文字列の項目は71個。本書の表は当時の一部 | `src/types.ts` |
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「2026-11-19の現状」 | 今との違いを追加。本文は当時の記録として変えていない | 上の表 |

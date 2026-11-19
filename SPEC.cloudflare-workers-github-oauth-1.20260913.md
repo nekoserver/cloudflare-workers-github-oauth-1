@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.20260913
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文は変えず、今の状態の確認（末尾）を足した。現状の正は横断まとめのSPEC
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20260913.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20260913.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 1. cursor-agentのAgent IDタップでアプリ先の回答文を最上位モーダルへ埋め込む
 
 **対象**: `GET /cursor-agent`(`src/views/cursorAgent.ts`)、
@@ -274,3 +278,16 @@ D1へ検索ログを書くと途中語まで残る。AIチャットはインク�
 
 - [`2082ec9`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/2082ec9) cursor-agentに過去ログ検索を追加しインクリメンタル検索を戻す
 
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 本書の各節の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態 — 本書は日付付きの作業の記録で、`/cursor-agent`の現状は横断まとめ[`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)を正とする。
+
+- 本書のエンドポイントは、すべて`src/index.ts`にある（横断まとめの13節）。`/cursor-agent`の画面と処理は2026-09-14から変わっていない。
+- 本書の機能は、横断まとめの11節のテスト資産で確かめている。2026-11-19に8ファイル中7ファイル194件が通過し、`src/aichat-neko-csearch-modal.test.ts`の7件はこのコンテナのNode 26.13.1で落ちた（横断まとめの13節）。
+- 6節の「再読み込み」ボタンの撤去は今もそのまま（`src/views/cursorAgent.ts`に「再読み込み」が無い）。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・末尾 | 今の状態の確認を追加。本文は変えていない | 横断まとめの13節 |

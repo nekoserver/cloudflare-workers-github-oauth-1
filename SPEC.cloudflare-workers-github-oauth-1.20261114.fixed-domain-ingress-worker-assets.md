@@ -1,5 +1,9 @@
 # 固定ドメインのTunnel入口・Workerルート・Static Assets仕様（2026-11-14）
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。要件は変えず、前提の確認と台帳の状態（末尾の「2026-11-19の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20261114.fixed-domain-ingress-worker-assets.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20261114.fixed-domain-ingress-worker-assets.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 状態と目的
 
 設計整理。入口と配備の責務を区別し、固定ドメイン上のApache系アクセス、Cloudflare Workerの公開ルート、Worker Static Assetsの管理台帳を一貫して追跡する。DNS、Tunnel、Worker Route、Static Assetsの変更・切替は本SPECでは実施しない。
@@ -79,3 +83,18 @@ Worker RouteやCustom DomainはTunnel ingressとは異なる制御点である�
 - [Worker script and asset routing](https://developers.cloudflare.com/workers/static-assets/routing/worker-script/) — asset-firstと`run_worker_first`によるWorker handlerの実行順。
 - [Versions and deployments](https://developers.cloudflare.com/workers/versions-and-deployments/) — versionとdeploymentの区別。
 - [Version skew and static assets](https://developers.cloudflare.com/workers/versions-and-deployments/version-skew/) — deployment中のversionとasset manifestの対応。
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: `origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）の`wrangler.toml`・`public/_headers`・`containers/demo/cloudflared-ingress.yml.template`と、本体のdemoコンテナの`/etc/cloudflared/ingress.yml` — 11-14の記述の前提が今も同じか。
+
+- **Worker route台帳は作られていない。** 機能ごとの接続先の台帳（`src/data/askgk-routes.json`、`src/data/conversation-stream-routes.json`）はあるが、本書の台帳項目（route ID、ingress kind、owner Worker、path owner、auth boundary、evidence、state）を持つ全体の台帳は無い。ポートの対応の正本も未作成（[port-route-registry](SPEC.cloudflare-workers-github-oauth-1.port-route-registry.md)）。
+- `wrangler.toml`は今も`assets = { directory = "./public" }`だけで、`binding = "ASSETS"`・`run_worker_first`は無い。Worker Routeの例（`1.cfw1.nekomaneki.work/*`）はコメントアウトのまま。
+- `public/_headers`には2026-11-15に`/apache-manual/`の規則が足された（[`afb11f51`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/afb11f51)）。asset規則の台帳化（管理要件）はまだ。
+- `cloudflared-ingress.yml.template`は11-14から変わっていない。稼働中のコンテナの`/etc/cloudflared/ingress.yml`は、`mygw.nekomaneki.work`の`/ssh`を2222へ、残りを8443へ送る（テンプレートどおり）。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「2026-11-19の現状」 | 前提の確認と、台帳が未作成であることを追加。要件は変えていない | 上の箇条書き |

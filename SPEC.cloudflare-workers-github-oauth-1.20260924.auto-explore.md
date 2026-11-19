@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.20260924.auto-explore
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。1〜7節は変えず、今の状態と後の変更（8節）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20260924.auto-explore.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20260924.auto-explore.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## AIチャットの「探索の境界線」パネルと「自動探索」機能
 
 **対象**: `/aichat`ページ(`src/views/aichat.ts`)の「探索の境界線」パネル(`keywordBoundaryPanel`)、
@@ -214,3 +218,19 @@ migration 0159で削除済みの非推奨テーブル。`aichat_auto_explore_his
 | `src/keyword-boundary-endpoints.test.ts` | `GET /api/aichat/keyword-boundary/unknown`・`/stats`の分類済み除外、他ユーザー分離、`computed_at`降順、`limit`上限、DBエラー時のエラーメッセージ透過を検証 |
 | `src/aichat-boundary-panel-selection-20260923.test.ts` | チェックボックス選択・自動探索ボタンのHTML/クライアントスクリプト側の挙動を検証 |
 | `src/aichat-scissors-auto-vectorize-20260918.test.ts` | `vectorizeAnswerAndExtractKeywords`呼び出しのHTML埋め込み内容を検証 |
+
+## 8. 2026-11-19の現状（改訂で追記）
+
+**対象**: 2〜7節の機能の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態と、9月24日の後の変更。
+
+- `GET /api/aichat/keyword-boundary/unknown`・`/stats`は`src/index.ts`にある。パネル・ボタン・`autoExploreProcessKeyword`は`src/views/aichat.ts`にある。
+- 4-4節の注意は今も当てはまる。`POST /api/aichat`は`source`が`'textbox'`でなければ`'api'`として保存する（`src/index.ts`の7533行・7928行）。自動探索の問い合わせは、通常のAPIの呼び出しと区別されない。
+- `aichat_auto_explore_history`（migration 0160）は、revert（[`9dfabac`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/9dfabac)）のまま、コードにもマイグレーションにも無い。
+- 9月24日の後の変更: 自動探索のログのパネルに閉じるボタン（[`e71028af`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/e71028af)、2026-10-10）、「未分類パネル」のチェックボックスでパネルの表示と自動探索の停止を連動（[`4216fae5`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/4216fae5)、2026-10-11）。
+- 7節のテスト3ファイルは、2026-11-19に49件通過した。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・8節 | 今の状態と後の変更を追加。1〜7節は変えていない | 上の箇条書き |

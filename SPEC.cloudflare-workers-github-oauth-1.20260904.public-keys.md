@@ -1,5 +1,9 @@
 # SPEC 2026-09-04: 公開鍵登録・チャレンジ署名ログイン(/public-keys)
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。1〜9節は変えず、今の状態の確認と、後から足された経路・画面（10節）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20260904.public-keys.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20260904.public-keys.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 1. 概要と目的
 
 **対象**: `/public-keys` ページ、`/login` ページのパスキー的ログイン導線、
@@ -219,3 +223,20 @@ GitHub OAuthを経由しないため、以前のGitHubログインで作成さ�
 - 現状、AIチャットの入力欄等からこのチャレンジ文字列を経由して秘密鍵を
   操作・詐称する経路は無い(秘密鍵はJSのCryptoKeyオブジェクトとして
   IndexedDBの外に出ない設計のため)。
+
+## 10. 2026-11-19の現状（改訂で追記）
+
+**対象**: 1〜7節の仕組みと、9月4日の後に足された経路・画面（`origin/main` [`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）。
+
+- 1〜7節のエンドポイント（`/public-keys`、`GET`・`POST /api/public-keys`、`/api/public-keys/:id/revoke`・`challenge`・`verify`、`/auth/public-key/challenge`・`verify`）は、すべて`src/index.ts`にある。有効期限の選択肢（30日〜無期限、既定は無期限）、旧形式の移行（`migrateLegacyKeyPairs`）、5.1節の異常の記録と通知（`src/utils/publicKeySecurity.ts`）も本書のとおり。
+- 本書が挙げるテスト（`src/publicKeyExpiry-20260903.test.ts`、`src/publicKeySecurityEvents-20260904.test.ts`）と、関係するテスト計6ファイル56件は、2026-11-19に通過した。
+- **本書の後に足されたもの**:
+  - `POST /auth/public-key/available`（[`bd804ed7`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/bd804ed7)、2026-09-15）。`/login`のパスキーの一覧を出すための照会で、失効済みの鍵は経過時間にかかわらず返さない。
+  - 登録の後のカウントダウンの導線（[`68710376`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/68710376)、2026-09-16）と、登録完了のバナーの配置の修正（[`e23aae87`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/e23aae87)）。
+  - これらは本書の1〜7節に無い。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・10節 | 現状の確認と、後から足された経路・画面を追加。1〜9節は変えていない | 上の箇条書き |

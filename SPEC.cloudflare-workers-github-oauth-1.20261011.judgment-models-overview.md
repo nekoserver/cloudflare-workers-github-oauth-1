@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.20261011.judgment-models-overview
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。1〜4節の比較は変えず、Clefの利用範囲の変化（5節）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20261011.judgment-models-overview.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20261011.judgment-models-overview.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 判断特化型AI(Jev・Clef)の総論: 何が同じで何が違うか
 
 **対象**: Jev(TypeSafe AI System One Model、`api.typesafe.ai`)と
@@ -112,3 +116,17 @@ state(評価対象)+questions(型付き質問)を受け取り、各質問の確�
   (Playgroundでの単発確認のみ)
 - **大量データでの挙動**: 本リポジトリのJev運用は基本1〜20ラベル/呼び出しの
   規模。Clefの64件上限付近での挙動(レイテンシ・精度)は未検証
+
+## 5. 2026-11-19の現状（改訂で追記）
+
+**対象**: 2節の比較表の「本リポジトリでの既存実績」の行と、Jev・Clefの呼び出し箇所（`origin/main` [`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)） — 10-11の後に変わった点。
+
+- **Clefは、Playgroundの外でも使われている。** 10-11の[`b8fd673d`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/b8fd673d)で`POST /api/aichat/clef-score`（AIチャットの「Clefでの評価を追加」）が入り、`src/utils/clefScoreApi.ts`（[`71d2e9e2`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/71d2e9e2)）がJevのラベルをClefで評価する。PLANのステップ②（既存の`jev_evaluations`と既存のJevの呼び出しには影響しない、新規の追加）に当たる。2節の表の「Playgroundページのみ試験導入（本番の判定フローには未使用）」は、「Playgroundと、AIチャットの任意の評価ボタン。既存のJevの判定フローは置き換えていない」と読み替える。
+- Jevの呼び出し（`src/utils/jevEvaluation.ts`）はそのまま。10-15には、thread-trackerに「Jevでの評価を追加」が足された（[`f9b22652`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/f9b22652)）。
+- 4節の未検証の論点（スコアの意味論の一致、レイテンシ・コストの実測、64件の挙動）は、記録が見つからず未検証のまま。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・5節 | Clefの利用範囲の変化を追加（2節の表の行を読み替え）。1〜4節の比較は変えていない | `git log -S`、`src/index.ts`の`/api/aichat/clef-score` |

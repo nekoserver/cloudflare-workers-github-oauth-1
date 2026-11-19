@@ -1,5 +1,9 @@
 # Jev再帰ドリルダウン仕様
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文は変えず、要件の番号と今の状態（末尾）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.jev-recursive-drilldown.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.jev-recursive-drilldown.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 目的
 
 Jevの評価を同じ質問セットで繰り返すのではなく、広い観点の評価結果が低かった
@@ -57,3 +61,21 @@ const result = await runJevRecursiveDrilldown({
 現時点では再利用可能なコアまでを実装範囲とし、D1テーブルや外部APIエンドポイントは
 追加しない。実際の画面へ接続する際は、評価ツリーを追記専用マスターとして保存し、
 各所見に実行ID・親質問ID・深さを持たせれば、評価経路を後から再現できる。
+
+## 要件の番号と2026-11-19の現状（改訂で追記）
+
+**対象**: `src/utils/jevRecursiveDrilldown.ts`（[`5886b485`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/5886b485)、2026-09-21から変更なし） — 本書の要件に番号を付け、今の実装と照らした結果。
+
+| 番号 | 要件 | 状態 |
+|---|---|---|
+| REQ-JRD-1 | `value <= threshold`のノードの`children`だけを次のラウンドへ送る | 実装どおり |
+| REQ-JRD-2 | 既定値は`threshold` 0.6、`maxDepth` 3、`maxQuestions` 20 | 実装どおり（60〜62行） |
+| REQ-JRD-3 | 停止理由は`completed`・`max_depth`・`question_budget`。Jevの失敗は`jev_error`で、それまでの`findings`を返す | 実装どおり |
+| REQ-JRD-4 | 同じ質問IDの重複、範囲外の設定は問い合わせの前に拒否する（`invalid_tree`・`invalid_config`） | 実装どおり |
+| REQ-JRD-5 | D1のテーブルと外部のAPIは足さない（コアだけ） | そのまま。`runJevRecursiveDrilldown`を呼ぶ画面・APIは無い（`git grep`） |
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・末尾 | 要件の番号と現状を追加。本文は変えていない | 実装の実読、`src/utils/jevRecursiveDrilldown.test.ts`の通過 |

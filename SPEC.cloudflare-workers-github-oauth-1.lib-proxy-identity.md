@@ -2,11 +2,15 @@
 id: SPEC.cloudflare-workers-github-oauth-1.lib-proxy-identity
 repo: nekoserver/cloudflare-workers-github-oauth-1
 target: lib dashboard proxy identity and recovery
-version: 8
+version: 9
 date: 2026-11-18
 ---
 
 # lib ダッシュボードへの経路: 身元の受け渡しと復旧経路
+
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。版8の要件は変えず、要件ごとの実装の状態（末尾の「実装の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.lib-proxy-identity.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.lib-proxy-identity.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
 
 ## 結論（あるべき姿）
 
@@ -102,3 +106,26 @@ lib ダッシュボード（`/cf-containers/proxy/lib/muse/dashboard/index.shtml
 
 - 版7: REQ-LP-010 の段階を「コンテナ起動／server.js 応答／Apache 応答／lib のスクリプト実行／ページ応答正常」に分け、失敗した層をその名前で記録することと、同じ段階確認をページから手動でも実行できることを追加。AC-LP-006 を対応させた（2026-11-18、Okiraku の指示「問題の切り分けができるようにすべき」による）。
 - 版8: 再評価による改訂（2026-11-18、Okiraku の指摘「本体ワーカー側がログインユーザーにしかその機能を提供していないという意味では正しいはず」による）。前提 P6 を追加し、この経路の機能と運用表示はログイン済みの管理者にだけ提供するのが設計であり、未認証の位置から確認できないことは欠陥ではないこと、実経路の受け入れ確認は認証済みセッションで行うことを明記。あわせて、途中で切れていた AC-LP-004 を全文書き直し、AC-LP-006・AC-LP-007 に確認主体（管理者としてログインした状態）を明記した。再評価の結果は EVAL.cloudflare-workers-github-oauth-1.lib-proxy-identity にまとめた。
+- 版9: 2026-11-19、opus-5.5。要件は変えず、要件ごとの実装の状態（「実装の現状」）を足した。評価は EVAL.cloudflare-workers-github-oauth-1.lib-proxy-identity.opus-5.5.20261119
+
+## 実装の現状（2026-11-19）
+
+**対象**: REQ-LP-001〜011の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での実装の状態 — 版8の要件のうち、どこまでが実装に入っているか。
+
+| 要件 | 状態 | 根拠 |
+|---|---|---|
+| REQ-LP-001 | 実装済み | [`7dcabc92`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/7dcabc92)（2026-11-18）。`src/utils/proxyIdentity.ts`の`buildProxyForwardRequest`、`src/index.ts`の`/cf-containers/proxy/*`。テスト`src/utils/proxyIdentity.test.ts`（4件） |
+| REQ-LP-002 | 満たす | `server.js`の`proxyToLib`は変えていない |
+| REQ-LP-003・004 | libの側の作業 | lib PR #152の後続。本リポジトリでは確かめない |
+| REQ-LP-005 | 一部 | ページに起動・再起動の操作と、ヘルスチェックの表の「Apache lib(8445)」の欄（[`5f27297f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/5f27297f)）がある。プロキシのエラー文言で「制限」と「下流の停止」を分ける処理は無い |
+| REQ-LP-006・007 | 満たす（運用の定め） | — |
+| REQ-LP-008 | 未実装 | `cfDashboardAdminMiddleware`（`src/middleware/auth.ts`）は、管理者でなければ403「この操作には管理者権限が必要です」を返す。`/cf-containers/proxy/*`だけを404にする分岐は無い |
+| REQ-LP-009 | 未実装 | プロキシの失敗時は502で`プロキシでサーバーエラーが発生しました: <例外のメッセージ>`を返す（`src/index.ts`） |
+| REQ-LP-010 | 未実装 | 段階ごとの経路確認（コンテナ起動／server.js応答／Apache応答／libのスクリプト実行／ページ応答正常）を記録する処理・画面は無い |
+| REQ-LP-011 | 未実装 | 停止中でも使える操作をまとめたセクションは無い |
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「実装の現状」 | 要件ごとの実装の状態を追加。版8の要件は変えていない | 上の表 |

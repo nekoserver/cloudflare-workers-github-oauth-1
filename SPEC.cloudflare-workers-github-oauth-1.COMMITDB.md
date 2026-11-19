@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.COMMITDB.md
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文の手順は残し、pushのwebhookでの自動の追記（2026-10-04〜）と`committed_at`列（末尾の「2026-11-19の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.COMMITDB.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.COMMITDB.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## repo_commit_index 追記ルール
 
 **対象**: D1 テーブル `repo_commit_index`（DB: `workers-github-oauth-1`, UUID: `abbe590b-f7ff-4b98-b61c-17c8cb18c8cf`）— PR がマージされるたびに、新規コミットをこのテーブルに追記してコミットインデックスを最新状態に保つ。**本体リポジトリ・`nekoserver/dynamicneko`・`nekoserver/cf-auth` の複数リポジトリを `repo_name` で区別して同居させる**（2026-09-11 に `nekoserver/cf-auth`（69件）・`nekoserver/dynamicneko`（120件）の過去分を追加し、複数リポジトリ対応にした）。
@@ -167,3 +171,25 @@ for i, line in enumerate(new_lines):
 | `migrations/0034_create_repo_commit_index.sql` | テーブル定義 |
 | `STATS.COMMIT.203.-20250528.md` | 2026-05-28 時点の全コミット分類集計 |
 | `NOTICE.cloudflare-workers-github-oauth-1.PRCOUNT.md` | コミット数と PR 番号の不一致に関する知見 |
+
+---
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 「実施手順」の手動の運用と、`repo_commit_index`のスキーマ（`origin/main` [`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)） — 2026-09-11の後に変わった点。本文の手順は消さずに残す（自動の追記が失敗したときの補い方として使える）。
+
+| 項目 | 本文の記述 | 今 | 根拠 |
+|---|---|---|---|
+| 追記の主な経路 | PRのマージのたびに、エージェントが手動でSQLを作って実行する（`CLAUDE.md`ルール24） | **GitHubのpushのwebhookで自動で追記する**（2026-10-04〜）。`POST /webhook/github`のpushイベントで、`buildPushRepoCommitIndexEntries`がコミットの配列から行を作り、`MAX(seq_num)`の続きの番号で`INSERT OR IGNORE`する。手動の手順は、webhookが届かなかった・失敗したときの補いになる | [`9354d9a8`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/9354d9a8)、`src/index.ts`のpush webhookの処理、`src/utils/githubPushNotify.test.ts`（20件、2026-11-19に通過） |
+| 対象リポジトリ | 本体・dynamicneko・cf-authの3つ | 自動の追記は、webhookが届くリポジトリ（GitHub Appがインストールされたリポジトリ）すべてが対象。3つに限らない | 同上（`repositoryFullName`をそのまま`repo_name`にする） |
+| スキーマ | 5列 | `committed_at`（TEXT）が加わった | `migrations/0175_add_repo_commit_index_committed_at.sql`（[`a76cade7`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a76cade7)、2026-10-15） |
+| 失敗したとき | — | 例外は`logger.error('Failed to update repo_commit_index for push webhook')`に残るだけで、画面や通知には出ない。`CLAUDE.md`ルール8の「通知」は満たしていない | `src/index.ts`のcatch |
+
+- `CLAUDE.md`のルール24は手動の運用を必須として書いたまま。自動の追記が入ったことと食い違う。ルールを直すかは利用者が決める。
+- セッションの開始時に件数を照合する手順（「トリガー」の3つ目）は、自動の追記の取りこぼしを見つける手段として今も有効。2026-11-19の本体の`git rev-list --count origin/main`は5703。D1の件数は確かめていない（本番のD1の読み取りの認証が無い）。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「2026-11-19の現状」 | 自動の追記、対象の広がり、`committed_at`、失敗の通知の欠落を追加。本文の手順は補いとして残した | 上の表 |
