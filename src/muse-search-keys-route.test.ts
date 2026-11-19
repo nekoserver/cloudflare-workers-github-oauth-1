@@ -195,25 +195,25 @@ describe('GET /api/muse-search/answers(🗒️ボタンの一覧)', () => {
     expect((await request('/api/muse-search/answers', {}, null)).status).toBe(401);
     expect((await request('/api/muse-search/answers', {}, 2)).status).toBe(403);
   });
-  it('全キー合算で、スレッドごとに出現回数の多い順に、回答を並べて返す', async () => {
+  it('全キー合算で、チャットごとに(合計の多い順)、回答を回答日時の古い順に並べて返す', async () => {
     const { fetcher, request } = setup();
-    const answers1 = [answerHit({ answerId: 'a1', occurrences: 2 }), answerHit({ answerId: 'a2', occurrences: 5 }), answerHit({ answerId: 'b1', chatId: 'c9', threadId: 't2', occurrences: 1 })];
+    const answers1 = [answerHit({ answerId: 'a1', occurrences: 2, createdAt: 300 }), answerHit({ answerId: 'a2', occurrences: 5, createdAt: 100 }), answerHit({ answerId: 'b1', chatId: 'c9', threadId: null, occurrences: 1, createdAt: 50 })];
     await request(q('alpha'), { DYNAMICNEKO: fetcher(ok({ posts: [post], occurrenceCount: 1, answers: answers1 })) });
-    await request(q('beta'), { DYNAMICNEKO: fetcher(ok({ posts: [post], occurrenceCount: 1, answers: [answerHit({ answerId: 'b1', chatId: 'c9', threadId: 't2', occurrences: 9 })] })) });
+    await request(q('beta'), { DYNAMICNEKO: fetcher(ok({ posts: [post], occurrenceCount: 1, answers: [answerHit({ answerId: 'b1', chatId: 'c9', threadId: null, occurrences: 9, createdAt: 50 })] })) });
     await request(q('alpha'), { DYNAMICNEKO: fetcher(ok({ posts: [post], occurrenceCount: 1, answers: answers1 })) });
     const res = await request('/api/muse-search/answers');
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
-    const body = await res.json() as { threads: Array<{ threadId: string | null; totalOccurrences: number; answers: Array<{ answerId: string; occurrences: number; searchKeys: string[] }> }> };
-    expect(body.threads.map((t) => [t.threadId, t.totalOccurrences, t.answers.map((a) => [a.answerId, a.occurrences, a.searchKeys])])).toEqual([
-      ['t2', 10, [['b1', 10, ['alpha', 'beta']]]],
-      ['t1', 7, [['a2', 5, ['alpha']], ['a1', 2, ['alpha']]]],
+    const body = await res.json() as { chats: Array<{ chatId: string; threadId: string | null; totalOccurrences: number; answers: Array<{ answerId: string; occurrences: number; searchKeys: string[] }> }> };
+    expect(body.chats.map((t) => [t.chatId, t.threadId, t.totalOccurrences, t.answers.map((a) => [a.answerId, a.occurrences, a.searchKeys])])).toEqual([
+      ['c9', null, 10, [['b1', 10, ['alpha', 'beta']]]],
+      ['c1', 't1', 7, [['a2', 5, ['alpha']], ['a1', 2, ['alpha']]]],
     ]);
   });
   it('他のユーザーの記録は返さない。記録が無ければ空', async () => {
     const { sqlite, request } = setup();
     sqlite.prepare("INSERT INTO muse_search_answer_log (user_id, search_key, answer_id, chat_id, thread_id, occurrences, preview, answer_created_at, searched_at) VALUES ('someone-else','k','a','c','t',9,'p',1,'2026-11-19T00:00:00Z')").run();
-    expect(await (await request('/api/muse-search/answers')).json()).toEqual({ threads: [] });
+    expect(await (await request('/api/muse-search/answers')).json()).toEqual({ chats: [] });
   });
   it('D1が未設定・読み出しの失敗は、空の一覧にせず、理由つきで 503 にする', async () => {
     const none = await setup({ omitDb: true }).request('/api/muse-search/answers');

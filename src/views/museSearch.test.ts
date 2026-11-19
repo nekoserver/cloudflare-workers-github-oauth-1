@@ -272,9 +272,9 @@ describe('🔑ボタンのモーダル', () => {
 });
 
 // 🗒️ボタン(2026-11-19、ユーザー指定): 🔑モーダルのタイトル行の末尾。押すと、本体D1の記録から、スレッドごとに出現回数の多い順に回答を並べる。
-describe('🗒️ボタン(スレッドごとの回答の一覧)', () => {
-  const answer = (over: Record<string, unknown> = {}) => ({ answerId: 'a1', chatId: 'c1', occurrences: 2, searchKeys: ['static'], preview: '前…静的…後', createdAt: 100, ...over });
-  const thread = (over: Record<string, unknown> = {}) => ({ threadId: 't1', chatId: null, totalOccurrences: 7, answers: [answer()], ...over });
+describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
+  const answer = (over: Record<string, unknown> = {}) => ({ answerId: 'a1', occurrences: 2, searchKeys: ['static'], preview: '前…静的…後', createdAt: 1763535000, ...over });
+  const thread = (over: Record<string, unknown> = {}) => ({ chatId: 'c1', threadId: 't1', totalOccurrences: 7, answers: [answer()], ...over });
   const router = (routes: Record<string, () => Promise<Response> | Response>) => vi.fn(async (url: string) => {
     const handler = Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1];
     if (!handler) throw new Error('想定外のURL: ' + url);
@@ -297,27 +297,31 @@ describe('🗒️ボタン(スレッドごとの回答の一覧)', () => {
     expect(notesButton()!.getAttribute('aria-label')).toBeTruthy();
     expect(notesButton()!.getAttribute('aria-pressed')).toBe('false');
   });
-  it('押すと /api/muse-search/answers を読み、スレッドごとに(APIの順に)、回答を出現回数の順に並べて出す', async () => {
+  it('押すと /api/muse-search/answers を読み、チャットIDごとのループの中に、回答IDを回答日時の順(APIの順)に並べて出す', async () => {
     const fetchFn = router({
       '/api/muse-search/keys': json({ keys: [] }),
-      '/api/muse-search/answers': json({ threads: [
-        thread({ threadId: 't2', totalOccurrences: 10, answers: [answer({ answerId: 'b1', chatId: 'c9', occurrences: 10, searchKeys: ['alpha', 'beta'], preview: 'ぷれびゅー' })] }),
-        thread({ threadId: null, chatId: 'c3', totalOccurrences: 4, answers: [answer({ answerId: 'z1', chatId: 'c3', occurrences: 3 }), answer({ answerId: 'z2', chatId: 'c3', occurrences: 1 })] }),
+      '/api/muse-search/answers': json({ chats: [
+        thread({ chatId: 'c-00012', threadId: 'thread-7', totalOccurrences: 10, answers: [answer({ answerId: 'b0', occurrences: 4, createdAt: 1763535000 }), answer({ answerId: 'b1', occurrences: 6, searchKeys: ['alpha', 'beta'], preview: 'ぷれびゅー', createdAt: 1763538600 })] }),
+        thread({ chatId: 'c-00003', threadId: null, totalOccurrences: 3, answers: [answer({ answerId: 'z1', occurrences: 3, createdAt: 1763535000 })] }),
       ] }),
     });
     await open(fetchFn);
     notesButton()!.click();
     await flush();
     expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])).toEqual(['/api/muse-search/keys', '/api/muse-search/answers']);
-    expect(title()).toContain('スレッド');
+    expect(title()).toContain('チャット');
+    expect(title()).toContain('回答日時');
     expect(notesButton()!.getAttribute('aria-pressed')).toBe('true');
     expect(sections().map((el) => el.querySelector('.muse-answers-heading')!.textContent)).toEqual([
-      expect.stringMatching(/スレッド t2.*10回/),
-      expect.stringMatching(/スレッド化していないチャット c3.*4回/),
+      expect.stringMatching(/チャット c-00012.*スレッド thread-7.*10回.*2件/),
+      expect.stringMatching(/チャット c-00003.*スレッド化なし.*3回.*1件/),
     ]);
-    const rows = [...sections()[1].querySelectorAll('tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent));
-    expect(rows).toEqual([['z1', 'c3', '3', 'static', '前…静的…後'], ['z2', 'c3', '1', 'static', '前…静的…後']]);
-    expect([...sections()[0].querySelectorAll('tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent))).toEqual([['b1', 'c9', '10', 'alpha, beta', 'ぷれびゅー']]);
+    const rows = (el: Element) => [...el.querySelectorAll('tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent));
+    expect(rows(sections()[0])).toEqual([
+      ['b0', script.formatMuseSearchTime(1763535000), '4', 'static', '前…静的…後'],
+      ['b1', script.formatMuseSearchTime(1763538600), '6', 'alpha, beta', 'ぷれびゅー'],
+    ]);
+    expect([...sections()[0].querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(['回答ID', '回答日時(日本時間)', '出現回数', '検索キー', '一致箇所の前後']);
   });
   it('読み込み中は表示を出し、記録が無ければ空の案内、読めなければ理由つきのエラー(空の一覧に見せない)', async () => {
     let release!: (res: Response) => void;
@@ -325,7 +329,7 @@ describe('🗒️ボタン(スレッドごとの回答の一覧)', () => {
     await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': () => pending }));
     notesButton()!.click();
     expect(document.querySelector('.muse-keys-body')!.textContent).toContain('読み込んでいます');
-    release(new Response(JSON.stringify({ threads: [] })));
+    release(new Response(JSON.stringify({ chats: [] })));
     await flush();
     expect(document.querySelector('.muse-keys-body')!.textContent).toContain('まだ');
     document.body.innerHTML = '';
@@ -336,7 +340,7 @@ describe('🗒️ボタン(スレッドごとの回答の一覧)', () => {
     expect(sections()).toHaveLength(0);
   });
   it('もう一度押すと、🔑の検索キーの一覧へ戻る。タイトルと状態も戻る', async () => {
-    await open(router({ '/api/muse-search/keys': json({ keys: [{ searchKey: 'alpha', aiChatCount: 1, treeViewCount: 1, searchCount: 1, firstSearchedAt: '2026-11-19T00:00:00Z', lastSearchedAt: '2026-11-19T00:00:00Z' }] }), '/api/muse-search/answers': json({ threads: [thread()] }) }));
+    await open(router({ '/api/muse-search/keys': json({ keys: [{ searchKey: 'alpha', aiChatCount: 1, treeViewCount: 1, searchCount: 1, firstSearchedAt: '2026-11-19T00:00:00Z', lastSearchedAt: '2026-11-19T00:00:00Z' }] }), '/api/muse-search/answers': json({ chats: [thread()] }) }));
     const firstTitle = title();
     notesButton()!.click();
     await flush();
@@ -354,21 +358,21 @@ describe('🗒️ボタン(スレッドごとの回答の一覧)', () => {
     notesButton()!.click();
     notesButton()!.click();
     await flush();
-    release(new Response(JSON.stringify({ threads: [thread()] })));
+    release(new Response(JSON.stringify({ chats: [thread()] })));
     await flush();
     expect(document.querySelector('.muse-keys-table')).not.toBeNull();
     expect(sections()).toHaveLength(0);
   });
   it('サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す', async () => {
     const evil = '<img src=x onerror=alert(1)>';
-    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ threads: [thread({ threadId: evil, answers: [answer({ answerId: evil, preview: evil, searchKeys: [evil] })] })] }) }));
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ chats: [thread({ chatId: evil, threadId: evil, answers: [answer({ answerId: evil, preview: evil, searchKeys: [evil] })] })] }) }));
     notesButton()!.click();
     await flush();
     expect(document.querySelectorAll('[role="dialog"] img')).toHaveLength(0);
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain(evil);
   });
   it('🗒️を押してもモーダルは閉じず、Escと✕で閉じる。閉じたあと🔑へフォーカスが戻る', async () => {
-    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ threads: [thread()] }) }));
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ chats: [thread()] }) }));
     notesButton()!.click();
     await flush();
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();

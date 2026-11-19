@@ -1,11 +1,11 @@
 /**
  * /muse-search の🗒️ボタン用の記録(D1 muse_search_answer_log、マイグレーション0196、2026-11-19、ユーザー指定)。
  * 検索のたびに、dynamicneko が返した「回答ごとの出現回数」を、キー・検索日時とともに追記する。
- * 🗒️のモーダルは、全キーを合算して、スレッドごとに、出現回数の多い順に回答を並べる。
+ * 🗒️のモーダルは、全キーを合算して、チャットIDごとに(合計の多い順)、回答IDを回答日時の古い順に並べる。
  *
  * - 記録は追記だけ。一覧は読むときに、(回答, キー)ごとの最後の行だけを足す(同じキーを何度検索しても増えない)。
- * - スレッドは、dynamicneko のスレッド化(tree_view_muse_discussions)のID。スレッド化していない回答は、チャットごとに1つのまとまりにする(threadId は null)。
- * - 回答のスレッド・チャットは、その回答の最新の記録に従う(あとでスレッド化されたら移る。1つの回答が2つに割れない)。
+ * - チャットは、Museタブの1つのチャット。threadId は、dynamicneko のスレッド化(tree_view_muse_discussions)のID(スレッド化していなければ null)で、チャットの見出しに添える。
+ * - 回答のチャットは、その回答の最新の記録に従う(1つの回答が2つに割れない)。
  * - 本文の全文は保存しない。一致箇所の前後(preview)だけ。
  */
 
@@ -50,15 +50,15 @@ export async function recordSearchedAnswers(db: D1Database | undefined, userId: 
 
 type LogRow = { id: number; search_key: string; answer_id: string; chat_id: string; thread_id: string | null; occurrences: number; preview: string; answer_created_at: number };
 
-export type MuseThreadAnswer = { answerId: string; chatId: string; occurrences: number; searchKeys: string[]; preview: string; createdAt: number };
-export type MuseThreadGroup = { threadId: string | null; chatId: string | null; totalOccurrences: number; answers: MuseThreadAnswer[] };
+export type MuseChatAnswer = { answerId: string; occurrences: number; searchKeys: string[]; preview: string; createdAt: number };
+export type MuseChatGroup = { chatId: string; threadId: string | null; totalOccurrences: number; answers: MuseChatAnswer[] };
 
 /**
- * (回答, キー)ごとの最後の行を、全キー合算でスレッドごとにまとめる。
- * スレッド: 合計の多い順(同数は、含む回答のうち新しい方が先)。スレッドの中: 回答ごとの回数の多い順(同数は回答の新しい順)。
- * スレッド化していない回答は、チャットごとに1つのまとまり(threadId は null、chatId にチャット)。
+ * (回答, キー)ごとの最後の行を、全キー合算でチャットIDごとにまとめる(ユーザー指定 2026-11-19: チャットIDのループの中に回答IDを並べる)。
+ * チャット: 合計の多い順(同数は、含む回答のうち新しい方が先)。チャットの中: 回答日時の古い順(会話の流れ。同時刻は回答ID順)。
+ * 回答のチャットは、その回答の最新の記録に従う。threadId は、チャットの中でいちばん新しい記録のスレッド(スレッド化していなければ null)。
  */
-export function groupAnswersByThread(latestRows: LogRow[]): MuseThreadGroup[] {
+export function groupAnswersByChat(latestRows: LogRow[]): MuseChatGroup[] {
   const answers = new Map<string, { latest: LogRow; occurrences: number; keys: string[] }>();
   for (const row of latestRows) {
     const entry = answers.get(row.answer_id);
@@ -67,23 +67,23 @@ export function groupAnswersByThread(latestRows: LogRow[]): MuseThreadGroup[] {
     entry.keys.push(row.search_key);
     if (row.id > entry.latest.id) entry.latest = row;
   }
-  const groups = new Map<string, MuseThreadGroup & { newest: number }>();
+  const groups = new Map<string, MuseChatGroup & { newest: number; threadFromId: number }>();
   for (const [answerId, entry] of answers) {
     const { latest } = entry;
-    const groupKey = latest.thread_id !== null ? 't:' + latest.thread_id : 'c:' + latest.chat_id;
-    let group = groups.get(groupKey);
-    if (!group) { group = { threadId: latest.thread_id, chatId: latest.thread_id === null ? latest.chat_id : null, totalOccurrences: 0, answers: [], newest: 0 }; groups.set(groupKey, group); }
+    let group = groups.get(latest.chat_id);
+    if (!group) { group = { chatId: latest.chat_id, threadId: latest.thread_id, totalOccurrences: 0, answers: [], newest: 0, threadFromId: latest.id }; groups.set(latest.chat_id, group); }
+    if (latest.id > group.threadFromId) { group.threadId = latest.thread_id; group.threadFromId = latest.id; }
     group.totalOccurrences += entry.occurrences;
     group.newest = Math.max(group.newest, latest.answer_created_at);
-    group.answers.push({ answerId, chatId: latest.chat_id, occurrences: entry.occurrences, searchKeys: [...entry.keys].sort(), preview: latest.preview, createdAt: latest.answer_created_at });
+    group.answers.push({ answerId, occurrences: entry.occurrences, searchKeys: [...entry.keys].sort(), preview: latest.preview, createdAt: latest.answer_created_at });
   }
   return [...groups.values()]
-    .sort((a, b) => b.totalOccurrences - a.totalOccurrences || b.newest - a.newest)
-    .map(({ newest: _newest, ...group }) => ({ ...group, answers: group.answers.sort((a, b) => b.occurrences - a.occurrences || b.createdAt - a.createdAt || a.answerId.localeCompare(b.answerId)) }));
+    .sort((a, b) => b.totalOccurrences - a.totalOccurrences || b.newest - a.newest || a.chatId.localeCompare(b.chatId))
+    .map(({ newest: _newest, threadFromId: _threadFromId, ...group }) => ({ ...group, answers: group.answers.sort((a, b) => a.createdAt - b.createdAt || a.answerId.localeCompare(b.answerId)) }));
 }
 
 /** 🗒️モーダルの一覧。読めなかったときは例外にする(呼び出し側が、空の一覧にせず理由つきで失敗にする)。 */
-export async function listMuseAnswersByThread(db: D1Database, userId: string): Promise<MuseThreadGroup[]> {
+export async function listMuseAnswersByChat(db: D1Database, userId: string): Promise<MuseChatGroup[]> {
   const result = await db.prepare(
     `SELECT l.id, l.search_key, l.answer_id, l.chat_id, l.thread_id, l.occurrences, l.preview, l.answer_created_at
      FROM muse_search_answer_log l
@@ -91,5 +91,5 @@ export async function listMuseAnswersByThread(db: D1Database, userId: string): P
      ORDER BY l.id DESC
      LIMIT ?2`,
   ).bind(userId, MUSE_ANSWER_LOG_ROW_LIMIT).all<LogRow>();
-  return groupAnswersByThread(result.results);
+  return groupAnswersByChat(result.results);
 }
