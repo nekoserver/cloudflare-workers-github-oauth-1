@@ -580,16 +580,41 @@ export const MUSE_SEARCH_SCRIPT = `
       if (data.truncated) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '本文が長いため、途中までを表示しています。'));
       return wrap;
     }
-    function toggleMuseThread(doc, fetchFn, link, item) {
-      var panel = item.querySelector('.muse-thread-last');
-      if (panel) {
-        // 開いている・閉じている → 切り替える。取れていない(読み込み中・失敗)ときは、取り直す。
-        if (panel.getAttribute('data-state') === 'loaded' || panel.getAttribute('data-state') === 'loading') {
-          panel.hidden = !panel.hidden;
-          link.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
-          return;
+    // 同時に取りにいく数の上限。「全開」で多数のスレッドを開いても、一度に何十本も送らない。
+    function createMuseSemaphore(limit) {
+      var active = 0;
+      var queue = [];
+      return {
+        acquire: function () {
+          return new Promise(function (resolve) {
+            if (active < limit) { active += 1; resolve(); } else queue.push(resolve);
+          });
+        },
+        release: function () {
+          var next = queue.shift();
+          if (next) next(); else active -= 1;
         }
-      } else {
+      };
+    }
+    var MUSE_THREAD_FETCH_LIMIT = 4;
+
+    function isMuseThreadOpen(link) {
+      return link.getAttribute('aria-expanded') === 'true';
+    }
+    function closeMuseThread(link, item) {
+      var panel = item.querySelector('.muse-thread-last');
+      if (panel) panel.hidden = true;
+      link.setAttribute('aria-expanded', 'false');
+    }
+    // 開く。取れている本文は取り直さない。読み込み中なら、そのまま表示する。失敗していたら、取り直す。
+    function openMuseThread(doc, fetchFn, semaphore, link, item) {
+      var panel = item.querySelector('.muse-thread-last');
+      if (panel && (panel.getAttribute('data-state') === 'loaded' || panel.getAttribute('data-state') === 'loading')) {
+        panel.hidden = false;
+        link.setAttribute('aria-expanded', 'true');
+        return;
+      }
+      if (!panel) {
         panel = museSearchEl(doc, 'div', 'muse-thread-last');
         item.appendChild(panel);
       }
@@ -597,21 +622,30 @@ export const MUSE_SEARCH_SCRIPT = `
       panel.setAttribute('data-state', 'loading');
       panel.textContent = '読み込んでいます…';
       link.setAttribute('aria-expanded', 'true');
-      fetchFn('/api/muse-search/thread?threadId=' + encodeURIComponent(link.getAttribute('data-thread-id'))).then(function (res) {
-        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
-      }).then(function (r) {
-        if (!r.ok) {
+      semaphore.acquire().then(function () {
+        return fetchFn('/api/muse-search/thread?threadId=' + encodeURIComponent(link.getAttribute('data-thread-id'))).then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+        }).then(function (r) {
+          if (!r.ok) {
+            panel.setAttribute('data-state', 'failed');
+            panel.textContent = failText(r, '最終書き込み');
+            return;
+          }
+          panel.setAttribute('data-state', 'loaded');
+          panel.textContent = '';
+          panel.appendChild(renderMuseThreadLast(doc, r.data));
+        }).catch(function (error) {
           panel.setAttribute('data-state', 'failed');
-          panel.textContent = failText(r, '最終書き込み');
-          return;
-        }
-        panel.setAttribute('data-state', 'loaded');
-        panel.textContent = '';
-        panel.appendChild(renderMuseThreadLast(doc, r.data));
-      }).catch(function (error) {
-        panel.setAttribute('data-state', 'failed');
-        panel.textContent = '最終書き込みを読み込めませんでした: ' + (error && error.message ? error.message : String(error));
+          panel.textContent = '最終書き込みを読み込めませんでした: ' + (error && error.message ? error.message : String(error));
+        }).then(function () { semaphore.release(); });
       });
+    }
+    // リンクを押したとき。開いていれば閉じ、閉じていれば開く。ただし、取れなかった(失敗した)ときは、押し直すと取り直す。
+    function toggleMuseThread(doc, fetchFn, semaphore, link, item) {
+      var panel = item.querySelector('.muse-thread-last');
+      if (panel && panel.getAttribute('data-state') === 'failed') openMuseThread(doc, fetchFn, semaphore, link, item);
+      else if (isMuseThreadOpen(link)) closeMuseThread(link, item);
+      else openMuseThread(doc, fetchFn, semaphore, link, item);
     }
     function loadMuseThreads(doc, fetchFn, container) {
       container.textContent = '読み込んでいます…';
@@ -631,6 +665,54 @@ export const MUSE_SEARCH_SCRIPT = `
           container.appendChild(museSearchEl(doc, 'p', 'muse-search-status', 'スレッドがまだありません。'));
           return;
         }
+        var semaphore = createMuseSemaphore(MUSE_THREAD_FETCH_LIMIT);
+        var items = [];
+
+        // 検索窓(表示中のスレッドのタイトルを絞り込む。ブラウザ側だけで、サーバーは呼ばない)と、「全開/全閉」ボタン。
+        var tools = museSearchEl(doc, 'div', 'muse-thread-tools');
+        var filter = museSearchEl(doc, 'input', 'muse-thread-filter');
+        filter.type = 'search';
+        filter.setAttribute('data-field', 'thread-filter');
+        filter.setAttribute('placeholder', '表示中のスレッドを絞り込む');
+        filter.setAttribute('aria-label', 'スレッドのタイトルで絞り込む');
+        filter.setAttribute('maxlength', '500');
+        filter.setAttribute('autocomplete', 'off');
+        var toggleAll = museSearchEl(doc, 'button', 'muse-thread-toggle-all', '全開');
+        toggleAll.type = 'button';
+        toggleAll.setAttribute('data-action', 'toggle-all');
+        toggleAll.title = '表示中のスレッドの最終書き込みを、すべて開く/閉じる';
+        tools.appendChild(filter);
+        tools.appendChild(toggleAll);
+        container.appendChild(tools);
+        var noMatch = museSearchEl(doc, 'p', 'muse-thread-nomatch', 'タイトルに一致するスレッドはありません。');
+        noMatch.hidden = true;
+        container.appendChild(noMatch);
+
+        function visibleItems() { return items.filter(function (entry) { return !entry.item.hidden; }); }
+        // ボタンの文字は、表示中のスレッドがすべて開いていれば「全閉」、そうでなければ「全開」。
+        function updateToggleAll() {
+          var visible = visibleItems();
+          var allOpen = visible.length > 0 && visible.every(function (entry) { return isMuseThreadOpen(entry.link); });
+          toggleAll.textContent = allOpen ? '全閉' : '全開';
+        }
+        filter.addEventListener('input', function () {
+          var query = filter.value.trim().toLowerCase();
+          items.forEach(function (entry) {
+            entry.item.hidden = query !== '' && entry.link.textContent.toLowerCase().indexOf(query) < 0;
+          });
+          noMatch.hidden = query === '' || visibleItems().length > 0;
+          updateToggleAll();
+        });
+        toggleAll.addEventListener('click', function () {
+          var visible = visibleItems();
+          var allOpen = visible.length > 0 && visible.every(function (entry) { return isMuseThreadOpen(entry.link); });
+          visible.forEach(function (entry) {
+            if (allOpen) closeMuseThread(entry.link, entry.item);
+            else if (!isMuseThreadOpen(entry.link)) openMuseThread(doc, fetchFn, semaphore, entry.link, entry.item);
+          });
+          updateToggleAll();
+        });
+
         var list = museSearchEl(doc, 'ul', 'muse-thread-list');
         r.data.threads.forEach(function (thread) {
           var item = museSearchEl(doc, 'li', 'muse-thread-item');
@@ -639,9 +721,14 @@ export const MUSE_SEARCH_SCRIPT = `
           link.setAttribute('data-thread-id', thread.threadId);
           link.setAttribute('aria-expanded', 'false');
           link.title = '最終書き込み: ' + formatMuseSearchTime(thread.lastPostAt);
-          link.addEventListener('click', function (event) { event.preventDefault(); toggleMuseThread(doc, fetchFn, link, item); });
+          link.addEventListener('click', function (event) {
+            event.preventDefault();
+            toggleMuseThread(doc, fetchFn, semaphore, link, item);
+            updateToggleAll();
+          });
           item.appendChild(link);
           list.appendChild(item);
+          items.push({ item: item, link: link });
         });
         container.appendChild(list);
       }).catch(function (error) {
@@ -661,6 +748,27 @@ export const MUSE_SEARCH_SCRIPT = `
       keysButton.addEventListener('click', function () { openMuseKeysModal(doc, fetchFn, keysButton); });
       var threads = doc.querySelector('[data-field="threads"]');
       loadMuseThreads(doc, fetchFn, threads);
+
+      // スマホ幅の縦並びの設定(ユーザー指定 2026-11-19)。初期値はOFF(今までの表のまま)。この端末のブラウザにだけ保存する(サーバーには送らない)。
+      // ONのときだけ <html> に muse-stacked を付け、幅560px以下の検索キーの表が縦並びになる。ブラウザの保存が使えなくても、スイッチはその場で効く。
+      var MUSE_STACKED_KEY = 'museSearchStackedTables';
+      var stackedToggle = doc.querySelector('input[data-setting="stacked"]');
+      function readStackedSetting() {
+        try { return doc.defaultView.localStorage.getItem(MUSE_STACKED_KEY) === '1'; } catch (error) { return false; }
+      }
+      function applyStackedSetting(on) {
+        doc.documentElement.classList.toggle('muse-stacked', on);
+      }
+      stackedToggle.checked = readStackedSetting();
+      applyStackedSetting(stackedToggle.checked);
+      stackedToggle.addEventListener('change', function () {
+        var on = stackedToggle.checked;
+        applyStackedSetting(on);
+        try {
+          if (on) doc.defaultView.localStorage.setItem(MUSE_STACKED_KEY, '1');
+          else doc.defaultView.localStorage.removeItem(MUSE_STACKED_KEY);
+        } catch (error) { /* 保存できなくても、この画面では効いている */ }
+      });
 
       function clearResults() {
         while (list.firstChild) list.removeChild(list.firstChild);
@@ -740,7 +848,13 @@ export function getMuseSearchPage(): string {
     .muse-search-note { color: var(--text-muted); font-size: 13px; margin: 8px 0 0; }
     .muse-search-status { color: var(--text-secondary); margin: 16px 0 8px; }
     .muse-search-error { color: var(--danger-color); }
+    .muse-setting { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 4px; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
+    .muse-setting input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-color); }
     .muse-threads { margin: 16px 0 0; }
+    .muse-thread-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+    .muse-thread-filter { flex: 1 1 auto; min-width: 0; min-height: 36px; box-sizing: border-box; padding: 0 12px; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; font: inherit; }
+    .muse-thread-toggle-all { flex: 0 0 auto; min-height: 36px; padding: 0 14px; white-space: nowrap; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font: inherit; }
+    .muse-thread-nomatch { margin: 0 0 8px; color: var(--text-secondary); }
     .muse-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
     .muse-thread-link { color: var(--accent-color); text-decoration: none; overflow-wrap: anywhere; }
     .muse-thread-last { margin: 6px 0 4px 4px; padding: 6px 0 2px 12px; border-left: 2px solid var(--border-color); color: var(--text-primary); }
@@ -788,16 +902,16 @@ export function getMuseSearchPage(): string {
     .muse-search-form button[data-action="keys"] { padding: 0 12px; }
     .muse-search-snippet mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
     @media (max-width: 560px) {
-      .muse-keys-list, .muse-keys-list tbody, .muse-keys-list tr, .muse-keys-list td { display: block; }
-      .muse-keys-list thead { display: block; }
-      .muse-keys-list thead tr { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 0 8px; border-bottom: 1px solid var(--border-color); }
-      .muse-keys-list thead th { display: block; position: static; padding: 0; border: 0; font-size: 13px; text-align: left; }
-      .muse-keys-list tr { padding: 8px 0; border-bottom: 1px solid var(--border-light); }
-      .muse-keys-list td { border: 0; padding: 2px 0; text-align: left; min-width: 0; white-space: normal; }
-      .muse-keys-list td[data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; text-align: right; }
-      .muse-keys-list td.muse-keys-num, .muse-keys-list td.muse-keys-time { min-width: 0; white-space: normal; }
-      .muse-keys-list td[data-label]::before { content: attr(data-label); flex: 0 0 auto; text-align: left; color: var(--text-secondary); }
-      .muse-keys-list td.muse-keys-key { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+      .muse-stacked .muse-keys-list, .muse-stacked .muse-keys-list tbody, .muse-stacked .muse-keys-list tr, .muse-stacked .muse-keys-list td { display: block; }
+      .muse-stacked .muse-keys-list thead { display: block; }
+      .muse-stacked .muse-keys-list thead tr { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0 0 8px; border-bottom: 1px solid var(--border-color); }
+      .muse-stacked .muse-keys-list thead th { display: block; position: static; padding: 0; border: 0; font-size: 13px; text-align: left; }
+      .muse-stacked .muse-keys-list tr { padding: 8px 0; border-bottom: 1px solid var(--border-light); }
+      .muse-stacked .muse-keys-list td { border: 0; padding: 2px 0; text-align: left; min-width: 0; white-space: normal; }
+      .muse-stacked .muse-keys-list td[data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; text-align: right; }
+      .muse-stacked .muse-keys-list td.muse-keys-num, .muse-stacked .muse-keys-list td.muse-keys-time { min-width: 0; white-space: normal; }
+      .muse-stacked .muse-keys-list td[data-label]::before { content: attr(data-label); flex: 0 0 auto; text-align: left; color: var(--text-secondary); }
+      .muse-stacked .muse-keys-list td.muse-keys-key { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
     }
   </style>
 </head>
@@ -810,6 +924,7 @@ export function getMuseSearchPage(): string {
       <button type="button" data-action="keys" aria-label="検索キーの一覧を開く" title="検索キーの一覧(AIチャットでの出現回数の順)">🔑</button>
     </form>
     <p class="muse-search-note">質問と回答の両方を探します(大文字と小文字は区別しません)。新しい順に、最大100件まで表示します。</p>
+    <label class="muse-setting"><input type="checkbox" data-setting="stacked"> スマホ幅(幅560px以下)で、検索キーの表を縦並びにする</label>
     <p class="muse-search-status" data-field="status" role="status" aria-live="polite"></p>
     <ul class="muse-search-results" data-field="results"></ul>
     <section class="muse-threads" data-field="threads" aria-label="スレッド(最終書き込みの新しい順)"></section>
