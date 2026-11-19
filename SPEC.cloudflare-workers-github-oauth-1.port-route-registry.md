@@ -3,12 +3,16 @@ id: SPEC.cloudflare-workers-github-oauth-1.port-route-registry
 repo: nekoserver/cloudflare-workers-github-oauth-1
 source: 2026-11-18 Okiraku 指示（「繋ぎ込む前提で入出力ポートを一致させなければならない」ものを一元管理できないと気持ち悪い。cloudflared の振り分けも同じ。SPEC を書くことを同日に承認）
 status: draft
-version: 3
+version: 4
 created: 2026-11-18
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # SPEC.cloudflare-workers-github-oauth-1.port-route-registry
+
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。版3（draft）の要求は変えず、実装の状態（末尾の「実装の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.port-route-registry.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.port-route-registry.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
 
 ## 目的と範囲
 
@@ -96,3 +100,19 @@ updated: 2026-11-18
 - 版1: 初版（2026-11-18、Okiraku の指示と承認による）。
 - 版2: REQ-PR-005 の「実際」を層の区別（コンテナ停止／プロセス未待ち受け／実行エラー／正常）で出すよう改訂し、段階の名前を REQ-LP-010 と揃えることを明記（2026-11-18、Okiraku の指示「問題の切り分けができるようにすべき」による）。
 - 版3: 前提 P5 を追加（ヘルスチェックの表は管理者にだけ提供されるのが設計であり、未認証から見えないことは欠陥ではない）。lib-proxy-identity SPEC 版8 の再評価に合わせた整合（2026-11-18）。
+- 版4: 2026-11-19、opus-5.5。要求は変えず「実装の現状」を足した（正本は未作成、未決事項は判断待ち）。
+
+## 実装の現状（2026-11-19）
+
+**対象**: REQ-PR-001〜007の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態 — 版3（draft）の要求がどこまで実装されたか。
+
+- **正本は作られていない。** `containers/demo/routes.json`も、ほかの名前の正本も無い（`git grep`）。未決事項の3件（正本の名前と形式、生成まで踏み込むか、T3のポートを含めるか）は、利用者の判断の記録が無いまま。
+- 前提P1は今も同じ。ポートは各ファイルに直書きされている: `server.js`（待ち受け8080、probe 8443・`LIB_PORT`、Redmine 8444、T3 3773・3774）、`apache-demo.conf`（`Listen 8443`）、`apache-lib.conf`（`Listen 127.0.0.1:8445`）、`cloudflared-ingress.yml.template`（`ssh://127.0.0.1:2222`、`https://127.0.0.1:8443`）。
+- REQ-PR-005に関わる変更として、ヘルスチェックの表のApacheの欄が8443と8445の2つに分かれた（[`5f27297f`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/5f27297f)、2026-11-18）。hopごとの「期待」と「実際」を層で区別する表示ではない。
+- REQ-PR-004は、経路確認（lib-proxy-identityのREQ-LP-010）が未実装のため、まだ適用できない。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「実装の現状」 | 実装の状態を追加。要求は変えていない | `git grep`、`containers/demo`の実読 |

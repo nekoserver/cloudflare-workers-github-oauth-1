@@ -1,5 +1,9 @@
 # SPEC.cursor-agent.md
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。1・2節は変えず、今の状態の確認（3節）を足した
+評価: [`EVAL.cursor-agent.opus-5.5.20261119.md`](EVAL.cursor-agent.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 日付付き SPEC と実装の横断まとめは
 [`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)
 へ移した。起動・チャンク結合・キャッシュ・応答検索・過去ログ検索の現状と、
@@ -67,3 +71,17 @@ JOIN 失敗で `rows` を常に空にすると、インクリメンタル検索�
 - [`8d0cc6e`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/8d0cc6e) 回答キャッシュ表未作成時のD1検索エラーをSPEC.cursor-agent.mdに残す
 - [`afc8f75`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/afc8f75) 回答キャッシュ表欠落時も画面の列で検索し解除ボタンを撤去する
 - [`6dd3308`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/6dd3308) cursor-agentの実装済み範囲と入力窓・ダイナミックワーカー対応をSPECにまとめる
+
+## 3. 2026-11-19の現状（改訂で追記）
+
+**対象**: 1節・2節の診断メッセージとフォールバックの、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態。
+
+- 1節の文言の組み立ては`src/utils/cursorAgentLaunch.ts`の242行（`回答キャッシュの検索に失敗しました: ${detail}`）、本番の文言の例は`src/index.ts`の注記にある。本書のとおり。
+- 1節に挙げたテスト（`src/cursor-agent-launch.test.ts`、`src/cursor-agent-history-answer-search-e2e.test.ts`）は2026-11-19に通過した。
+- 横断まとめ（`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`）を正とする関係は変わらない。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・3節 | 現状の確認を追加。1・2節は変えていない | 上の箇条書き |

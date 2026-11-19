@@ -1,5 +1,9 @@
 # Apache WebSocket proxyの仕様と見直し要件（2026-11-14）
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。目標要件は変えず、未決事項のうちコンテナの中で実測できたもの（末尾の「2026-11-19の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20261114.apache-websocket-proxy.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20261114.apache-websocket-proxy.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 状態
 
 設計整理。現状の確認と目標要件を定義したもので、Apache設定の変更・承認ではない。実稼働環境の版・設定・接続挙動は未確認。
@@ -73,3 +77,24 @@ Rewrite条件はUpgradeヘッダだけを調べ、Connectionヘッダを検証�
 - 現在稼働中のApache version、module、VirtualHost、timeoutとログ設定。
 - `/lib`等の拒否とRewrite `[P]`の組合せ、catch-all ProxyPassでUpgrade付き要求を受けた際の実応答。
 - 同一origin、HTTP/2、異常/重複Upgradeヘッダの実挙動。
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 本体のdemoコンテナ（2026-11-18 22:10起動）の公開Apache（8443）と、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）の`containers/demo/apache-demo.conf` — 未決事項のうち、コンテナの中から確かめられたもの。
+
+- 稼働中のApacheは`Apache/2.4.71 (Unix)`。読み込まれているproxy系のmoduleは`proxy`・`proxy_http`・`proxy_wstunnel`・`rewrite`（`apache2ctl -M`）。「版と配布元の記録」の世代差（作業ツリー2.4.71、ロック2.4.70）は、稼働しているイメージでは2.4.71に揃っている。ロック（`image.lock.json`）は今も古いまま（[container-image-explicit-build](SPEC.cloudflare-workers-github-oauth-1.container-image-explicit-build.md)の「実装の現状」）。
+- 設定は11-14から変わっていない。Upgradeの判定は`Upgrade`ヘッダだけで、`Connection`ヘッダを見ない。許可リスト（WS-1）は無い。
+- Upgrade付きの要求（`Upgrade: websocket`・`Connection: Upgrade`・`Sec-WebSocket-Key`）を8443へ送った結果（`Host: mygw.nekomaneki.work`）:
+
+| パス | 応答 |
+|---|---|
+| `/lib/README.md`・`/debug`・`/admin` | 403（拒否が効く。WS-3の設定の部分） |
+| `/ws`・`/some/random` | 200（`ws://127.0.0.1:8080/`へ送られ、server.jsはHTTPで応答した。101ではない） |
+
+- WS-2の「送り先は固定のloopback」は満たしている（`ws://127.0.0.1:8080/$1`）。「許可したpathだけ」は満たしていない（どのパスでもUpgradeを送る）。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「2026-11-19の現状」 | 稼働中の版・module、拒否とUpgradeの組み合わせの実測を追加。目標要件は変えていない | コンテナの中からの実測 |

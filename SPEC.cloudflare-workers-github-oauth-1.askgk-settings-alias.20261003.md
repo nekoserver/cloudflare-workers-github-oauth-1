@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.askgk-settings-alias.20261003.md
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。10-03の記録は変えず、送り先・エイリアス・接頭語の変化（末尾の「2026-11-19の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.askgk-settings-alias.20261003.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.askgk-settings-alias.20261003.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## `/neko askgk settings` エイリアス追加とSlack未対応の判明(2026-10-03)
 
 **対象**: `src/utils/tunnelSignerAsk.ts`の`ASKGK_COMMAND_ALIASES`・`resolveAskgkCommand()`、
@@ -109,3 +113,25 @@ tunnel-signerファイルに渡すヘルプコマンドは「`/neko askgk`」(�
 - `formatAskgkResult`(`/api/aichat`側)・`resolveAskgkMentionReply`(Slack
   `@メンション`側)の両方で、質問文が空文字の場合の表示を`(引数なし)`にした
 - `/neko help`にも「`/neko askgk (引数なし) / /neko askgk help`」の行を追記
+
+---
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 本書の「背景」の送り先、`ASKGK_COMMAND_ALIASES`、`/neko help`の`askgk`行、Slackの`@メンション`の`/neko askgk`（`origin/main` [`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)） — 10-03の後に変わった点。
+
+| 項目 | 10-03の記述 | 今 |
+|---|---|---|
+| 送り先 | rust-worker-sqlx-d1が`mynw.nekomaneki.work/lib/api/tunnels`へ転送 | 送り先は台帳`src/data/askgk-routes.json`で決まる（[`SPEC.cloudflare-workers-github-oauth-1.askgk-routes.20261026.md`](SPEC.cloudflare-workers-github-oauth-1.askgk-routes.20261026.md)）。既定は`r9.nekomaneki.work`、`claude_prompt=`・`muse_prompt=`は`mygw.nekomaneki.work`。`mynw`は台帳に無い |
+| エイリアス | `models-list`・`settings` | `tunnels-list`（→`cf tunnels list`、[`78fe7e73`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/78fe7e73)）が加わった。`settings`→「設定状況」はそのまま |
+| 接頭語 | 記載なし | `/neko askgk claude_prompt="..."`・`muse_prompt="..."`が加わり、接頭語ごと先方へ送る（`/neko help`の193行） |
+| `sysstats`・`routines`・`help`・引数なし | 変換せずに送る | そのまま |
+| Slackの`@メンション` | `/neko askgk`だけ対応 | そのまま（`src/utils/slackMentionReply.ts`の`ASKGK_MENTION_PREFIX`） |
+
+`src/utils/tunnelSignerAsk.test.ts`・`src/utils/slackMentionReply.test.ts`は2026-11-19に52件通過した。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「2026-11-19の現状」 | 送り先・エイリアス・接頭語の変化を追加。10-03の記録は変えていない | 上の表 |

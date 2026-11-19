@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.20260914
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文は変えず、今の状態の確認（末尾）を足した。現状の正は横断まとめのSPEC
+評価: [`EVAL.cloudflare-workers-github-oauth-1.20260914.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.20260914.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 1. 回答キャッシュ表欠落時は画面の列で検索を継続する
 
 **対象**: `GET /api/cursor-agent/history?q=`、`POST /api/cursor-agent/history/past-log-search`、
@@ -258,3 +262,16 @@ Cursor VM 側の `/neko csearch` のように、AIチャット過去ログでも
 - [`a214f33`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a214f33) /neko qsearch の最新回答APIパラメータを質問IDにする
 - [`a0eaf9a`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/a0eaf9a) /neko qsearch の最新回答APIパラメータを質問IDと言語モデルにする
 
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 本書の各節の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態 — 本書は日付付きの作業の記録で、`/cursor-agent`の現状は横断まとめ[`SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md`](SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md)を正とする。
+
+- 本書のエンドポイントは、すべて`src/index.ts`にある（横断まとめの13節）。`/cursor-agent`の画面と処理は2026-09-14から変わっていない。
+- 本書の機能は、横断まとめの11節のテスト資産で確かめている。2026-11-19に8ファイル中7ファイル194件が通過し、`src/aichat-neko-csearch-modal.test.ts`の7件はこのコンテナのNode 26.13.1で落ちた（横断まとめの13節）。
+- 1節の「解除」ボタンの撤去は今もそのまま（`src/views/cursorAgent.ts`に「解除」が無い）。3〜6節の`/neko csearch`・`/neko qsearch`は`src/utils/aichatSlashCommand.ts`にある。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・末尾 | 今の状態の確認を追加。本文は変えていない | 横断まとめの13節 |

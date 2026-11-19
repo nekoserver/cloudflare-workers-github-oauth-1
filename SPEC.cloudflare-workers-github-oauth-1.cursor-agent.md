@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。0〜12節は変えず、実装の状態の確認とテスト資産の結果（13節）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 **対象**: `/cursor-agent` ページ、Cursor Background Agent API（Cloud Agent / VM）、
 D1 `cursor_agent_*` テーブル、および今後追加する AIチャット入力窓・ダイナミックワーカー
 （`nekoserver/dynamicneko`）からの問い合わせ — いま実装済みの起動・チャンク結合・
@@ -528,3 +532,18 @@ vitest の node:sqlite では `no such table: cursor_agent_answer_cache` にな�
 - [`NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md`](NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md) — Binding / secret 名
 - [`EVAL.cloudflare-workers-github-oauth-1.20260914.md`](EVAL.cloudflare-workers-github-oauth-1.20260914.md) — 作成時点の警告。成功終端キャッシュとインクリメンタルは現行で対処済み
 - [`EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md`](EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md) — 2026-09-13〜14 の実装評価と達成度（時系列コミット表）
+
+## 13. 2026-11-19の現状（改訂で追記）
+
+**対象**: 0〜6節の「実装済み」、7・8節の「今後追加」、11節のテスト資産の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態。
+
+- 0〜6節のエンドポイント（`GET /cursor-agent`、`POST /api/cursor-agent/launch`、`GET /api/cursor-agent/history`・`/history/:id/conversation`、`POST /api/cursor-agent/history/past-log-search`）は、すべて`src/index.ts`にある。`/cursor-agent`の画面と処理（`src/views/cursorAgent.ts`・`src/utils/cursorAgentLaunch.ts`）は、2026-09-14の[`b9984d41`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/b9984d41)から変わっていない。
+- 7節の表の状態は今も正しい。`/neko csearch`は実装済み、`/neko cursor`（起動）と`/neko cursor-past`（過去ログの保存）は未実装。
+- 8節の外部向けのAPI（`POST /api/cursor-agent/launch-external`・`history-external`・`past-log-search-external`、`CURSOR_AGENT_EXTERNAL_SECRET`）は未実装。
+- 11節のテスト資産8ファイルを2026-11-19に走らせた。7ファイル194件は通過。**`src/aichat-neko-csearch-modal.test.ts`の7件は落ちた。** ページのスクリプトの`localStorage.getItem`で`localStorage`が`undefined`になる。このコンテナのNode 26.13.1には、Node自身の`localStorage`（`--localstorage-file`が無いと使えない、と警告が出る）があり、それがjsdomのものより先に見えているとみられる（推測。確かめていない）。2026-11-08の[`660398d4`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/660398d4)で、このテストは送信のジョブ化に合わせて直された（その時点で通ったかは確かめていない）。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・13節 | 実装の状態の確認と、テスト資産の1ファイルがこの環境で落ちることを追加。0〜12節は変えていない | 上の箇条書き |

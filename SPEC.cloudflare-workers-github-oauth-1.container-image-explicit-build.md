@@ -2,12 +2,16 @@
 id: SPEC.cloudflare-workers-github-oauth-1.container-image-explicit-build
 repo: nekoserver/cloudflare-workers-github-oauth-1
 status: draft（出典: 2026-11-18、Okiraku の指示「じゃあそうしようか」— wrangler の変更判定を経由しない明示ビルドへの介入に合意。U1 は同日、候補A に決定）
-version: 2
+version: 3
 created: 2026-11-18
-updated: 2026-11-18
+updated: 2026-11-19
 ---
 
 # デモコンテナイメージの明示ビルドと digest 固定
+
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。版2の要求は変えず、適用の状態（末尾の「実装の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.container-image-explicit-build.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.container-image-explicit-build.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
 
 ## 目的と範囲
 
@@ -65,3 +69,22 @@ updated: 2026-11-18
 - AC-EI-001: scripts/demo-image-lock.mjs --check が終了コード 0 で終わる。（REQ-EI-003、REQ-EI-005）
 - AC-EI-002: 再作成後のコンテナが報告する版が現行ピン（httpd 2.4.71 / Node.js 26.13.1 / git 2.56.1 等）と一致する。実経路確認である。（REQ-EI-001、REQ-EI-002）
 - AC-EI-003: mygw.nekomaneki.work が 502 / 530 でなく応答する。Apache 起動の確認を含む。（REQ-EI-002）
+
+## 実装の現状（2026-11-19）
+
+**対象**: REQ-EI-001〜005とAC-EI-001〜003の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態 — 版2（draft、U1は候補Aに決定）がどこまで適用されたか。
+
+| 項目 | 状態 | 根拠 |
+|---|---|---|
+| 明示ビルドのスクリプト | ある | `scripts/deploy-with-container-build.sh`（[`eed0e99c`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/eed0e99c)、2026-11-18）。入力のハッシュのタグが無ければビルド・push・digestの固定・ロックの再記録・deployを行う |
+| Workers Buildsのビルドコマンドの切り替え（U1） | 未確認 | ダッシュボードの設定で、リポジトリからは見えない |
+| REQ-EI-002（`wrangler.toml`のdigest固定） | 未充足（リポジトリ上） | `image = "./containers/demo/Dockerfile"`のまま。スクリプトはビルドの環境の中で書き換えるが、その結果はコミットされない |
+| REQ-EI-003・AC-EI-001（`--check`が0） | 未充足 | 2026-11-19に`node scripts/demo-image-lock.mjs --check`は終了コード1で`REBUILD`（入力に`lib-restore-wait.sh`・`codex-harness/*`・httpd 2.4.71・git 2.56.1などが加わり、2.4.70・2.56.0などが外れた）。ロックの後に入力が変わり、再記録されていない |
+| REQ-EI-005（ロック照合テスト、PR #2649） | マージ済み | 2026-11-18 05:23（UTC） |
+| AC-EI-002・003 | 未確認 | 本番のコンテナの報告する版、`mygw.nekomaneki.work`の応答は、この評価では確かめていない |
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「実装の現状」 | 適用の状態を追加。要求は変えていない | 上の表 |

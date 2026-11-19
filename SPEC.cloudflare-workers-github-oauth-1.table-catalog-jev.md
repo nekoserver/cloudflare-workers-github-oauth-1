@@ -1,5 +1,9 @@
 # SPEC — テーブルカタログ・カラムキー定義(Jev評価系)
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文は変えず、6テーブルの確認と、本書の後に増えたJevのテーブル（末尾の「2026-11-19の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.table-catalog-jev.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.table-catalog-jev.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 対象
 
 **対象**: `jev_label_groups` / `jev_labels` / `jev_evaluations` /
@@ -239,3 +243,18 @@ ORDER BY jg.id;
 - Jev API呼び出しには`JEV_API_KEY`シークレットが必要。未設定時の挙動は
   各呼び出し元のエラーハンドリングに従う(CLAUDE.mdルール8: 記録・通知・
   テストの3義務を満たすこと)
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 本書の6テーブル・マイグレーション・グループ・関連エンドポイントと、本書の後に増えたJevのテーブル（`origin/main` [`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）。
+
+- 6テーブルは本書のとおり。`jev_label_groups`・`jev_labels`・`jev_evaluations`は0144、`jev_country_keyword_labels`・`jev_country_keyword_evaluations`は0145、`jev_keyword_evaluation_locks`は0148。`TABLE_GROUP_MAP`ではどれも`ai`のまま（専用の`jev`グループは無い）。
+- 本書が挙げるエンドポイント（`/jev-label-stats`・`/jev-score-board`・`/jev-rev-viewer`・`/api/aichat/jev-score`・`-external`・`-keyword`・`/api/aichat/jev-values`・`/api/jev-score-board/rows`・`/api/aichat/jev-score-board-*-external`）は、すべて`src/index.ts`にある。
+- **本書の範囲の外に、Jevのテーブルが増えている。** 2026-09-19の0150（`jev_vuln_label_groups`・`jev_vuln_labels`・`jev_vuln_evaluations`、コミットの脆弱性診断）と0151（`jev_test_label_groups`・`jev_test_labels`・`jev_test_evaluations`、テスト充足度診断）。2026-09-23の0158で作った`jev_keyword_boundary_*`の2つは、同じ日の0159で消された。これらは本書の目録に無い。
+- `table_catalog`・`table_column_keys`は今もコードから読まれない（[`SPEC.cloudflare-workers-github-oauth-1.table-catalog.md`](SPEC.cloudflare-workers-github-oauth-1.table-catalog.md)の「2026-11-19の現状」）。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「2026-11-19の現状」 | 6テーブルの確認と、範囲外に増えたテーブルを追加。本文は変えていない | `migrations/`、`src/index.ts` |

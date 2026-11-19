@@ -1,5 +1,9 @@
 # SPEC.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260911.md
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。1〜5節は変えず、各節の今の状態（6節）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260911.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260911.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 1. cf-authログイン通知の署名検証不一致の調査と復旧
 
 **対象**: `POST /webhook/cf-auth`(本体Worker)と`nekoserver/cf-auth`の
@@ -223,3 +227,24 @@ nekoserverアカウントでも`notifyWelcome()`(=webhook送信)は現在の
 
 D1ログ(`webhook_log`・`countdown_events`)と実際の操作タイミングを
 突き合わせる調査手法は有効だったため、今後も踏襲すること。
+
+## 6. 2026-11-19の現状（改訂で追記）
+
+**対象**: 1〜5節の変更と未解決の件の、`origin/main`（[`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)）での状態。
+
+| 節 | 状態 | 根拠 |
+|---|---|---|
+| 1（署名の不一致） | コードの変更は無い件。今の署名の失敗は`webhook_log`（`source='cf-auth'`）に`rejected`で残る | `src/index.ts`の`/webhook/cf-auth`の`logWebhookEvent`。`webhook_log`は`migrations/`ではなく`STATUS_MIGRATION_SQL['0061']`で作る |
+| 2（入力欄の初期値） | 本書のとおり | `src/views/countdown.ts`の516〜517行（プレースホルダは「予定の名前」、値は「cf-auth 期限まで」） |
+| 3（自動登録） | 本書のとおり | `CF_AUTH_SESSION_TTL_MS`（7日）・`CF_AUTH_DEADLINE_LABEL`・`computeCfAuthDeadlineTargetAt`（`src/utils/countdown.ts`）、`upsertCfAuthDeadlineCountdown`（`src/index.ts`） |
+| 4（403の関門の撤去） | 本書のとおり | `POST /api/countdown`に`hasCfAuthAccess`は無く、`/webhook/cf-auth`だけが使う |
+| 5（緑のトーストの登録ボタン） | 未解決のまま | 解決の記録が見つからない |
+
+- 本書の`src/session.ts`・`src/webhook.ts`は`nekoserver/cf-auth`のファイルで、本リポジトリには無い。
+- `src/utils/countdown.test.ts`・`src/countdown-20260828.test.ts`は2026-11-19に55件通過した。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・6節 | 各節の今の状態を追加。1〜5節は変えていない | 上の表 |

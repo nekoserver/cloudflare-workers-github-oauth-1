@@ -1,5 +1,9 @@
 # SPEC — テーブルカタログ・カラムキー定義・権限制御のDB化
 
+改訂: 2026-11-19、opus-5.5（Claude Opus 5.5、Claude Code）。本文の設計は変えず、マイグレーション番号の訂正と、定数からの移行が止まっている現状（末尾の「2026-11-19の現状」）を足した
+評価: [`EVAL.cloudflare-workers-github-oauth-1.table-catalog.opus-5.5.20261119.md`](EVAL.cloudflare-workers-github-oauth-1.table-catalog.opus-5.5.20261119.md)
+定期的な見直し: このSPECは[`SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md`](SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md)の手順で、定期的に実情に合わせて改訂し、評価し直す
+
 ## 対象
 
 **対象**: 新規テーブル `table_catalog` / `table_column_keys` / `table_group_permissions`、`/api/status/tables/:table/rows` エンドポイント、`/status` ページのグループ別フィルタリング — 24テーブルのグループ分け・PK/FK定義・ロール別権限をD1に格納し、任意のテーブルを起点にそのグループ全体を俯瞰でき、かつロールに応じた参照・更新権限を制御できるようにする。
@@ -157,3 +161,26 @@ wrangler d1 execute workers-github-oauth-1 --remote --file migrations/0024_table
 - グループ横断FKが存在する場合（例: email_suppression_list → resend_webhook_log）、グループフィルタリング時にFK先テーブルも表示対象に含めるかはUI設計で決定
 - `table_group_permissions` はUIレベルのアクセス制御であり、D1レベルのRBACではない。Worker側のミドルウェアで制御する形になる
 - permission='none' のグループはモーダルの表示対象から除外するだけでなく、APIレスポンスからも除外すること（クライアント側のみの制御では不十分）
+
+## 2026-11-19の現状（改訂で追記）
+
+**対象**: 本書のテーブル設計・マイグレーション番号・「コードへの影響」の1〜6と、`/status`の今の作り（`origin/main` [`c271b7ba`](https://github.com/nekoserver/cloudflare-workers-github-oauth-1/commit/c271b7ba)） — 2026-03-30の後に変わった点。
+
+| 項目 | 本文の記述 | 今 | 根拠 |
+|---|---|---|---|
+| マイグレーション番号 | `table_catalog`・`table_column_keys`は0024、`table_group_permissions`は0025（将来） | 2つの表は**0026**（`migrations/0026_create_table_catalog.sql`）。0024は`slack_interaction_log`、0025は`commit_agent_log`に使われた。初期データは`STATUS_MIGRATION_SQL['0033']`ほかにある | `migrations/`、`src/index.ts`の`STATUS_MIGRATION_SQL` |
+| `table_group_permissions` | 0025で将来追加 | 作られていない（マイグレーションもコードも無い） | `git grep` |
+| 1. マイグレーション | 追加済み | 追加済み（0026） | — |
+| 2・3. 定数からDB読み出しへの段階的な移行 | 移行する | **移行していない。** コードは`table_catalog`・`table_column_keys`を読まない（`SELECT ... FROM table_catalog`が無い）。`/status`は今も定数`STATUS_TABLE_DEFINITIONS`（180テーブル）・`TABLE_COLUMN_KEYS`・`TABLE_GROUP_MAP`で動く。`CLAUDE.md`ルール23も、テーブルを足すときは定数への登録を必須としている | `src/index.ts` |
+| 4. グループ別のフィルタ | 将来 | 未実装 | `src/views/status.ts` |
+| 5. ER図のGROUPSとの同期のテスト | 追加する | 未確認（該当するテストを見つけていない） | — |
+| 6. ロール別のアクセス制御 | `table_group_permissions`の導入時 | 未実装。`/api/status/tables/:table/rows`は`authMiddleware`だけ | `src/index.ts`の`/api/status/tables/:table/rows` |
+| 背景の規模 | 24テーブル・5グループ | 180テーブル。`TABLE_GROUP_MAP`のグループは`ai`・`auth`・`commit`・`config`・`email`・`search`・`system`・`wine`の8つ | 同上 |
+
+- 本書の設計（グループとロールの権限をD1に置く）は、着手した段階（表の作成と初期データ）で止まっている。定数を正とする今の運用（ルール23）と、本書の「DBを正にする」方針のどちらを続けるかは、利用者が決める。
+
+## 改訂の記録
+
+| 日付 | モデル | 箇所 | 内容 | 根拠 |
+|---|---|---|---|---|
+| 2026-11-19 | opus-5.5 | 冒頭・「2026-11-19の現状」 | マイグレーション番号の訂正（0024→0026）、未移行・未実装の項目、規模の変化を追加。本文の設計は変えていない | 上の表 |
