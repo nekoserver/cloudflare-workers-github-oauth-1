@@ -103,6 +103,23 @@ describe('前提チェック: ダッシュボードのパネルの Apache 側前
   });
 });
 
+describe('前提チェック: 実行経路の BASE 共有の Apache 側前提(REQ-EP-034)', () => {
+  // SPEC.lib.muse.execution-path 版3。CGI(www-data)と承認(root)ではホームが分かれ、
+  // 状態の置き場所が実行ユーザーのホーム依存だと受付と承認が噛み合わない
+  // (2026-11-19 実測: 受付が /var/www 配下を作れず 500)。配信側が CGI の環境へ
+  // 置き場所と運用ホームを明示して渡し、実体は entrypoint が用意する。
+  it('lib の VirtualHost に MUSE_SDK_BASE と MUSE_SDK_HOME の SetEnv がある', () => {
+    expect(libConf).toMatch(/^\s*SetEnv\s+MUSE_SDK_BASE\s+\/var\/lib\/muse-sdk\s*$/m);
+    expect(libConf).toMatch(/^\s*SetEnv\s+MUSE_SDK_HOME\s+\/root\s*$/m);
+  });
+
+  it('entrypoint が BASE の実体と既定ワークスペースを用意する', () => {
+    expect(entrypoint).toMatch(/mkdir -p \/var\/lib\/muse-sdk\b/);
+    expect(entrypoint).toMatch(/chown www-data:www-data \/var\/lib\/muse-sdk\b/);
+    expect(entrypoint).toMatch(/mkdir -p \/root\/sdk-ask-workspace\b/);
+  });
+});
+
 describe('前提チェック: entrypoint の Apache 起動方法(REQ-LW-011)', () => {
   it('apache2ctl のサービス制御(start・stop・restart 等)を使わない', () => {
     expect(entrypoint).not.toMatch(/apache2ctl\s+(start|stop|restart|graceful)/);

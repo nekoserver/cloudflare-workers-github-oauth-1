@@ -235,6 +235,14 @@ else
   log "lib: no /root/lib, lib SSI stays unavailable (/root/lib が無い)"
 fi
 
+# --- 実行経路の状態の置き場所(apache-lib.conf の MUSE_SDK_BASE と対、REQ-EP-034) ---
+# 受付(www-data)が書けて承認(root)が読める専用ディレクトリと、既定ワークスペースを
+# 用意する。再作成で消えるため、イメージ側のここで毎回そろえる。
+mkdir -p /var/lib/muse-sdk
+chown www-data:www-data /var/lib/muse-sdk
+mkdir -p /root/sdk-ask-workspace
+log "lib: muse-sdk base prepared (/var/lib/muse-sdk)"
+
 # --- Apache(server.jsへのTLSプロキシ・Redmineは127.0.0.1:8444で内部待ち受け) ---
 # apache2ctl のサービス制御は使わない。Ubuntu の apache2ctl は systemd が居ると判定すると
 # systemctl へ委譲し、systemctl は chroot 環境では start を無視して正常終了するため、
