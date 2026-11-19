@@ -13,6 +13,7 @@ export function createMuseSearchKeysSqlite(): DatabaseSync {
   sqlite.exec(createShares);
   sqlite.exec(readFileSync('migrations/0074_add_deleted_at_to_ai_chat_shares.sql', 'utf8'));
   sqlite.exec(readFileSync('migrations/0195_create_muse_search_key_log.sql', 'utf8'));
+  sqlite.exec(readFileSync('migrations/0196_create_muse_search_answer_log.sql', 'utf8'));
   return sqlite;
 }
 

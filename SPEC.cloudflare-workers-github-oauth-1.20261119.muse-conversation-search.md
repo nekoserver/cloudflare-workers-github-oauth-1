@@ -140,6 +140,42 @@ dynamicneko は全ルートの前に、オーナーのセッションを要求�
 - 出現回数の SQL(`replace` の長さの差)が、大きな `ai_chat_shares` で遅くないかは測っていない。
 - 「AIチャットの応答ログ」を `ai_chat_shares.answer` と解釈した(確認が要る)。
 
+## 7. 🗒️ボタン: スレッドごとの回答の一覧(実装済み・本体の PR に含む)
+
+**対象**: `muse_search_answer_log` テーブル(本体の D1、`migrations/0196`)、`src/utils/museSearchAnswers.ts`、`GET /api/muse-search/answers`、🔑モーダルのタイトル行末の🗒️ボタン、dynamicneko の `answers` — 検索のたびに「どの回答に何回出たか」を本体の D1 に残し、スレッドごとに出現回数の多い順で見られるようにする。
+
+### 背景
+
+- 🔑の一覧はキーごとの合計だけで、「どのスレッドの、どの回答に出ているか」が分からなかった。
+- スレッドID・回答IDは dynamicneko の D1 にあり、本体の `muse_search_key_log` には無い。ユーザー指定(本体の D1 から読む)に沿い、検索のたびに dynamicneko の応答から本体の新テーブルへ追記する。
+
+### 仕様
+
+| 項目 | 内容 |
+|---|---|
+| 上流 | dynamicneko の `GET /api/tree-view/muse-search` の応答に `answers`(回答ID・チャットID・スレッドID(無ければ null)・回答内の出現回数・一致箇所の前後・回答の作成時刻)。回答(assistant)だけで、質問は数えない。出現回数の多い順に最大100件 |
+| 記録 | `/api/muse-search` が成功するたびに、`answers` を1文で追記(`json_each`)。検索キーの記録とは独立。0件なら何も書かない |
+| 一覧 | **全キー合算**。(回答, キー)ごとに最後の記録だけを足す(同じキーを何度検索しても増えない)。スレッドは合計の多い順、スレッドの中は回答の回数の多い順 |
+| スレッド | スレッド化していない回答は、チャットごとに1つのまとまり(`threadId` は null)。回答のスレッドは最新の記録に従う |
+| 画面 | モーダルのタイトル行の末尾に🗒️(✕の左)。押すとスレッド別の表に切り替わり、もう一度押すと🔑の一覧へ戻る。Tab は🗒️と✕の間を行き来する |
+
+### 失敗の見え方
+
+| 状況 | 動作 |
+|---|---|
+| 上流が `answers` を返さない(古い版) | 検索キーは記録し、応答に `answersLogged: false` と理由。画面の状態行に警告 |
+| 上流の `answers` の形が違う | 検索全体を 502(形の違うデータを記録しない) |
+| 回答の記録に失敗 | 検索の結果と検索キーの記録は残し、`answersLogged: false` と理由、ログにも出す |
+| 一覧の読み出しに失敗・DB 未設定 | `GET /api/muse-search/answers` が 503(`error`・`detail`)。モーダルに理由を表示(空の一覧に見せない) |
+| 本番の D1 に 0196 が未適用 | 検索は動くが `answersLogged: false`(no such table)。**デプロイ前に流す** |
+
+### 注意事項
+
+- マイグレーション 0196 は**本体の D1**(`workers-github-oauth`)用。dynamicneko の D1 ではない。
+- 記録は導入後の検索から。それ以前の検索は🗒️に出ない。
+- 一覧は最新の記録5000行まで。1回の検索で記録する回答は上流の上限100件。
+- dynamicneko の PR(`answers`)が先にデプロイされていないと、🗒️は空のまま。
+
 ## 関連
 
 - dynamicneko の PR(出現回数): [nekoserver/dynamicneko#459](https://github.com/nekoserver/dynamicneko/pull/459)
