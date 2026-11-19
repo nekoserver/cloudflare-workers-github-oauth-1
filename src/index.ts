@@ -496,6 +496,8 @@ import { askTunnelSigner, AskTunnelSignerResult } from './utils/tunnelSignerAsk'
 import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
 import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
+import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
+import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
 import { fetchMuseMonitor } from './utils/museMonitor';
@@ -20772,6 +20774,32 @@ app.post('/api/muse-inquiries/proposals/:proposalId/decision', authMiddleware, c
     logger.warn('muse inquiry decision failed', { error: message });
     return jsonUtf8({ error: '採否を記録できませんでした: ' + message }, 500);
   }
+});
+
+/**
+ * tree-view の Museタブの会話の検索(2026-11-19、ユーザー指定)。会話は dynamicneko のD1にあるので、本体は署名付きで
+ * dynamicneko の GET /api/tree-view/muse-search を呼ぶ(src/utils/museConversationSearch.ts)。新しいシークレットは足さない。
+ * 管理者だけ。画面へは一致箇所の前後(snippet)だけを返し、本文の全文は返さない。
+ */
+app.get('/muse-search', authMiddleware, cfDashboardAdminMiddleware, (c) => {
+  c.header('Cache-Control', 'no-store');
+  c.header('Content-Security-Policy', MUSE_SEARCH_CSP);
+  return c.html(getMuseSearchPage());
+});
+
+app.get('/api/muse-search', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const parsed = parseMuseSearchQuery(c.req.query('q'));
+  if (!parsed.ok) {
+    return c.json({ errorCode: parsed.errorCode, error: parsed.errorCode === 'empty' ? '検索する文字を入力してください' : `検索文は${MUSE_SEARCH_MAX_QUERY}文字までです` }, 400);
+  }
+  const result = await searchMuseConversations(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET, parsed.query);
+  if (!result.ok) {
+    const notConfigured = result.errorCode === 'binding_missing' || result.errorCode === 'secret_missing';
+    logger.warn('muse-search upstream failed', { errorCode: result.errorCode });
+    return c.json({ errorCode: result.errorCode, detail: result.detail }, notConfigured ? 503 : 502);
+  }
+  return c.json({ count: result.data.posts.length, posts: toMuseSearchResultItems(result.data.posts, parsed.query) });
 });
 
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
