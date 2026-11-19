@@ -1175,6 +1175,178 @@ describe('初期画面のスレッド一覧', () => {
     await flush();
     expect(section().hidden).toBe(false);
   });
+  // 「全開/全閉」トグルボタンと検索窓(2026-11-19、ユーザー指定): 表示中のスレッド一覧に検索をかけられるようにする。
+  // 検索窓は、表示中のスレッドのタイトルを絞り込む(ブラウザ側だけ。サーバーは呼ばない)。全開/全閉は、表示中のスレッドの最終書き込みを、まとめて開く/閉じる。
+  describe('全開/全閉と、スレッドの絞り込み', () => {
+    const filter = () => section().querySelector<HTMLInputElement>('input[data-field="thread-filter"]')!;
+    const toggleAll = () => section().querySelector<HTMLButtonElement>('button[data-action="toggle-all"]')!;
+    const items = () => [...section().querySelectorAll<HTMLElement>('li.muse-thread-item')];
+    const visibleTitles = () => items().filter((li) => !li.hidden).map((li) => li.querySelector('a')!.textContent);
+    const type = (value: string) => { filter().value = value; filter().dispatchEvent(new Event('input', { bubbles: true })); };
+    const threadUrls = (fetchFn: typeof fetch) => calls(fetchFn).filter((u) => u.startsWith('/api/muse-search/thread?'));
+    const threeThreads = { threads: [
+      thread({ threadId: 't1', title: 'Workers の静的アセット' }),
+      thread({ threadId: 't2', title: 'Tailscale DERP の調査' }),
+      thread({ threadId: 't3', title: 'ワーカーのデプロイ' }),
+    ] };
+    const open3 = async (extra: Record<string, () => Promise<Response> | Response> = {}) => {
+      const fetchFn = router(threadsRoutes({ '/api/muse-search/threads': json(threeThreads), ...extra }));
+      mount(fetchFn);
+      await flush();
+      return fetchFn;
+    };
+
+    it('一覧を取れたあとに、検索窓と「全開」ボタンが出る。スレッドが無いとき・一覧を取れなかったときは出さない', async () => {
+      await open3();
+      expect(filter()).not.toBeNull();
+      expect(filter().type).toBe('search');
+      expect(filter().getAttribute('aria-label')).toBeTruthy();
+      expect(toggleAll().type).toBe('button');
+      expect(toggleAll().textContent).toBe('全開');
+      document.body.innerHTML = '';
+      mount(router(threadsRoutes({ '/api/muse-search/threads': json({ threads: [] }) })));
+      await flush();
+      expect(section().querySelector('input[data-field="thread-filter"]')).toBeNull();
+      expect(section().querySelector('button[data-action="toggle-all"]')).toBeNull();
+      document.body.innerHTML = '';
+      mount(router(threadsRoutes({ '/api/muse-search/threads': json({ error: 'x' }, 502) })));
+      await flush();
+      expect(section().querySelector('input[data-field="thread-filter"]')).toBeNull();
+    });
+    it('検索窓に入れると、タイトルに含まれるスレッドだけが残る。大文字小文字は区別しない。前後の空白は無視する。空にすると全部に戻る。サーバーは呼ばない', async () => {
+      const fetchFn = await open3();
+      const before = calls(fetchFn).length;
+      type('tailscale');
+      expect(visibleTitles()).toEqual(['Tailscale DERP の調査']);
+      type('  の静的  ');
+      expect(visibleTitles()).toEqual(['Workers の静的アセット']);
+      type('ワーカー');
+      expect(visibleTitles()).toEqual(['ワーカーのデプロイ']);
+      type('   ');
+      expect(visibleTitles()).toEqual(['Workers の静的アセット', 'Tailscale DERP の調査', 'ワーカーのデプロイ']);
+      type('');
+      expect(visibleTitles()).toHaveLength(3);
+      expect(calls(fetchFn).length).toBe(before);
+    });
+    it('1件も一致しないときは、その旨の案内を出す(空の画面にしない)。一致が戻れば消える。並びは変わらない', async () => {
+      await open3();
+      const empty = () => section().querySelector<HTMLElement>('.muse-thread-nomatch')!;
+      expect(empty().hidden).toBe(true);
+      type('存在しない言葉');
+      expect(visibleTitles()).toEqual([]);
+      expect(empty().hidden).toBe(false);
+      expect(empty().textContent).toContain('一致するスレッドはありません');
+      type('の');
+      expect(empty().hidden).toBe(true);
+      expect(items().map((li) => li.querySelector('a')!.textContent)).toEqual(['Workers の静的アセット', 'Tailscale DERP の調査', 'ワーカーのデプロイ']);
+    });
+    it('「全開」を押すと、表示中のスレッドの最終書き込みを、すべて開く(それぞれ取って、リンクの下に出す)。ボタンは「全閉」になる', async () => {
+      const fetchFn = await open3();
+      toggleAll().click();
+      await flush();
+      expect(threadUrls(fetchFn).sort()).toEqual(['/api/muse-search/thread?threadId=t1', '/api/muse-search/thread?threadId=t2', '/api/muse-search/thread?threadId=t3']);
+      for (const a of links()) {
+        expect(a.getAttribute('aria-expanded')).toBe('true');
+        expect(panelOf(a)!.hidden).toBe(false);
+        expect(panelOf(a)!.querySelectorAll('p.muse-thread-paragraph').length).toBeGreaterThan(0);
+      }
+      expect(toggleAll().textContent).toBe('全閉');
+    });
+    it('「全閉」を押すと、表示中のスレッドをすべて閉じる。ボタンは「全開」に戻る。また「全開」を押しても、取った本文は取り直さない', async () => {
+      const fetchFn = await open3();
+      toggleAll().click();
+      await flush();
+      toggleAll().click();
+      for (const a of links()) {
+        expect(a.getAttribute('aria-expanded')).toBe('false');
+        expect(panelOf(a)!.hidden).toBe(true);
+      }
+      expect(toggleAll().textContent).toBe('全開');
+      toggleAll().click();
+      await flush();
+      expect(threadUrls(fetchFn)).toHaveLength(3);
+      expect(links().every((a) => a.getAttribute('aria-expanded') === 'true')).toBe(true);
+    });
+    it('全開/全閉は、絞り込みで表示中のスレッドだけに効く(隠れているスレッドは、取りにも、開閉にも行かない)', async () => {
+      const fetchFn = await open3();
+      type('tailscale');
+      toggleAll().click();
+      await flush();
+      expect(threadUrls(fetchFn)).toEqual(['/api/muse-search/thread?threadId=t2']);
+      expect(links().map((a) => a.getAttribute('aria-expanded'))).toEqual(['false', 'true', 'false']);
+      type('');
+      expect(toggleAll().textContent).toBe('全開');
+      toggleAll().click();
+      await flush();
+      expect(threadUrls(fetchFn).sort()).toEqual(['/api/muse-search/thread?threadId=t1', '/api/muse-search/thread?threadId=t2', '/api/muse-search/thread?threadId=t3']);
+    });
+    it('ボタンの文字は、表示中のスレッドの開閉に合わせて変わる(1つずつ開いて全部開けば「全閉」、1つ閉じれば「全開」)。絞り込みを変えても追従する', async () => {
+      await open3();
+      for (const a of links()) { a.click(); await flush(); }
+      expect(toggleAll().textContent).toBe('全閉');
+      links()[0].click();
+      expect(toggleAll().textContent).toBe('全開');
+      links()[0].click();
+      expect(toggleAll().textContent).toBe('全閉');
+      type('tailscale');
+      expect(toggleAll().textContent).toBe('全閉');
+      document.body.innerHTML = '';
+      await open3();
+      links()[0].click();
+      await flush();
+      type('静的');
+      expect(toggleAll().textContent).toBe('全閉');
+      type('');
+      expect(toggleAll().textContent).toBe('全開');
+    });
+    it('一致が1件も無いとき、ボタンを押しても何も取りにいかない(「全開」のまま)', async () => {
+      const fetchFn = await open3();
+      type('存在しない言葉');
+      toggleAll().click();
+      await flush();
+      expect(threadUrls(fetchFn)).toEqual([]);
+      expect(toggleAll().textContent).toBe('全開');
+    });
+    it('全開は、同時に取りにいく数を4つまでに抑える(多数のスレッドでも、一度に何十本も送らない)。最後にはすべて開く', async () => {
+      let inflight = 0;
+      let peak = 0;
+      const many = { threads: Array.from({ length: 12 }, (_, i) => thread({ threadId: 'm' + i, title: 'スレッド' + i })) };
+      const fetchFn = router({
+        '/api/muse-search/threads': json(many),
+        '/api/muse-search/thread?': async () => {
+          inflight += 1; peak = Math.max(peak, inflight);
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          inflight -= 1;
+          return new Response(JSON.stringify(lastPost()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        },
+      });
+      mount(fetchFn);
+      await flush();
+      toggleAll().click();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(peak).toBeLessThanOrEqual(4);
+      expect(peak).toBeGreaterThan(1);
+      expect(threadUrls(fetchFn)).toHaveLength(12);
+      expect(links().every((a) => panelOf(a)!.querySelectorAll('p.muse-thread-paragraph').length > 0)).toBe(true);
+    });
+    it('検索(上の検索窓)を始めると、この検索窓・ボタンも、一覧と一緒に隠れる', async () => {
+      const page = mount(router(threadsRoutes({ '/api/muse-search/threads': json(threeThreads), '/api/muse-search?': json({ count: 0, posts: [] }) })));
+      await flush();
+      page.submit('静的');
+      await flush();
+      expect(section().hidden).toBe(true);
+      expect(filter().closest('[data-field="threads"]')).toBe(section());
+    });
+    it('CSS: 検索窓とボタンは、固定色を使わず変数を使う', () => {
+      const html = getMuseSearchPage();
+      const start = html.indexOf('<style id="muse-search-style">');
+      const style = html.slice(start, html.indexOf('</style>', start));
+      expect(style).toMatch(/\.muse-thread-tools \{[^}]*display: flex/);
+      expect(style).toMatch(/\.muse-thread-filter \{[^}]*var\(--/);
+      expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    });
+  });
+
   it('CSS: 一覧と本文は、固定色を使わず変数を使う。リンクに下線を付けない', () => {
     const html = getMuseSearchPage();
     const start = html.indexOf('<style id="muse-search-style">');
