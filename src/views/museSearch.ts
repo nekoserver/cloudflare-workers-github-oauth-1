@@ -69,13 +69,15 @@ export const MUSE_SEARCH_SCRIPT = `
       return max + 100;
     }
 
-    function museKeysCell(doc, text, className) {
+    // label は、スマホ幅で表を縦並び(項目名: 値)にするときの項目名(CSSの ::before で出す)。無ければ、行の見出しとして扱う。
+    function museKeysCell(doc, text, className, label) {
       var td = museSearchEl(doc, 'td', className, text);
+      if (label) td.setAttribute('data-label', label);
       return td;
     }
 
     function renderMuseKeysTable(doc, keys) {
-      var table = museSearchEl(doc, 'table', 'muse-keys-table');
+      var table = museSearchEl(doc, 'table', 'muse-keys-table muse-keys-list');
       var head = doc.createElement('thead');
       var headRow = doc.createElement('tr');
       ['検索キー', 'AIチャットでの出現回数', 'tree-viewでの出現回数', '検索回数', '最後に検索した日時(日本時間)'].forEach(function (label, index) {
@@ -89,12 +91,12 @@ export const MUSE_SEARCH_SCRIPT = `
       keys.forEach(function (item) {
         var row = doc.createElement('tr');
         row.appendChild(museKeysCell(doc, item.searchKey, 'muse-keys-key'));
-        row.appendChild(museKeysCell(doc, String(item.aiChatCount), 'muse-keys-num'));
-        var tree = museKeysCell(doc, item.treeViewCount === null ? '—' : String(item.treeViewCount), 'muse-keys-num');
+        row.appendChild(museKeysCell(doc, String(item.aiChatCount), 'muse-keys-num', 'AIチャットでの出現回数'));
+        var tree = museKeysCell(doc, item.treeViewCount === null ? '—' : String(item.treeViewCount), 'muse-keys-num', 'tree-viewでの出現回数');
         if (item.treeViewCount === null) tree.title = 'tree-viewでの出現回数を取得できませんでした';
         row.appendChild(tree);
-        row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num'));
-        row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), 'muse-keys-time'));
+        row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num', '検索回数'));
+        row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), 'muse-keys-time', '最後に検索した日時(日本時間)'));
         body.appendChild(row);
       });
       table.appendChild(body);
@@ -632,6 +634,16 @@ export function getMuseSearchPage(): string {
     .muse-keys-table .muse-keys-time { white-space: nowrap; }
     .muse-search-form button[data-action="keys"] { padding: 0 12px; }
     .muse-search-snippet mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
+    @media (max-width: 560px) {
+      .muse-keys-list, .muse-keys-list tbody, .muse-keys-list tr, .muse-keys-list td { display: block; }
+      .muse-keys-list thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+      .muse-keys-list tr { padding: 8px 0; border-bottom: 1px solid var(--border-light); }
+      .muse-keys-list td { border: 0; padding: 2px 0; text-align: left; min-width: 0; white-space: normal; }
+      .muse-keys-list td[data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; text-align: right; }
+      .muse-keys-list td.muse-keys-num, .muse-keys-list td.muse-keys-time { min-width: 0; white-space: normal; }
+      .muse-keys-list td[data-label]::before { content: attr(data-label); flex: 0 0 auto; text-align: left; color: var(--text-secondary); }
+      .muse-keys-list td.muse-keys-key { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    }
   </style>
 </head>
 <body>

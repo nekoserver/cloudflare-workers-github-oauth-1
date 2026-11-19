@@ -142,6 +142,28 @@ describe('🔑ボタンのモーダル', () => {
     expect(keysButton().textContent).toContain('🔑');
     expect(keysButton().getAttribute('aria-label')).toBeTruthy();
   });
+  // スマホ幅の表示(2026-11-19、ユーザー指定「直して」): 5列の表が幅に収まらず、右の列が切れていた。スマホ幅では、1行を「項目名: 値」の縦並びにする。
+  it('検索キーの表のセルは、項目名(data-label)を持つ。キーのセルは項目名なし(行の見出し)。表の文字は変えない', async () => {
+    mount(router({ '/api/muse-search/keys': json({ keys: [key({ searchKey: 'alpha', aiChatCount: 30, treeViewCount: null, searchCount: 5 })] }) }));
+    keysButton().click();
+    await flush();
+    const table = document.querySelector('[role="dialog"] table')!;
+    expect(table.classList.contains('muse-keys-list')).toBe(true);
+    const cells = [...table.querySelectorAll('tbody tr:first-child td')];
+    expect(cells.map((td) => td.getAttribute('data-label'))).toEqual([null, 'AIチャットでの出現回数', 'tree-viewでの出現回数', '検索回数', '最後に検索した日時(日本時間)']);
+    expect(cells.slice(0, 4).map((td) => td.textContent)).toEqual(['alpha', '30', '—', '5']);
+  });
+  it('CSS: 狭い幅(560px以下)では、表を縦並び(項目名: 値)にして、横にはみ出させない。固定色は使わない', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    const media = style.slice(style.indexOf('@media (max-width: 560px)'));
+    expect(style).toContain('@media (max-width: 560px)');
+    expect(media).toMatch(/\.muse-keys-list tr, \.muse-keys-list td \{ display: block;/);
+    expect(media).toMatch(/\.muse-keys-list td\[data-label\]::before \{[^}]*content: attr\(data-label\)/);
+    expect(media).toMatch(/\.muse-keys-list thead \{[^}]*position: absolute/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
   it('押すと /api/muse-search/keys を読み、モーダルに、AIチャットでの出現回数の順(APIの順)に並べて出す', async () => {
     const fetchFn = router({ '/api/muse-search/keys': json({ keys: [key({ searchKey: 'alpha', aiChatCount: 30, treeViewCount: 4, searchCount: 5 }), key({ searchKey: 'beta', aiChatCount: 2, treeViewCount: 90, searchCount: 1 })] }) });
     mount(fetchFn);
