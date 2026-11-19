@@ -224,3 +224,76 @@ describe('GET /api/muse-search/answers(🗒️ボタンの一覧)', () => {
     expect(await broken.json()).toMatchObject({ error: expect.any(String), detail: expect.stringContaining('d1 down') });
   });
 });
+
+// 回答IDのリンク(2026-11-19、ユーザー指定): 押すと、その回答の全文を(キーワードを強調した区間にして)返す。
+describe('GET /api/muse-search/answer(回答IDのリンク)', () => {
+  const upstreamAnswer = { answerId: 'answer-0042', chatId: 'c1', content: 'Workers の Static Assets は ASSETS バインディングから配信される', createdAt: 100 };
+  const logRow = (sqlite: ReturnType<typeof setup>['sqlite'], userId: string, key: string, answerId = 'answer-0042') =>
+    sqlite.prepare("INSERT INTO muse_search_answer_log (user_id, search_key, answer_id, chat_id, thread_id, occurrences, preview, answer_created_at, searched_at) VALUES (?, ?, ?, 'c1', NULL, 1, 'p', 100, '2026-11-19T00:00:00Z')").run(userId, key, answerId);
+  const get = (request: ReturnType<typeof setup>['request'], answerId: string | null, env: Record<string, unknown> = {}, githubId: number | null = ADMIN_ID) =>
+    request('/api/muse-search/answer' + (answerId === null ? '' : '?answerId=' + encodeURIComponent(answerId)), env, githubId);
+  const fetcherOf = (setupResult: ReturnType<typeof setup>, body: unknown = upstreamAnswer, status = 200) => setupResult.fetcher(async () => Response.json(body, { status }));
+
+  it('未ログインは 401、管理者でなければ 403', async () => {
+    const { request } = setup();
+    expect((await get(request, 'a', {}, null)).status).toBe(401);
+    expect((await get(request, 'a', {}, 2)).status).toBe(403);
+  });
+  it('回答IDが無い・空白・201文字以上は 400(上流を呼ばない)', async () => {
+    const s = setup();
+    const fetcher = fetcherOf(s);
+    for (const id of [null, '', '   ', 'a'.repeat(201)]) expect((await get(s.request, id, { DYNAMICNEKO: fetcher })).status).toBe(400);
+    expect(fetcher.fetch).not.toHaveBeenCalled();
+  });
+  it('その回答に当たったキーワードを、大文字小文字を区別せず強調した区間にして、全文とともに返す', async () => {
+    const s = setup();
+    logRow(s.sqlite, USER, 'static assets'); logRow(s.sqlite, USER, 'バインディング');
+    const fetcher = fetcherOf(s);
+    const res = await get(s.request, 'answer-0042', { DYNAMICNEKO: fetcher });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const body = await res.json() as { answerId: string; chatId: string; createdAt: number; keys: string[]; truncated: boolean; segments: Array<{ text: string; hit: boolean }> };
+    expect(body).toMatchObject({ answerId: 'answer-0042', chatId: 'c1', createdAt: 100, keys: ['static assets', 'バインディング'], truncated: false });
+    expect(body.segments.filter((x) => x.hit).map((x) => x.text)).toEqual(['Static Assets', 'バインディング']);
+    expect(body.segments.map((x) => x.text).join('')).toBe(upstreamAnswer.content);
+    const [url] = fetcher.fetch.mock.calls[0] as unknown as [string];
+    expect(url).toBe('https://dynamicneko.internal/api/tree-view/muse-answer?answerId=answer-0042');
+  });
+  it('検索の記録に無い回答IDは 404(上流を呼ばない)。他のユーザーの記録しか無い回答も 404', async () => {
+    const s = setup();
+    logRow(s.sqlite, 'someone-else', 'static', 'answer-0042');
+    const fetcher = fetcherOf(s);
+    const res = await get(s.request, 'answer-0042', { DYNAMICNEKO: fetcher });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: expect.any(String) });
+    expect(fetcher.fetch).not.toHaveBeenCalled();
+  });
+  it('長すぎる回答は上限で切り、truncated: true にする', async () => {
+    const s = setup();
+    logRow(s.sqlite, USER, 'x');
+    const long = 'x'.repeat(100001);
+    const body = await (await get(s.request, 'answer-0042', { DYNAMICNEKO: fetcherOf(s, { ...upstreamAnswer, content: long }) })).json() as { truncated: boolean; segments: Array<{ text: string }> };
+    expect(body.truncated).toBe(true);
+    expect(body.segments.map((x) => x.text).join('').length).toBe(100000);
+  });
+  it('上流の失敗は、空の回答にせず、理由つきで返す(401・404は 502、形式違いも 502、未設定は 503)', async () => {
+    const s = setup();
+    logRow(s.sqlite, USER, 'x');
+    for (const status of [401, 404]) {
+      const res = await get(s.request, 'answer-0042', { DYNAMICNEKO: fetcherOf(s, { error: 'no' }, status) });
+      expect(res.status).toBe(502);
+      expect(await res.json()).toMatchObject({ errorCode: 'http_error', detail: expect.stringContaining(String(status)) });
+    }
+    expect((await get(s.request, 'answer-0042', { DYNAMICNEKO: fetcherOf(s, { content: 1 }) })).status).toBe(502);
+    expect((await get(s.request, 'answer-0042', {})).status).toBe(503);
+  });
+  it('D1が未設定・キーの読み出しの失敗は、理由つきで 503 にする', async () => {
+    const none = await get(setup({ omitDb: true }).request, 'a', {});
+    expect(none.status).toBe(503);
+    expect(await none.json()).toMatchObject({ detail: expect.stringContaining('DB') });
+    const broken = setup({ db: { failOn: /FROM muse_search_answer_log/ } });
+    const res = await get(broken.request, 'a', { DYNAMICNEKO: fetcherOf(broken) });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ detail: expect.stringContaining('d1 down') });
+  });
+});
