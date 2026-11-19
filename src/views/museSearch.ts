@@ -564,6 +564,166 @@ export const MUSE_SEARCH_SCRIPT = `
       showKeys();
     }
 
+    // 👤ボタン: ログインユーザーのハンドルネームの設定(ユーザー指定 2026-11-19)。最上位のモーダルに、ユーザー名と、いまのハンドルネームを出す。
+    // 一文字入力するごとに、登録済みのハンドルネームと照合し(サーバーが判定)、一致が無ければ登録ボタンが押せる。押すと登録が完了する。
+    var MUSE_HANDLE_MESSAGES = {
+      available: '使えます',
+      taken: 'そのハンドルネームは、すでに使われています',
+      same: '今のハンドルネームと同じです',
+      empty: '名前を入力してください',
+      too_long: '20文字までです',
+      invalid_chars: '使えない文字(改行・タブなどの制御文字)が含まれています'
+    };
+    function openMuseHandleModal(doc, fetchFn, opener) {
+      if (doc.querySelector('[data-overlay="muse-handle"]')) return;
+      var overlay = museSearchEl(doc, 'div', 'muse-handle-overlay');
+      overlay.setAttribute('data-overlay', 'muse-handle');
+      overlay.style.zIndex = String(getNextZ(doc));
+      var dialog = museSearchEl(doc, 'div', 'muse-keys-dialog muse-handle-dialog');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.setAttribute('aria-labelledby', 'muse-handle-title');
+      var head = museSearchEl(doc, 'div', 'muse-keys-head');
+      var title = museSearchEl(doc, 'h2', 'muse-keys-title', 'ハンドルネーム');
+      title.id = 'muse-handle-title';
+      var close = museSearchEl(doc, 'button', 'muse-keys-close', '✕');
+      close.type = 'button';
+      close.setAttribute('data-action', 'close');
+      close.setAttribute('aria-label', '閉じる');
+      head.appendChild(title);
+      head.appendChild(close);
+      var body = museSearchEl(doc, 'div', 'muse-keys-body muse-handle-body');
+      var userLine = museSearchEl(doc, 'p', 'muse-handle-user', 'ユーザー名: (未取得)');
+      var currentLine = museSearchEl(doc, 'p', 'muse-handle-current', 'いまのハンドルネーム: (未取得)');
+      var label = museSearchEl(doc, 'label', 'muse-handle-label', 'ハンドルネーム(20文字まで)');
+      var input = museSearchEl(doc, 'input', 'muse-handle-input');
+      input.type = 'text';
+      input.setAttribute('data-field', 'handle-input');
+      input.setAttribute('autocomplete', 'off');
+      input.setAttribute('spellcheck', 'false');
+      input.setAttribute('maxlength', '100');
+      input.disabled = true;
+      label.appendChild(input);
+      var statusLine = museSearchEl(doc, 'p', 'muse-handle-status', 'ユーザー名・ハンドルネームを読み込んでいます…');
+      statusLine.setAttribute('data-field', 'handle-status');
+      statusLine.setAttribute('role', 'status');
+      statusLine.setAttribute('aria-live', 'polite');
+      var register = museSearchEl(doc, 'button', 'muse-handle-register', '登録');
+      register.type = 'button';
+      register.setAttribute('data-action', 'handle-register');
+      register.disabled = true;
+      body.appendChild(userLine);
+      body.appendChild(currentLine);
+      body.appendChild(label);
+      body.appendChild(statusLine);
+      body.appendChild(register);
+      dialog.appendChild(head);
+      dialog.appendChild(body);
+      overlay.appendChild(dialog);
+      doc.body.appendChild(overlay);
+
+      var closed = false;
+      var busy = false;
+      var checkNumber = 0;
+      function closeModal() {
+        closed = true;
+        doc.removeEventListener('keydown', onKeydown);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (opener && opener.focus) opener.focus();
+      }
+      function onKeydown(event) {
+        if (event.key === 'Escape') closeModal();
+        else if (event.key === 'Tab') {
+          event.preventDefault();
+          var items = dialog.querySelectorAll('button, input');
+          var enabled = [];
+          for (var i = 0; i < items.length; i++) { if (!items[i].disabled) enabled.push(items[i]); }
+          var at = Array.prototype.indexOf.call(enabled, doc.activeElement);
+          var next = event.shiftKey ? (at <= 0 ? enabled.length - 1 : at - 1) : (at < 0 || at === enabled.length - 1 ? 0 : at + 1);
+          enabled[next].focus();
+        }
+      }
+      close.addEventListener('click', closeModal);
+      overlay.addEventListener('click', function (event) { if (event.target === overlay) closeModal(); });
+      doc.addEventListener('keydown', onKeydown);
+      close.focus();
+
+      function setStatus(text, isError) {
+        statusLine.textContent = text;
+        statusLine.className = 'muse-handle-status' + (isError ? ' muse-search-error' : '');
+      }
+      function parse(res) {
+        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+      }
+
+      // いまのユーザー名と、登録済みのハンドルネームを取る。取れなかったときは、「未設定」に見せず、入力欄と登録ボタンを使えなくする。
+      fetchFn('/api/muse-search/handle').then(parse).then(function (r) {
+        if (closed) return;
+        if (!r.ok) { setStatus(failText(r, 'ハンドルネーム'), true); return; }
+        userLine.textContent = 'ユーザー名: ' + r.data.userName;
+        currentLine.textContent = 'いまのハンドルネーム: ' + (r.data.handle ? r.data.handle.handleName : '未設定');
+        input.disabled = false;
+        setStatus('', false);
+        input.focus();
+      }).catch(function (error) {
+        if (closed) return;
+        setStatus('ハンドルネームを読み込めませんでした: ' + (error && error.message ? error.message : String(error)), true);
+      });
+
+      // 一文字入力するごとの照合。登録ボタンは、照合の応答を待つ間は押せず、一致が無い(available)ときだけ押せる。古い応答は、いまの入力の判定を上書きしない。
+      input.addEventListener('input', function () {
+        checkNumber += 1;
+        var mine = checkNumber;
+        var value = input.value;
+        register.disabled = true;
+        if (value.trim() === '') { setStatus(MUSE_HANDLE_MESSAGES.empty, false); return; }
+        setStatus('照合しています…', false);
+        fetchFn('/api/muse-search/handle/check?name=' + encodeURIComponent(value)).then(parse).then(function (r) {
+          if (closed || mine !== checkNumber) return;
+          if (!r.ok) { setStatus(failText(r, 'ハンドルネームの照合'), true); return; }
+          var available = r.data.available === true;
+          setStatus(MUSE_HANDLE_MESSAGES[r.data.status] || String(r.data.status), !available);
+          register.disabled = !available || busy;
+        }).catch(function (error) {
+          if (closed || mine !== checkNumber) return;
+          setStatus('照合できませんでした: ' + (error && error.message ? error.message : String(error)), true);
+        });
+      });
+
+      // 登録。二重に送らない。他のユーザーが先に取っていた(409)ときは押せなくし、サーバーの失敗・通信の失敗は、理由を出して押し直せるようにする。
+      register.addEventListener('click', function () {
+        if (busy || register.disabled) return;
+        busy = true;
+        register.disabled = true;
+        input.disabled = true;
+        setStatus('登録しています…', false);
+        fetchFn('/api/muse-search/handle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: input.value }) }).then(parse).then(function (r) {
+          busy = false;
+          input.disabled = false;
+          if (closed) return;
+          if (r.ok) {
+            currentLine.textContent = 'いまのハンドルネーム: ' + r.data.handle.handleName;
+            setStatus('登録しました: ' + r.data.handle.handleName, false);
+            register.disabled = true;
+            return;
+          }
+          if (r.status === 409) {
+            setStatus(r.data && r.data.error ? r.data.error : MUSE_HANDLE_MESSAGES.taken, true);
+            register.disabled = true;
+            return;
+          }
+          setStatus(failText(r, 'ハンドルネームの登録'), true);
+          register.disabled = false;
+        }).catch(function (error) {
+          busy = false;
+          input.disabled = false;
+          if (closed) return;
+          setStatus('登録できませんでした: ' + (error && error.message ? error.message : String(error)), true);
+          register.disabled = false;
+        });
+      });
+    }
+
     // 初期画面のスレッド一覧。各スレッドへの最終書き込みの日時が新しいほうから順に(APIの順のまま)、スレッドタイトルのリンクだけを並べる。
     // リンクを押すと、そのスレッドへの最終書き込みを、リンクの下に、段落ごとの <p> で出す。もう一度押すと閉じる。開き直しでは取り直さない。
     var MUSE_THREAD_ROLE_LABELS = { user: '質問', assistant: '回答' };
@@ -746,6 +906,8 @@ export const MUSE_SEARCH_SCRIPT = `
       var busy = false;
       var keysButton = doc.querySelector('button[data-action="keys"]');
       keysButton.addEventListener('click', function () { openMuseKeysModal(doc, fetchFn, keysButton); });
+      var handleButton = doc.querySelector('button[data-action="handle"]');
+      handleButton.addEventListener('click', function () { openMuseHandleModal(doc, fetchFn, handleButton); });
       var threads = doc.querySelector('[data-field="threads"]');
       loadMuseThreads(doc, fetchFn, threads);
 
@@ -848,6 +1010,12 @@ export function getMuseSearchPage(): string {
     .muse-search-note { color: var(--text-muted); font-size: 13px; margin: 8px 0 0; }
     .muse-search-status { color: var(--text-secondary); margin: 16px 0 8px; }
     .muse-search-error { color: var(--danger-color); }
+    .muse-handle-user, .muse-handle-current { margin: 0 0 6px; overflow-wrap: anywhere; }
+    .muse-handle-label { display: block; margin: 12px 0 0; color: var(--text-secondary); font-size: 13px; }
+    .muse-handle-input { display: block; width: 100%; min-height: 36px; box-sizing: border-box; margin: 4px 0 0; padding: 0 12px; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; font: inherit; }
+    .muse-handle-status { min-height: 1.5em; margin: 8px 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+    .muse-handle-register { min-height: 36px; padding: 0 18px; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font: inherit; }
+    .muse-handle-register:disabled { opacity: 0.5; cursor: not-allowed; }
     .muse-setting { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 4px; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
     .muse-setting input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-color); }
     .muse-threads { margin: 16px 0 0; }
@@ -880,6 +1048,7 @@ export function getMuseSearchPage(): string {
     .muse-keys-table .muse-answers-preview { min-width: 14em; overflow-wrap: anywhere; }
     .muse-answer-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-recent-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
+    .muse-handle-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-answers-link { color: var(--accent-color); text-decoration: none; }
     .muse-sort { font: inherit; font-weight: 600; line-height: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; min-height: 0; min-width: 0; height: auto; cursor: pointer; text-align: inherit; white-space: nowrap; }
     .muse-keys-list .muse-sort { white-space: normal; }
@@ -900,6 +1069,7 @@ export function getMuseSearchPage(): string {
     .muse-keys-table .muse-keys-key { min-width: 12em; overflow-wrap: anywhere; }
     .muse-keys-table .muse-keys-time { white-space: nowrap; }
     .muse-search-form button[data-action="keys"] { padding: 0 12px; }
+    .muse-search-form button[data-action="handle"] { padding: 0 12px; }
     .muse-search-snippet mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
     @media (max-width: 560px) {
       .muse-stacked .muse-keys-list, .muse-stacked .muse-keys-list tbody, .muse-stacked .muse-keys-list tr, .muse-stacked .muse-keys-list td { display: block; }
@@ -922,6 +1092,7 @@ export function getMuseSearchPage(): string {
       <input type="search" name="q" placeholder="tree-view の Museタブの会話から探す" aria-label="検索する文字" maxlength="500" autocomplete="off">
       <button type="submit">検索</button>
       <button type="button" data-action="keys" aria-label="検索キーの一覧を開く" title="検索キーの一覧(AIチャットでの出現回数の順)">🔑</button>
+      <button type="button" data-action="handle" aria-label="ハンドルネームを設定する" title="ハンドルネームの設定">👤</button>
     </form>
     <p class="muse-search-note">質問と回答の両方を探します(大文字と小文字は区別しません)。新しい順に、最大100件まで表示します。</p>
     <label class="muse-setting"><input type="checkbox" data-setting="stacked"> スマホ幅(幅560px以下)で、検索キーの表を縦並びにする</label>
@@ -930,7 +1101,7 @@ export function getMuseSearchPage(): string {
     <section class="muse-threads" data-field="threads" aria-label="スレッド(最終書き込みの新しい順)"></section>
   </main>
   <script>${MUSE_SEARCH_SCRIPT}
-    initMuseSearchPage(document, function (url) { return fetch(url, { headers: { Accept: 'application/json' } }); });
+    initMuseSearchPage(document, function (url, init) { var options = init || {}; var headers = Object.assign({ Accept: 'application/json' }, options.headers || {}); return fetch(url, Object.assign({}, options, { headers: headers })); });
   </script>
   <script>${getThemeToggleScript()}</script>
 </body>

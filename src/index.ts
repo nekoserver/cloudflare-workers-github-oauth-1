@@ -500,6 +500,7 @@ import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
 import { listMuseSearchKeys, recordSearchedKey } from './utils/museSearchKeys';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
+import { MUSE_HANDLE_MESSAGES, checkHandleAvailability, getHandle, registerHandle } from './utils/museHandles';
 import { MUSE_THREAD_ID_MAX, fetchMuseThreadLast, fetchMuseThreadList, toParagraphs } from './utils/museThreads';
 import { MUSE_ANSWER_ID_MAX, buildHighlightSegments, fetchMuseAnswer, listAnswerKeys, truncateAnswer } from './utils/museAnswerView';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
@@ -719,6 +720,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_work_targets', migration: '0187', description: '任意の対象物台帳。集計時の入力は必須としない', syncPolicy: 'auto' },
   { name: 'muse_search_key_log', migration: '0195', description: '/muse-searchの検索キーの記録(追記のみ)。検索キー・AIチャットの応答ログでの出現回数・tree-viewの会話ログでの出現回数・検索日時。🔑ボタンの一覧はここから作る', syncPolicy: 'auto' },
   { name: 'muse_search_answer_log', migration: '0196', description: '/muse-searchの回答ごとの出現回数の記録(追記のみ)。検索キー・回答ID・チャットID・スレッドID・回答内での出現回数・一致箇所の前後・検索日時。🗒️ボタンのスレッドごとの一覧はここから作る', syncPolicy: 'auto' },
+  { name: 'muse_user_handles', migration: '0197', description: '/muse-searchのハンドルネーム(1人1つ)。ユーザーID・ユーザー名(このアプリへのログインユーザー)・ハンドルネーム・照合用のキー(大文字小文字・全角半角を無視。UNIQUE)。👤ボタンで登録・変更する', syncPolicy: 'auto' },
   { name: 'conversation_stream_hosts', migration: '0194', description: '会話ストリームの接続先の上書き。台帳(conversation-stream-routes.json)が既定で、同じIDの上書き・追加・無効化だけを持つ', syncPolicy: 'auto' },
   { name: 'cf_container_session_targets', migration: '0187', description: '任意の対象物と稼働セッションの関連', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_notes', migration: '0187', description: 'セッション内の複数作業・目的・分類・使用ツールと追記型改訂履歴', syncPolicy: 'auto' },
@@ -3257,6 +3259,7 @@ CREATE INDEX IF NOT EXISTS idx_muse_search_key_log_user_key
 
 CREATE INDEX IF NOT EXISTS idx_muse_search_answer_log_user_answer_key
   ON muse_search_answer_log(user_id, answer_id, search_key, id DESC);`,
+  '0197': `CREATE TABLE IF NOT EXISTS muse_user_handles (user_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(user_id)) > 0), user_name TEXT NOT NULL CHECK (length(trim(user_name)) > 0), handle_name TEXT NOT NULL CHECK (length(trim(handle_name)) > 0 AND length(handle_name) <= 40), handle_key TEXT NOT NULL UNIQUE CHECK (length(handle_key) > 0), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`,
   '0194': `CREATE TABLE IF NOT EXISTS conversation_stream_hosts (
   id TEXT PRIMARY KEY NOT NULL,
   label TEXT NOT NULL,
@@ -3724,6 +3727,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   conversation_stream_hosts: { id: 'pk', origin: 'uk', enabled: 'idx', priority: 'idx' },
   muse_search_key_log: { id: 'pk', user_id: 'fk+idx', search_key: 'idx' },
   muse_search_answer_log: { id: 'pk', user_id: 'fk+idx', search_key: 'idx', answer_id: 'idx' },
+  muse_user_handles: { user_id: 'pk+fk', handle_key: 'uk' },
   cf_container_session_targets: { session_id: 'pk+fk', target_id: 'pk+fk' },
   cf_container_runtime_notes: { note_id: 'pk', session_id: 'uk+fk', entry_key: 'uk', revision: 'uk' },
   cf_container_cost_observations: { cost_record_id: 'pk', session_id: 'uk+fk', cost_key: 'uk', revision: 'uk', source: 'uk', source_ref: 'uk' },
@@ -3969,6 +3973,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   conversation_stream_hosts: 'system',
   muse_search_key_log: 'ai',
   muse_search_answer_log: 'ai',
+  muse_user_handles: 'config',
   cf_container_session_targets: 'system',
   cf_container_runtime_notes: 'system',
   cf_container_cost_observations: 'system',
@@ -4295,6 +4300,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   ai_chat_shares: { user_id: 'user_sessions', image_id: 'aichat_images' },
   muse_search_key_log: { user_id: 'user_sessions' },
   muse_search_answer_log: { user_id: 'user_sessions' },
+  muse_user_handles: { user_id: 'user_sessions' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -20934,6 +20940,63 @@ app.get('/api/muse-search/thread', authMiddleware, cfDashboardAdminMiddleware, a
   }
   const { content, truncated } = truncateAnswer(result.data.content);
   return c.json({ threadId: result.data.threadId, chatId: result.data.chatId, role: result.data.role, createdAt: result.data.createdAt, truncated, paragraphs: toParagraphs(content) });
+});
+
+/**
+ * 👤ボタン: ログインユーザーのユーザー名(JWTの sub)と、登録済みのハンドルネーム(無ければ null)。
+ * D1が未設定・読めないときは、「未登録」にせず、理由つきで 503。
+ */
+app.get('/api/muse-search/handle', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const userName = c.get('user').sub;
+  const error = 'ハンドルネームを読めませんでした';
+  if (!c.env.DB) return c.json({ error, detail: 'D1(DB)が未設定です' }, 503);
+  try {
+    const handle = await getHandle(c.env.DB, userName);
+    return c.json({ userName, handle: handle ? { handleName: handle.handleName, userName: handle.userName, updatedAt: handle.updatedAt } : null });
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    logger.error('muse-search: ハンドルネームを読めませんでした', { error: detail });
+    return c.json({ error, detail }, 503);
+  }
+});
+
+/**
+ * 一文字入力するごとの照合。他のユーザーの名前と一致しなければ available: true。誰の名前かは返さない。
+ * 検査に通らない名前は、D1を見ずに、available: false と理由(status)を返す。D1の失敗は、「使える」にせず 503。
+ */
+app.get('/api/muse-search/handle/check', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await checkHandleAvailability(c.env.DB, c.get('user').sub, c.req.query('name') ?? '');
+  if (result.ok) return c.json({ available: result.status === 'available', status: result.status });
+  if (result.errorCode === 'db_missing' || result.errorCode === 'db_error') {
+    logger.error('muse-search: ハンドルネームを照合できませんでした', { error: result.detail });
+    return c.json({ available: false, error: 'ハンドルネームを照合できませんでした', detail: result.detail }, 503);
+  }
+  return c.json({ available: false, status: result.errorCode });
+});
+
+/**
+ * ハンドルネームの登録(自分の名前は変更できる)。JSON以外のPOSTは断る(フォームからの勝手な登録を防ぐ)。
+ * ユーザー名(ログインユーザー)も一緒にD1へ記録する。他のユーザーの名前・自分の今の名前と一致すれば 409、検査に通らなければ 400、D1の失敗は 503。
+ */
+app.post('/api/muse-search/handle', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!(c.req.header('Content-Type') ?? '').toLowerCase().startsWith('application/json')) return c.json({ error: 'JSONで送ってください' }, 415);
+  let body: unknown;
+  try { body = await c.req.json(); } catch { return c.json({ error: '本文が壊れています' }, 400); }
+  const name = body && typeof body === 'object' && !Array.isArray(body) ? (body as { name?: unknown }).name : undefined;
+  if (typeof name !== 'string') return c.json({ error: 'name(文字)が必要です' }, 400);
+  const userName = c.get('user').sub;
+  const result = await registerHandle(c.env.DB, { userId: userName, userName, name });
+  if (result.ok) return c.json({ handle: { userName: result.handle.userName, handleName: result.handle.handleName, updatedAt: result.handle.updatedAt } });
+  if (result.errorCode === 'db_missing' || result.errorCode === 'db_error') {
+    logger.error('muse-search: ハンドルネームを登録できませんでした', { error: result.detail });
+    return c.json({ error: 'ハンドルネームを登録できませんでした', detail: result.detail }, 503);
+  }
+  if (result.errorCode === 'taken' || result.errorCode === 'same') return c.json({ status: result.errorCode, error: MUSE_HANDLE_MESSAGES[result.errorCode] }, 409);
+  if (result.errorCode === 'user_name_missing') return c.json({ status: result.errorCode, error: 'ユーザー名を取得できませんでした' }, 400);
+  return c.json({ status: result.errorCode, error: MUSE_HANDLE_MESSAGES[result.errorCode] }, 400);
 });
 
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
