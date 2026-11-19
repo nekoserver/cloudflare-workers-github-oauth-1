@@ -1168,12 +1168,15 @@ describe('初期画面のスレッド一覧', () => {
     expect(page.status()).toContain('見つかりませんでした');
     expect(calls(fetchFn).filter((u) => u === '/api/muse-search/threads')).toHaveLength(1);
   });
-  it('空の検索文では、一覧は隠れない(検索していない)', async () => {
-    const page = mount(router(threadsRoutes()));
+  it('空の検索文では、検索はしないが、入力を促すメッセージは「検索結果」のタブにあるので、そのタブへ移る(2026-11-19、タブの追加による仕様変更。以前は、一覧のまま)', async () => {
+    const fetchFn = router(threadsRoutes());
+    const page = mount(fetchFn);
     await flush();
     page.submit('   ');
     await flush();
-    expect(section().hidden).toBe(false);
+    expect(section().hidden).toBe(true);
+    expect(page.status()).toContain('検索する文字を入力');
+    expect(calls(fetchFn).filter((u) => u.startsWith('/api/muse-search?'))).toEqual([]);
   });
   // 「全開/全閉」トグルボタンと検索窓(2026-11-19、ユーザー指定): 表示中のスレッド一覧に検索をかけられるようにする。
   // 検索窓は、表示中のスレッドのタイトルを絞り込む(ブラウザ側だけ。サーバーは呼ばない)。全開/全閉は、表示中のスレッドの最終書き込みを、まとめて開く/閉じる。
@@ -1412,6 +1415,420 @@ describe('スマホ幅の縦並びの設定(切り替えスイッチ)', () => {
     mount(reply({ threads: [] }));
     expect(toggle().closest('[data-field="threads"]')).toBeNull();
     expect(toggle().closest('[role="dialog"]')).toBeNull();
+  });
+});
+
+// 👤ボタン(2026-11-19、ユーザー指定): ログインユーザーのハンドルネームを設定する。一文字入力するごとに、登録済みのハンドルネームと照合し、
+// 一致が無ければ登録ボタンが押せる。登録ボタンを押すと、登録が完了する。
+describe('👤ハンドルネームの設定', () => {
+  type Handler = { get?: () => Response | Promise<Response>; check?: (name: string) => Response | Promise<Response>; post?: (body: { name: string }) => Response | Promise<Response> };
+  const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  /** 👤の通信(GET handle・GET handle/check・POST handle)をメソッドごとに答える。それ以外(スレッド一覧)は空で答える。 */
+  const makeFetch = (h: Handler) => vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET';
+    if (url.startsWith('/api/muse-search/handle/check')) return h.check!(decodeURIComponent(url.split('name=')[1] ?? ''));
+    if (url === '/api/muse-search/handle' && method === 'GET') return h.get!();
+    if (url === '/api/muse-search/handle' && method === 'POST') return h.post!(JSON.parse(String(init?.body)));
+    if (url === '/api/muse-search/threads') return jsonRes({ threads: [] });
+    throw new Error('想定外の通信: ' + method + ' ' + url);
+  }) as unknown as typeof fetch;
+  const statusText = (a: string) => ({ available: '使えます', taken: 'そのハンドルネームは、すでに使われています', same: '今のハンドルネームと同じです', empty: '名前を入力してください', too_long: '20文字までです', invalid_chars: '使えない文字(改行・タブなどの制御文字)が含まれています' } as Record<string, string>)[a];
+  const base = (over: Handler = {}): Handler => ({
+    get: () => jsonRes({ userName: 'nekoserver', handle: null }),
+    check: () => jsonRes({ available: true, status: 'available' }),
+    post: (body) => jsonRes({ handle: { userName: 'nekoserver', handleName: body.name, updatedAt: '2026-11-19T10:00:00.000Z' } }),
+    ...over,
+  });
+  const handleButton = () => document.querySelector<HTMLButtonElement>('button[data-action="handle"]')!;
+  const overlay = () => document.querySelector<HTMLElement>('[data-overlay="muse-handle"]');
+  const input = () => overlay()!.querySelector<HTMLInputElement>('input[data-field="handle-input"]')!;
+  const register = () => overlay()!.querySelector<HTMLButtonElement>('button[data-action="handle-register"]')!;
+  const status = () => overlay()!.querySelector('[data-field="handle-status"]')!.textContent;
+  const press = (key: string) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  const type = async (value: string) => { input().value = value; input().dispatchEvent(new Event('input', { bubbles: true })); await flush(); };
+  const callsTo = (fetchFn: typeof fetch, prefix: string) => (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).startsWith(prefix));
+  const open = async (h: Handler = base()) => {
+    const fetchFn = makeFetch(h);
+    mount(fetchFn);
+    await flush();
+    handleButton().click();
+    await flush();
+    return fetchFn;
+  };
+
+  it('検索欄の🔑の右に👤がある(名前と説明を持つ)。ページを開いただけでは、モーダルは出ない', () => {
+    mount(makeFetch(base()));
+    expect(handleButton().textContent).toContain('👤');
+    expect(handleButton().type).toBe('button');
+    expect(handleButton().getAttribute('aria-label')).toBeTruthy();
+    expect(document.querySelector('button[data-action="keys"]')!.nextElementSibling).toBe(handleButton());
+    expect(overlay()).toBeNull();
+  });
+  it('押すと、最上位のモーダルが開き、ユーザー名(ログインユーザー)と、いまのハンドルネーム(無ければ「未設定」)を出す。入力欄にフォーカス。登録ボタンは押せない', async () => {
+    const fetchFn = await open();
+    const dialog = overlay()!.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(callsTo(fetchFn, '/api/muse-search/handle')[0][0]).toBe('/api/muse-search/handle');
+    expect(dialog.querySelector('.muse-handle-user')!.textContent).toContain('nekoserver');
+    expect(dialog.querySelector('.muse-handle-current')!.textContent).toContain('未設定');
+    expect(document.activeElement).toBe(input());
+    expect(register().disabled).toBe(true);
+  });
+  it('登録済みなら、そのハンドルネームを出す', async () => {
+    await open(base({ get: () => jsonRes({ userName: 'nekoserver', handle: { handleName: 'ねこさん', userName: 'nekoserver', updatedAt: '2026-11-19T01:00:00.000Z' } }) }));
+    expect(overlay()!.querySelector('.muse-handle-current')!.textContent).toContain('ねこさん');
+  });
+  it('一文字入力するごとに、登録済みのハンドルネームと照合する(入力のたびに1回。入力した文字をエンコードして送る)', async () => {
+    const seen: string[] = [];
+    const fetchFn = await open(base({ check: (name) => { seen.push(name); return jsonRes({ available: true, status: 'available' }); } }));
+    await type('N');
+    await type('Ne');
+    await type('Nek');
+    await type('Nek 猫');
+    expect(seen).toEqual(['N', 'Ne', 'Nek', 'Nek 猫']);
+    expect(callsTo(fetchFn, '/api/muse-search/handle/check').map((c) => c[0])).toEqual(['N', 'Ne', 'Nek', 'Nek 猫'].map((v) => '/api/muse-search/handle/check?name=' + encodeURIComponent(v)));
+  });
+  it('一致が無ければ(available)、「使えます」と出て、登録ボタンが押せる。一致すれば(taken・same)、理由を出して、押せない', async () => {
+    const answers: Record<string, unknown> = { free: { available: true, status: 'available' }, used: { available: false, status: 'taken' }, mine: { available: false, status: 'same' } };
+    await open(base({ check: (name) => jsonRes(answers[name]) }));
+    await type('free');
+    expect(status()).toBe('使えます');
+    expect(register().disabled).toBe(false);
+    await type('used');
+    expect(status()).toBe(statusText('taken'));
+    expect(register().disabled).toBe(true);
+    await type('mine');
+    expect(status()).toBe(statusText('same'));
+    expect(register().disabled).toBe(true);
+    await type('free');
+    expect(register().disabled).toBe(false);
+  });
+  it('検査に通らない名前(too_long・invalid_chars)は、理由を出して、押せない。空にすると、照合せず、押せない', async () => {
+    const fetchFn = await open(base({ check: (name) => jsonRes({ available: false, status: name === 'long' ? 'too_long' : 'invalid_chars' }) }));
+    await type('long');
+    expect(status()).toBe(statusText('too_long'));
+    expect(register().disabled).toBe(true);
+    await type('ctrl');
+    expect(status()).toBe(statusText('invalid_chars'));
+    const before = callsTo(fetchFn, '/api/muse-search/handle/check').length;
+    await type('');
+    expect(status()).toBe(statusText('empty'));
+    expect(register().disabled).toBe(true);
+    await type('   ');
+    expect(register().disabled).toBe(true);
+    expect(callsTo(fetchFn, '/api/muse-search/handle/check').length).toBe(before);
+  });
+  it('照合の応答を待つ間は、登録ボタンを押せない。遅れて届いた古い応答は、いまの入力の判定を上書きしない', async () => {
+    let releaseOld!: (r: Response) => void;
+    const old = new Promise<Response>((resolve) => { releaseOld = resolve; });
+    await open(base({ check: (name) => (name === 'ab' ? old : jsonRes({ available: false, status: 'taken' })) }));
+    input().value = 'ab';
+    input().dispatchEvent(new Event('input', { bubbles: true }));
+    await flush();
+    expect(register().disabled).toBe(true);
+    expect(status()).toContain('照合');
+    await type('abc');
+    expect(status()).toBe(statusText('taken'));
+    releaseOld(jsonRes({ available: true, status: 'available' }));
+    await flush();
+    expect(status()).toBe(statusText('taken'));
+    expect(register().disabled).toBe(true);
+  });
+  it('登録ボタンを押すと、入力した名前をJSONでPOSTして、登録が完了する(完了の表示。いまのハンドルネームが更新される。ボタンは押せなくなる)', async () => {
+    const fetchFn = await open();
+    await type('ねこさん');
+    register().click();
+    await flush();
+    const [url, init] = callsTo(fetchFn, '/api/muse-search/handle').find((c) => (c[1] as RequestInit | undefined)?.method === 'POST')! as [string, RequestInit];
+    expect(url).toBe('/api/muse-search/handle');
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(JSON.parse(String(init.body))).toEqual({ name: 'ねこさん' });
+    expect(status()).toContain('登録しました');
+    expect(overlay()!.querySelector('.muse-handle-current')!.textContent).toContain('ねこさん');
+    expect(register().disabled).toBe(true);
+  });
+  it('登録中は、ボタンを押し直しても、二重に送らない', async () => {
+    let release!: (r: Response) => void;
+    const slow = new Promise<Response>((resolve) => { release = resolve; });
+    const fetchFn = await open(base({ post: () => slow }));
+    await type('ねこ');
+    register().click();
+    register().click();
+    expect(callsTo(fetchFn, '/api/muse-search/handle').filter((c) => (c[1] as RequestInit | undefined)?.method === 'POST')).toHaveLength(1);
+    expect(register().disabled).toBe(true);
+    release(jsonRes({ handle: { userName: 'nekoserver', handleName: 'ねこ', updatedAt: 't' } }));
+    await flush();
+    expect(status()).toContain('登録しました');
+  });
+  it('登録のとき、他のユーザーが先に取っていた(409)なら、理由を出して、押せない。サーバーの失敗(503)・通信の失敗は、理由を出して、押し直せる(登録した扱いにしない)', async () => {
+    await open(base({ post: () => jsonRes({ status: 'taken', error: 'そのハンドルネームは、すでに使われています' }, 409) }));
+    await type('ねこ');
+    register().click();
+    await flush();
+    expect(status()).toBe('そのハンドルネームは、すでに使われています');
+    expect(register().disabled).toBe(true);
+    expect(overlay()!.querySelector('.muse-handle-current')!.textContent).toContain('未設定');
+    document.body.innerHTML = '';
+    await open(base({ post: () => jsonRes({ error: 'x', detail: 'd1 down' }, 503) }));
+    await type('ねこ');
+    register().click();
+    await flush();
+    expect(status()).toMatch(/503.*d1 down/);
+    expect(register().disabled).toBe(false);
+    expect(overlay()!.querySelector('.muse-handle-current')!.textContent).toContain('未設定');
+    document.body.innerHTML = '';
+    await open(base({ post: () => { throw new Error('network down'); } }));
+    await type('ねこ');
+    register().click();
+    await flush();
+    expect(status()).toContain('network down');
+    expect(register().disabled).toBe(false);
+  });
+  it('ユーザー名・ハンドルネームの読み込みに失敗したときは、理由を出し、入力欄と登録ボタンを使えなくする(「未設定」に見せない)。照合の失敗は、「使えます」にせず、理由を出して、押せない', async () => {
+    await open(base({ get: () => jsonRes({ error: 'x', detail: 'd1 down' }, 503) }));
+    expect(status()).toMatch(/503.*d1 down/);
+    expect(input().disabled).toBe(true);
+    expect(register().disabled).toBe(true);
+    expect(overlay()!.querySelector('.muse-handle-current')!.textContent).not.toContain('未設定');
+    document.body.innerHTML = '';
+    await open(base({ check: () => jsonRes({ available: false, error: 'x', detail: 'd1 down' }, 503) }));
+    await type('ねこ');
+    expect(status()).toMatch(/503.*d1 down/);
+    expect(register().disabled).toBe(true);
+  });
+  it('✕・Esc・外側のクリックで閉じ、👤へフォーカスが戻る。開いている間に👤を押し直しても重ねない。閉じたあとの遅れた応答は、画面を出さない', async () => {
+    let release!: (r: Response) => void;
+    const slow = new Promise<Response>((resolve) => { release = resolve; });
+    await open(base({ get: () => slow }));
+    handleButton().click();
+    expect(document.querySelectorAll('[data-overlay="muse-handle"]')).toHaveLength(1);
+    expect(overlay()!.textContent).toContain('読み込んでいます');
+    press('Escape');
+    expect(overlay()).toBeNull();
+    expect(document.activeElement).toBe(handleButton());
+    release(jsonRes({ userName: 'nekoserver', handle: null }));
+    await flush();
+    expect(overlay()).toBeNull();
+    handleButton().click();
+    await flush();
+    overlay()!.querySelector<HTMLButtonElement>('button[data-action="close"]')!.click();
+    expect(overlay()).toBeNull();
+    handleButton().click();
+    await flush();
+    overlay()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(overlay()).toBeNull();
+  });
+  it('Tabは、モーダルの外へ出ず、入力欄・登録ボタン・✕の間を行き来する(Shift+Tabは逆向き)', async () => {
+    await open();
+    await type('ねこ');
+    const close = overlay()!.querySelector<HTMLButtonElement>('button[data-action="close"]')!;
+    const tab = (shiftKey = false) => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(input());
+    tab();
+    expect(document.activeElement).toBe(register());
+    tab();
+    expect(document.activeElement).toBe(close);
+    tab();
+    expect(document.activeElement).toBe(input());
+    tab(true);
+    expect(document.activeElement).toBe(close);
+  });
+  it('重なり順は、いま画面にある固定位置の要素より上(getNextZ)', async () => {
+    const html = getMuseSearchPage();
+    const style = document.createElement('style');
+    style.textContent = html.slice(html.indexOf('<style id="muse-search-style">') + 30, html.indexOf('</style>', html.indexOf('<style id="muse-search-style">')));
+    document.head.appendChild(style);
+    try {
+      mount(makeFetch(base()));
+      const other = document.createElement('div');
+      other.style.cssText = 'position:fixed;inset:0;z-index:5000';
+      document.body.appendChild(other);
+      handleButton().click();
+      await flush();
+      expect(Number(overlay()!.style.zIndex)).toBe(5100);
+    } finally { style.remove(); }
+  });
+  it('サーバーから来た文字列(ユーザー名・ハンドルネーム・理由)は、HTMLとして解釈せず、文字のまま出す', async () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    await open(base({ get: () => jsonRes({ userName: evil, handle: { handleName: evil, userName: evil, updatedAt: 't' } }), check: () => jsonRes({ available: false, status: 'taken' }) }));
+    expect(overlay()!.querySelectorAll('img')).toHaveLength(0);
+    expect(overlay()!.querySelector('.muse-handle-user')!.textContent).toContain(evil);
+    expect(overlay()!.querySelector('.muse-handle-current')!.textContent).toContain(evil);
+  });
+  it('ページが fetch に渡す関数は、メソッド・本文を渡せる(POSTできる)。CSS: 固定位置・固定色なし', () => {
+    const html = getMuseSearchPage();
+    expect(html).toMatch(/initMuseSearchPage\(document, function \(url, init\)/);
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-handle-overlay \{ position: fixed; inset: 0;/);
+    expect(style).toMatch(/\.muse-handle-input \{[^}]*var\(--/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
+// 水平タブ(2026-11-19、ユーザー指定): 「質問と回答の両方を探します…」の行の先頭(すぐ上)に、「スレッド一覧」「検索結果」のタブ。
+// 読み込み時は「スレッド一覧」が選ばれ、検索の結果を出すときは「検索結果」へ移る。タブを切り替えると、内容が切り替わる。
+// 「スレッド一覧」が選ばれるたびに、一覧を取り直す。
+describe('水平タブ(スレッド一覧・検索結果)', () => {
+  const thread = (over: Record<string, unknown> = {}) => ({ threadId: 't1', title: 'スレッド1', lastPostAt: 1763535000, ...over });
+  const router = (routes: Record<string, () => Promise<Response> | Response>) => vi.fn(async (url: string) => {
+    const handler = Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1];
+    if (!handler) throw new Error('想定外のURL: ' + url);
+    return handler();
+  }) as unknown as typeof fetch;
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const baseRoutes = (extra: Record<string, () => Promise<Response> | Response> = {}) => ({ '/api/muse-search?': json({ count: 1, posts: [{ postId: 'a:user', chatId: 'c-00001', role: 'user', createdAt: 100, threadMark: false, snippet: { before: '前', match: '静的', after: '後' } }] }), '/api/muse-search/threads': json({ threads: [thread()] }), ...extra });
+  const tab = (name: 'threads' | 'results') => document.querySelector<HTMLButtonElement>(`[role="tab"][data-tab="${name}"]`)!;
+  const panel = (name: 'threads' | 'results') => document.querySelector<HTMLElement>(`[role="tabpanel"][data-panel="${name}"]`)!;
+  const threadCalls = (fetchFn: typeof fetch) => (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === '/api/muse-search/threads').length;
+  const selected = () => (['threads', 'results'] as const).filter((n) => tab(n).getAttribute('aria-selected') === 'true');
+  const key = (target: Element, k: string) => target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+
+  it('「質問と回答の両方を探します…」の行の先頭(すぐ上)に、水平のタブ(スレッド一覧・検索結果)がある', async () => {
+    mount(router(baseRoutes()));
+    await flush();
+    const tablist = document.querySelector<HTMLElement>('[role="tablist"]')!;
+    expect(tablist).not.toBeNull();
+    expect([...tablist.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(['スレッド一覧', '検索結果']);
+    const note = document.querySelector('.muse-search-note')!;
+    expect(tablist.nextElementSibling).toBe(note);
+    expect(tablist.getAttribute('aria-label')).toBeTruthy();
+  });
+  it('読み込み時は、「スレッド一覧」が選ばれている(選択・内容の表示・矢印キーの移動先が、そのタブ)。「検索結果」の内容は隠れている。タブと内容は、結びついている', async () => {
+    mount(router(baseRoutes()));
+    await flush();
+    expect(selected()).toEqual(['threads']);
+    expect(tab('threads').tabIndex).toBe(0);
+    expect(tab('results').tabIndex).toBe(-1);
+    expect(panel('threads').hidden).toBe(false);
+    expect(panel('results').hidden).toBe(true);
+    for (const n of ['threads', 'results'] as const) {
+      expect(tab(n).getAttribute('aria-controls')).toBe(panel(n).id);
+      expect(panel(n).getAttribute('aria-labelledby')).toBe(tab(n).id);
+    }
+  });
+  it('検索すると、「検索結果」へ選択が移り、検索の結果が見える。「スレッド一覧」は隠れる(検索を始めた時点で移る)', async () => {
+    let release!: (r: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    const page = mount(router(baseRoutes({ '/api/muse-search?': () => pending })));
+    await flush();
+    page.submit('静的');
+    expect(selected()).toEqual(['results']);
+    expect(panel('threads').hidden).toBe(true);
+    expect(panel('results').hidden).toBe(false);
+    expect(page.status()).toContain('検索しています');
+    release(new Response(JSON.stringify({ count: 1, posts: [{ postId: 'a:user', chatId: 'c-00001', role: 'user', createdAt: 100, threadMark: false, snippet: { before: '前', match: '静的', after: '後' } }] }), { status: 200 }));
+    await flush();
+    expect(page.items()).toHaveLength(1);
+    expect(tab('results').tabIndex).toBe(0);
+    expect(tab('threads').tabIndex).toBe(-1);
+  });
+  it('検索に失敗したときも、エラーの表示がある「検索結果」へ移る', async () => {
+    const page = mount(router(baseRoutes({ '/api/muse-search?': json({ detail: 'upstream 401' }, 502) })));
+    await flush();
+    page.submit('静的');
+    await flush();
+    expect(selected()).toEqual(['results']);
+    expect(page.status()).toMatch(/502.*upstream 401/);
+  });
+  it('タブを押すと、内容が切り替わる。「検索結果」は、前の検索の結果をそのまま見せる(取り直さない)', async () => {
+    const fetchFn = router(baseRoutes());
+    const page = mount(fetchFn);
+    await flush();
+    page.submit('静的');
+    await flush();
+    tab('threads').click();
+    await flush();
+    expect(selected()).toEqual(['threads']);
+    expect(panel('threads').hidden).toBe(false);
+    expect(panel('results').hidden).toBe(true);
+    tab('results').click();
+    expect(selected()).toEqual(['results']);
+    expect(panel('results').hidden).toBe(false);
+    expect(page.items()).toHaveLength(1);
+    expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).startsWith('/api/muse-search?'))).toHaveLength(1);
+  });
+  it('「スレッド一覧」が選ばれるたびに、一覧を取り直す(読み込み時の1回 + 選び直すたび)。「検索結果」を選んでも取り直さない', async () => {
+    const fetchFn = router(baseRoutes());
+    mount(fetchFn);
+    await flush();
+    expect(threadCalls(fetchFn)).toBe(1);
+    tab('results').click();
+    expect(threadCalls(fetchFn)).toBe(1);
+    tab('threads').click();
+    await flush();
+    expect(threadCalls(fetchFn)).toBe(2);
+    tab('results').click();
+    tab('threads').click();
+    await flush();
+    expect(threadCalls(fetchFn)).toBe(3);
+  });
+  it('取り直すと、一覧は作り直される(絞り込みの入力や、開いていたスレッドは、元に戻る)。最新の一覧が出る', async () => {
+    let titles = ['古いタイトル'];
+    mount(router(baseRoutes({ '/api/muse-search/threads': () => new Response(JSON.stringify({ threads: titles.map((t, i) => thread({ threadId: 't' + i, title: t })) })), '/api/muse-search/thread?': json({ threadId: 't0', chatId: 'c', role: 'assistant', createdAt: 1, truncated: false, paragraphs: ['本文'] }) })));
+    await flush();
+    document.querySelector<HTMLAnchorElement>('a[data-thread-id]')!.click();
+    await flush();
+    expect(document.querySelectorAll('.muse-thread-last')).toHaveLength(1);
+    titles = ['新しいタイトル', '古いタイトル'];
+    tab('results').click();
+    tab('threads').click();
+    await flush();
+    expect([...document.querySelectorAll('a[data-thread-id]')].map((a) => a.textContent)).toEqual(['新しいタイトル', '古いタイトル']);
+    expect(document.querySelectorAll('.muse-thread-last')).toHaveLength(0);
+  });
+  it('取り直しの応答が前後しても、いちばん新しい取り直しの結果だけを出す(古い応答は、画面を上書きしない)', async () => {
+    let call = 0;
+    let releaseOld!: (r: Response) => void;
+    const old = new Promise<Response>((resolve) => { releaseOld = resolve; });
+    mount(router(baseRoutes({ '/api/muse-search/threads': () => (++call === 2 ? old : new Response(JSON.stringify({ threads: [thread({ title: call === 1 ? '1回目' : '3回目' })] }))) })));
+    await flush();
+    tab('results').click();
+    tab('threads').click();
+    tab('results').click();
+    tab('threads').click();
+    await flush();
+    expect([...document.querySelectorAll('a[data-thread-id]')].map((a) => a.textContent)).toEqual(['3回目']);
+    releaseOld(new Response(JSON.stringify({ threads: [thread({ title: '2回目(古い応答)' })] })));
+    await flush();
+    expect([...document.querySelectorAll('a[data-thread-id]')].map((a) => a.textContent)).toEqual(['3回目']);
+  });
+  it('キーボード: → ← でタブを移り(その場で選ぶ)、Home・End で先頭・末尾へ。「スレッド一覧」へ移るたびに取り直す。フォーカスも、そのタブへ移る', async () => {
+    const fetchFn = router(baseRoutes());
+    mount(fetchFn);
+    await flush();
+    tab('threads').focus();
+    key(tab('threads'), 'ArrowRight');
+    expect(selected()).toEqual(['results']);
+    expect(document.activeElement).toBe(tab('results'));
+    key(tab('results'), 'ArrowRight');
+    expect(selected()).toEqual(['threads']);
+    await flush();
+    expect(threadCalls(fetchFn)).toBe(2);
+    key(tab('threads'), 'ArrowLeft');
+    expect(selected()).toEqual(['results']);
+    key(tab('results'), 'Home');
+    expect(selected()).toEqual(['threads']);
+    await flush();
+    expect(threadCalls(fetchFn)).toBe(3);
+    key(tab('threads'), 'End');
+    expect(selected()).toEqual(['results']);
+    expect(document.activeElement).toBe(tab('results'));
+  });
+  it('「検索結果」のタブが選ばれている間、上の検索窓(会話の検索)・🔑・👤・縦並びの設定は、そのまま使える(タブの外にある)', async () => {
+    mount(router(baseRoutes()));
+    await flush();
+    for (const selector of ['form[role="search"]', 'button[data-action="keys"]', 'button[data-action="handle"]', 'input[data-setting="stacked"]']) {
+      expect(document.querySelector(selector)!.closest('[role="tabpanel"]')).toBeNull();
+    }
+  });
+  it('CSS: タブは、固定色を使わず変数を使う。選ばれているタブは見分けられる', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-tabs \{[^}]*display: flex/);
+    expect(style).toMatch(/\.muse-tab\[aria-selected="true"\] \{[^}]*var\(--/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });
 
