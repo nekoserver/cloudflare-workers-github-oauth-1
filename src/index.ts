@@ -498,6 +498,7 @@ import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } 
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
+import { listMuseSearchKeys, recordSearchedKey } from './utils/museSearchKeys';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
 import { fetchMuseMonitor } from './utils/museMonitor';
@@ -713,6 +714,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_events', migration: '0187', description: 'コンテナ・セッションに紐付く重複取込防止付きイベント原本', syncPolicy: 'auto' },
   { name: 'cf_container_work_targets', migration: '0187', description: '任意の対象物台帳。集計時の入力は必須としない', syncPolicy: 'auto' },
+  { name: 'muse_search_key_log', migration: '0195', description: '/muse-searchの検索キーの記録(追記のみ)。検索キー・AIチャットの応答ログでの出現回数・tree-viewの会話ログでの出現回数・検索日時。🔑ボタンの一覧はここから作る', syncPolicy: 'auto' },
   { name: 'conversation_stream_hosts', migration: '0194', description: '会話ストリームの接続先の上書き。台帳(conversation-stream-routes.json)が既定で、同じIDの上書き・追加・無効化だけを持つ', syncPolicy: 'auto' },
   { name: 'cf_container_session_targets', migration: '0187', description: '任意の対象物と稼働セッションの関連', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_notes', migration: '0187', description: 'セッション内の複数作業・目的・分類・使用ツールと追記型改訂履歴', syncPolicy: 'auto' },
@@ -3225,6 +3227,17 @@ CREATE TABLE IF NOT EXISTS securemine_login_history (
 );
 CREATE INDEX IF NOT EXISTS idx_firewall_snapshots_time
   ON cf_container_firewall_snapshots(collected_at);`,
+  '0195': `CREATE TABLE IF NOT EXISTS muse_search_key_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  search_key TEXT NOT NULL CHECK (length(trim(search_key)) > 0 AND length(search_key) <= 500),
+  ai_chat_count INTEGER NOT NULL CHECK (typeof(ai_chat_count) = 'integer' AND ai_chat_count >= 0),
+  tree_view_count INTEGER CHECK (tree_view_count IS NULL OR (typeof(tree_view_count) = 'integer' AND tree_view_count >= 0)),
+  searched_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_muse_search_key_log_user_key
+  ON muse_search_key_log(user_id, search_key, id DESC);`,
   '0194': `CREATE TABLE IF NOT EXISTS conversation_stream_hosts (
   id TEXT PRIMARY KEY NOT NULL,
   label TEXT NOT NULL,
@@ -3690,6 +3703,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cf_container_runtime_events: { event_id: 'pk', container_id: 'fk+idx', session_id: 'fk', source: 'uk', source_event_id: 'uk' },
   cf_container_work_targets: { target_id: 'pk', parent_target_id: 'fk' },
   conversation_stream_hosts: { id: 'pk', origin: 'uk', enabled: 'idx', priority: 'idx' },
+  muse_search_key_log: { id: 'pk', user_id: 'fk+idx', search_key: 'idx' },
   cf_container_session_targets: { session_id: 'pk+fk', target_id: 'pk+fk' },
   cf_container_runtime_notes: { note_id: 'pk', session_id: 'uk+fk', entry_key: 'uk', revision: 'uk' },
   cf_container_cost_observations: { cost_record_id: 'pk', session_id: 'uk+fk', cost_key: 'uk', revision: 'uk', source: 'uk', source_ref: 'uk' },
@@ -3933,6 +3947,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cf_container_runtime_events: 'system',
   cf_container_work_targets: 'system',
   conversation_stream_hosts: 'system',
+  muse_search_key_log: 'ai',
   cf_container_session_targets: 'system',
   cf_container_runtime_notes: 'system',
   cf_container_cost_observations: 'system',
@@ -4257,6 +4272,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   tree_view_snapshot_refresh_log: { user_id: 'user_sessions', repo_name: 'installation_permissions' },
   tree_view_update_log: { repo_name: 'installation_permissions' },
   ai_chat_shares: { user_id: 'user_sessions', image_id: 'aichat_images' },
+  muse_search_key_log: { user_id: 'user_sessions' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -20799,7 +20815,25 @@ app.get('/api/muse-search', authMiddleware, cfDashboardAdminMiddleware, async (c
     logger.warn('muse-search upstream failed', { errorCode: result.errorCode });
     return c.json({ errorCode: result.errorCode, detail: result.detail }, notConfigured ? 503 : 502);
   }
-  return c.json({ count: result.data.posts.length, posts: toMuseSearchResultItems(result.data.posts, parsed.query) });
+  // 検索が成功したら、検索キーをAIチャットの応答ログでの出現回数・tree-viewでの出現回数・検索日時とともに本体のD1へ記録する(muse_search_key_log)。
+  // 記録に失敗しても検索の結果は返す。ただし、成功には見せず、理由を応答(keyLogError)とログで伝える。
+  const keyLog = await recordSearchedKey(c.env.DB, c.get('user').sub, parsed.query, result.data.occurrenceCount ?? null);
+  if (!keyLog.keyLogged) logger.error('muse-search: 検索キーの記録に失敗しました', { error: keyLog.keyLogError });
+  return c.json({ count: result.data.posts.length, posts: toMuseSearchResultItems(result.data.posts, parsed.query), ...keyLog });
+});
+
+/** 🔑ボタンの一覧。検索キーごとの最新の値を、AIチャットでの出現回数の多い順に返す。読めなかったときは、空の一覧にせず理由つきで失敗にする。 */
+app.get('/api/muse-search/keys', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const error = '検索キーの一覧を読めませんでした';
+  if (!c.env.DB) return c.json({ error, detail: 'D1(DB)が未設定です' }, 503);
+  try {
+    return c.json({ keys: await listMuseSearchKeys(c.env.DB, c.get('user').sub) });
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    logger.error('muse-search: 検索キーの一覧を読めませんでした', { error: detail });
+    return c.json({ error, detail }, 503);
+  }
 });
 
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {

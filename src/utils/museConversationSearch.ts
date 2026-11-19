@@ -23,7 +23,8 @@ export function parseMuseSearchQuery(raw: string | null | undefined): MuseSearch
 }
 
 export type MuseSearchPost = { postId: string; chatId: string; role: 'user' | 'assistant'; content: string; createdAt: number; threadMark: boolean };
-export type MuseSearchData = { posts: MuseSearchPost[] };
+/** occurrenceCount: tree-viewの会話ログでの出現回数(全件の回数)。dynamicnekoの古い版は返さないので、無いこともある。 */
+export type MuseSearchData = { posts: MuseSearchPost[]; occurrenceCount?: number };
 
 function isMuseSearchPost(value: unknown): value is MuseSearchPost {
   if (!value || typeof value !== 'object') return false;
@@ -34,7 +35,8 @@ function isMuseSearchPost(value: unknown): value is MuseSearchPost {
 
 export function isMuseSearchData(value: unknown): value is MuseSearchData {
   if (!value || typeof value !== 'object') return false;
-  const posts = (value as { posts?: unknown }).posts;
+  const { posts, occurrenceCount } = value as { posts?: unknown; occurrenceCount?: unknown };
+  if (occurrenceCount !== undefined && !(typeof occurrenceCount === 'number' && Number.isInteger(occurrenceCount) && occurrenceCount >= 0)) return false;
   return Array.isArray(posts) && posts.every(isMuseSearchPost);
 }
 
