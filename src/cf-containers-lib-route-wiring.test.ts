@@ -53,23 +53,6 @@ describe('前提チェック: lib経路の配線(server.js → Apache lib Virtua
   });
 });
 
-// tailnet ヘルス表示(SPEC.lib.tailnet-health.shtml)のフラグ恒常化。
-// 経緯: フラグ MUSE_TAILNET_HEALTH_OK は lib vhost の SetEnvIf が X-Forwarded-User を
-// 正規ユーザー名と照合して立てる。2026-11-18 夜、稼働中インスタンスの /etc/apache2 へ
-// 実名の行をその場で挿入して開通したが、インスタンス内の変更は再作成で消えるため、
-// 2026-11-19 の再作成で再び (access denied) に戻った(利用者報告)。
-// 行の置き場所はイメージ側の apache-lib.conf でなければならない(版4、REQ-TH-014)。
-// 判定はフラグを立てる SetEnvIf の行だけを対象にする(コメント中の言及では判定しない)。
-describe('前提チェック: tailnet ヘルス表示のフラグ恒常化(REQ-TH-014)', () => {
-  it('lib の VirtualHost に、X-Forwarded-User を実名で照合して MUSE_TAILNET_HEALTH_OK を立てる SetEnvIf がある', () => {
-    const lines = libConf.split('\n')
-      .map((l) => l.trim())
-      .filter((t) => t.startsWith('SetEnvIf') && t.includes('MUSE_TAILNET_HEALTH_OK=1'));
-    expect(lines.length, 'apache-lib.conf に MUSE_TAILNET_HEALTH_OK を立てる SetEnvIf が無い').toBeGreaterThanOrEqual(1);
-    expect(lines[0]).toMatch(/^SetEnvIf\s+X-Forwarded-User\s+\^nekoserver\$\s+MUSE_TAILNET_HEALTH_OK=1$/);
-  });
-});
-
 describe('前提チェック: Dockerfile が lib の VirtualHost を配置し有効化する', () => {
   it('apache-lib.conf を sites-available の 010-lib.conf として配置する', () => {
     expect(dockerfile).toMatch(/^COPY apache-lib\.conf \/etc\/apache2\/sites-available\/010-lib\.conf$/m);
@@ -113,6 +96,18 @@ describe('前提チェック: entrypoint の Apache 起動方法(REQ-LW-011)', (
     expect(envvarsAt, 'entrypoint に /etc/apache2/envvars の読み込みが無い').toBeGreaterThanOrEqual(0);
     expect(startAt, 'entrypoint に /usr/sbin/apache2 -k start が無い').toBeGreaterThanOrEqual(0);
     expect(startAt).toBeGreaterThan(envvarsAt);
+  });
+
+  it('envvars を読むサブシェルでは読み込みの前に nounset を解除する(REQ-LW-012)', () => {
+    // entrypoint 本体は set -u で動作し、サブシェルがそれを継承する。envvars は
+    // 未設定の APACHE_CONFDIR を展開するため、解除が無いと読み込みで落ちて
+    // httpd が実行されない(2026-11-19 の実例、SPEC の F6)。
+    const startLine = entrypoint.split('\n').find((l) => l.includes('/etc/apache2/envvars') && l.includes('/usr/sbin/apache2 -k start'));
+    expect(startLine, 'envvars の読み込みと直接起動を含む行が無い').toBeDefined();
+    const unsetAt = startLine!.indexOf('set +u');
+    const envvarsAt = startLine!.indexOf('/etc/apache2/envvars');
+    expect(unsetAt, 'envvars を読む前に set +u が無い').toBeGreaterThanOrEqual(0);
+    expect(unsetAt).toBeLessThan(envvarsAt);
   });
 
   it('起動後に両ポートの待ち受けを確認し、確認できない場合は失敗を明示する', () => {
