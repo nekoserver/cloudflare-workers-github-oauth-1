@@ -500,6 +500,7 @@ import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
 import { listMuseSearchKeys, recordSearchedKey } from './utils/museSearchKeys';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
+import { MUSE_ANSWER_ID_MAX, buildHighlightSegments, fetchMuseAnswer, listAnswerKeys, truncateAnswer } from './utils/museAnswerView';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
 import { fetchMuseMonitor } from './utils/museMonitor';
@@ -20871,6 +20872,36 @@ app.get('/api/muse-search/answers', authMiddleware, cfDashboardAdminMiddleware, 
     logger.error('muse-search: チャットごとの回答の一覧を読めませんでした', { error: detail });
     return c.json({ error, detail }, 503);
   }
+});
+
+/**
+ * 🗒️モーダルの回答IDのリンク。その回答の全文を dynamicneko から署名付きで取り、その回答に当たったキーワード(muse_search_answer_log)を強調した区間にして返す。
+ * 検索の記録に無い回答ID(他のユーザーの記録しか無いものを含む)は、キーワードが分からないので 404(上流を呼ばない)。
+ * 失敗は、空の回答にせず理由つきで返す。本文は本体のD1に複製しない。
+ */
+app.get('/api/muse-search/answer', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const answerId = (c.req.query('answerId') ?? '').trim();
+  if (!answerId) return c.json({ error: '回答IDが必要です' }, 400);
+  if (answerId.length > MUSE_ANSWER_ID_MAX) return c.json({ error: `回答IDは${MUSE_ANSWER_ID_MAX}文字までです` }, 400);
+  if (!c.env.DB) return c.json({ error: '回答を表示できませんでした', detail: 'D1(DB)が未設定です' }, 503);
+  let keys: string[];
+  try {
+    keys = await listAnswerKeys(c.env.DB, c.get('user').sub, answerId);
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    logger.error('muse-search: 回答のキーワードを読めませんでした', { error: detail });
+    return c.json({ error: '回答のキーワードを読めませんでした', detail }, 503);
+  }
+  if (keys.length === 0) return c.json({ error: 'この回答IDは検索の記録にありません' }, 404);
+  const result = await fetchMuseAnswer(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET, answerId);
+  if (!result.ok) {
+    const notConfigured = result.errorCode === 'binding_missing' || result.errorCode === 'secret_missing';
+    logger.warn('muse-search: 回答の全文を取れませんでした', { errorCode: result.errorCode });
+    return c.json({ errorCode: result.errorCode, detail: result.detail }, notConfigured ? 503 : 502);
+  }
+  const { content, truncated } = truncateAnswer(result.data.content);
+  return c.json({ answerId: result.data.answerId, chatId: result.data.chatId, createdAt: result.data.createdAt, keys, truncated, segments: buildHighlightSegments(content, keys) });
 });
 
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {

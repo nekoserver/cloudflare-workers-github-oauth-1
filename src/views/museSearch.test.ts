@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { MUSE_SEARCH_SCRIPT, getMuseSearchPage } from './museSearch';
 
-type Script = { initMuseSearchPage: (doc: Document, fetchFn: typeof fetch) => void; formatMuseSearchTime: (sec: number) => string };
-const script = new Function(`${MUSE_SEARCH_SCRIPT}\nreturn { initMuseSearchPage, formatMuseSearchTime };`)() as Script;
+type Script = { initMuseSearchPage: (doc: Document, fetchFn: typeof fetch) => void; formatMuseSearchTime: (sec: number) => string; shortenMuseAnswerId: (id: string) => string };
+const script = new Function(`${MUSE_SEARCH_SCRIPT}\nreturn { initMuseSearchPage, formatMuseSearchTime, shortenMuseAnswerId };`)() as Script;
 
 function mount(fetchFn: typeof fetch) {
   const html = getMuseSearchPage();
@@ -395,6 +395,180 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
     const start = html.indexOf('<style id="muse-search-style">');
     const style = html.slice(start, html.indexOf('</style>', start));
     expect(style).toContain('.muse-answers-thread');
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
+// 回答IDのリンク(2026-11-19、ユーザー指定): 表示は前後4文字ずつを残して残りを「…」にし、押すと最上位のモーダルに、その回答をキーワード強調つきで出す。
+describe('回答IDのリンクと、回答のモーダル', () => {
+  const LONG_ID = 'answer-2026-11-19-0042-abcdef';
+  const answer = (over: Record<string, unknown> = {}) => ({ answerId: LONG_ID, occurrences: 2, searchKeys: ['static'], preview: '前…静的…後', createdAt: 1763535000, ...over });
+  const chat = (over: Record<string, unknown> = {}) => ({ chatId: 'c1', threadId: null, totalOccurrences: 2, answers: [answer()], ...over });
+  const detail = (over: Record<string, unknown> = {}) => ({ answerId: LONG_ID, chatId: 'c1', createdAt: 1763535000, keys: ['static'], truncated: false, segments: [{ text: '前置き ', hit: false }, { text: 'Static', hit: true }, { text: ' 後ろ', hit: false }], ...over });
+  const router = (routes: Record<string, () => Promise<Response> | Response>) => vi.fn(async (url: string) => {
+    const handler = Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1];
+    if (!handler) throw new Error('想定外のURL: ' + url);
+    return handler();
+  }) as unknown as typeof fetch;
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const keysButton = () => document.querySelector<HTMLButtonElement>('button[data-action="keys"]')!;
+  const link = () => document.querySelector<HTMLAnchorElement>('a[data-answer-id]');
+  const answerOverlay = () => document.querySelector<HTMLElement>('[data-overlay="muse-answer"]');
+  const answerDialog = () => answerOverlay()?.querySelector<HTMLElement>('[role="dialog"]') ?? null;
+  const keysOverlay = () => document.querySelector<HTMLElement>('[data-overlay="muse-keys"]');
+  const press = (key: string) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  /** 🔑を開き、🗒️へ切り替える(回答IDのリンクが並ぶ)。 */
+  const openList = async (fetchFn: typeof fetch) => {
+    mount(fetchFn);
+    keysButton().click();
+    await flush();
+    document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="answers"]')!.click();
+    await flush();
+  };
+  const baseRoutes = (extra: Record<string, () => Promise<Response> | Response> = {}) => ({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ chats: [chat()] }), ...extra });
+
+  describe('shortenMuseAnswerId(前後4文字ずつを残して、残りを…にする)', () => {
+    it('9文字以上は、前4文字+…+後ろ4文字', () => {
+      expect(script.shortenMuseAnswerId(LONG_ID)).toBe('answ…cdef');
+      expect(script.shortenMuseAnswerId('123456789')).toBe('1234…6789');
+    });
+    it('8文字以下は、そのまま(省く文字が無い)。空は空', () => {
+      expect(script.shortenMuseAnswerId('12345678')).toBe('12345678');
+      expect(script.shortenMuseAnswerId('abc')).toBe('abc');
+      expect(script.shortenMuseAnswerId('')).toBe('');
+    });
+    it('サロゲートペア(絵文字)を、途中で割らない', () => {
+      expect(script.shortenMuseAnswerId('😀😀😀😀abc😀😀😀😀')).toBe('😀😀😀😀…😀😀😀😀');
+    });
+  });
+
+  it('回答IDは、前後4文字ずつを残した文字のリンクで出す。全文は title と aria-label に持つ', async () => {
+    await openList(router(baseRoutes()));
+    expect(link()!.textContent).toBe('answ…cdef');
+    expect(link()!.getAttribute('data-answer-id')).toBe(LONG_ID);
+    expect(link()!.title).toBe(LONG_ID);
+    expect(link()!.getAttribute('aria-label')).toContain(LONG_ID);
+    expect(link()!.getAttribute('href')).toBeTruthy();
+  });
+  it('押すと /api/muse-search/answer を、回答IDをエンコードして読む。ページ遷移はしない', async () => {
+    const fetchFn = router(baseRoutes({ '/api/muse-search/answer?': json(detail()) }));
+    await openList(fetchFn);
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link()!.dispatchEvent(event);
+    await flush();
+    expect(event.defaultPrevented).toBe(true);
+    expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]).at(-1)).toBe('/api/muse-search/answer?answerId=' + encodeURIComponent(LONG_ID));
+  });
+  it('最上位のモーダルに、回答の全文を出し、当たったキーワードを <mark> で強調する。つなぐと元の文章', async () => {
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': json(detail({ keys: ['static', 'ねこ'], segments: [{ text: '前置き ', hit: false }, { text: 'Static', hit: true }, { text: ' と ', hit: false }, { text: 'ねこ', hit: true }, { text: '\n二行目', hit: false }] })) })));
+    link()!.click();
+    await flush();
+    const dialog = answerDialog()!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect([...dialog.querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Static', 'ねこ']);
+    expect(dialog.querySelector('.muse-answer-text')!.textContent).toBe('前置き Static と ねこ\n二行目');
+    expect(dialog.textContent).toContain('static, ねこ');
+    expect(dialog.querySelector('.muse-answer-title')!.textContent).toContain('answ…cdef');
+    expect(keysOverlay()).not.toBeNull();
+  });
+  it('重なり順は、いま画面にある固定位置の要素より上(getNextZ)。🗒️のモーダルより上に出る', async () => {
+    const html = getMuseSearchPage();
+    const style = document.createElement('style');
+    style.textContent = html.slice(html.indexOf('<style id="muse-search-style">') + 30, html.indexOf('</style>', html.indexOf('<style id="muse-search-style">')));
+    document.head.appendChild(style);
+    try {
+      await openList(router(baseRoutes({ '/api/muse-search/answer?': json(detail()) })));
+      link()!.click();
+      await flush();
+      expect(Number(keysOverlay()!.style.zIndex)).toBeGreaterThanOrEqual(800);
+      expect(Number(answerOverlay()!.style.zIndex)).toBe(Number(keysOverlay()!.style.zIndex) + 100);
+    } finally { style.remove(); }
+  });
+  it('サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す(強調の中も)', async () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': json(detail({ keys: [evil], segments: [{ text: evil, hit: true }, { text: evil, hit: false }] })) })));
+    link()!.click();
+    await flush();
+    expect(answerDialog()!.querySelectorAll('img')).toHaveLength(0);
+    expect(answerDialog()!.querySelector('mark')!.textContent).toBe(evil);
+  });
+  it('切り詰めたときは、その旨を出す', async () => {
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': json(detail({ truncated: true })) })));
+    link()!.click();
+    await flush();
+    expect(answerDialog()!.textContent).toContain('長いため');
+  });
+  it('読み込み中の表示を出し、失敗は理由つきで出す(空の回答に見せない)', async () => {
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': () => pending })));
+    link()!.click();
+    expect(answerDialog()!.textContent).toContain('読み込んでいます');
+    release(new Response(JSON.stringify({ errorCode: 'http_error', detail: 'upstream 404' }), { status: 502 }));
+    await flush();
+    expect(answerDialog()!.textContent).toMatch(/502.*upstream 404/);
+    expect(answerDialog()!.querySelectorAll('mark')).toHaveLength(0);
+  });
+  it('404(記録に無い)・ネットワークの失敗も、理由つきで出す', async () => {
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': json({ error: 'この回答IDは検索の記録にありません' }, 404) })));
+    link()!.click();
+    await flush();
+    expect(answerDialog()!.textContent).toMatch(/404.*検索の記録にありません/);
+    document.body.innerHTML = '';
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': () => { throw new Error('network down'); } })));
+    link()!.click();
+    await flush();
+    expect(answerDialog()!.textContent).toContain('network down');
+  });
+  it('Escは最上位のモーダル(回答)だけを閉じ、🗒️のモーダルは残す。リンクへフォーカスが戻る。もう一度Escで🗒️のモーダルが閉じる', async () => {
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': json(detail()) })));
+    link()!.focus();
+    link()!.click();
+    await flush();
+    press('Escape');
+    expect(answerOverlay()).toBeNull();
+    expect(keysOverlay()).not.toBeNull();
+    expect(document.activeElement).toBe(link());
+    press('Escape');
+    expect(keysOverlay()).toBeNull();
+  });
+  it('✕と外側のクリックで、回答のモーダルだけを閉じる。Tabは回答のモーダルの外へ出ない', async () => {
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': json(detail()) })));
+    link()!.click();
+    await flush();
+    const close = answerDialog()!.querySelector<HTMLButtonElement>('button[data-action="close"]')!;
+    expect(document.activeElement).toBe(close);
+    press('Tab');
+    expect(document.activeElement).toBe(close);
+    close.click();
+    expect(answerOverlay()).toBeNull();
+    expect(keysOverlay()).not.toBeNull();
+    link()!.click();
+    await flush();
+    answerOverlay()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(answerOverlay()).toBeNull();
+    expect(keysOverlay()).not.toBeNull();
+  });
+  it('開いている間に同じリンクをもう一度押しても重ねない。閉じたあとの遅れた応答は、画面を出さない', async () => {
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    await openList(router(baseRoutes({ '/api/muse-search/answer?': () => pending })));
+    link()!.click();
+    link()!.click();
+    expect(document.querySelectorAll('[data-overlay="muse-answer"]')).toHaveLength(1);
+    press('Escape');
+    release(new Response(JSON.stringify(detail())));
+    await flush();
+    expect(answerOverlay()).toBeNull();
+    expect(document.querySelectorAll('mark')).toHaveLength(0);
+  });
+  it('CSS: 強調と回答のモーダルは、固定色を使わず変数を使う。回答のモーダルは固定位置', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-answer-overlay \{ position: fixed; inset: 0;/);
+    expect(style).toMatch(/\.muse-answer-text mark \{[^}]*var\(--/);
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });
