@@ -31,8 +31,10 @@ import { getLoginPage } from './views/login';
 import { getWelcomePage } from './views/welcome';
 import { ensureTreeViewCronCountdownForUser } from './utils/treeViewCronCountdown';
 import { getAiChatPage, DEFAULT_AICHAT_MODELS } from './views/aichat';
-import { conversationStreamFrameOrigins, resolveConversationStreamRoutes, type ConversationStreamRoutes } from './utils/conversationStreamRoutes';
+import { conversationStreamFrameOrigins, type ConversationStreamRoutes } from './utils/conversationStreamRoutes';
 import { conversationStreamHealthy } from './utils/conversationStreamHealth';
+import { loadConversationStreamRoutes, readConversationStreamHostRows, type LoadedConversationStreamRoutes } from './utils/conversationStreamRegistry';
+import { normalizeConversationStreamHost } from './utils/conversationStreamOverrides';
 import { getThreadTrackerPage } from './views/threadTracker';
 import { codexQuestionTreeRoutes } from './routes/codexQuestionTree';
 import { getAiChatSharePage, getAiChatShareNotFoundPage } from './views/aichat-share';
@@ -709,6 +711,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'cf_container_runtime_sessions', migration: '0187', description: 'コンテナ別の稼働区間・開始終了の根拠・構成', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_events', migration: '0187', description: 'コンテナ・セッションに紐付く重複取込防止付きイベント原本', syncPolicy: 'auto' },
   { name: 'cf_container_work_targets', migration: '0187', description: '任意の対象物台帳。集計時の入力は必須としない', syncPolicy: 'auto' },
+  { name: 'conversation_stream_hosts', migration: '0194', description: '会話ストリームの接続先の上書き。台帳(conversation-stream-routes.json)が既定で、同じIDの上書き・追加・無効化だけを持つ', syncPolicy: 'auto' },
   { name: 'cf_container_session_targets', migration: '0187', description: '任意の対象物と稼働セッションの関連', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_notes', migration: '0187', description: 'セッション内の複数作業・目的・分類・使用ツールと追記型改訂履歴', syncPolicy: 'auto' },
   { name: 'cf_container_cost_observations', migration: '0187', description: '通貨別の実費・概算・上限・不明を区別した費用観測履歴', syncPolicy: 'auto' },
@@ -3220,6 +3223,18 @@ CREATE TABLE IF NOT EXISTS securemine_login_history (
 );
 CREATE INDEX IF NOT EXISTS idx_firewall_snapshots_time
   ON cf_container_firewall_snapshots(collected_at);`,
+  '0194': `CREATE TABLE IF NOT EXISTS conversation_stream_hosts (
+  id TEXT PRIMARY KEY NOT NULL,
+  label TEXT NOT NULL,
+  origin TEXT NOT NULL UNIQUE,
+  priority INTEGER NOT NULL DEFAULT 100,
+  enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_stream_hosts_enabled_priority
+  ON conversation_stream_hosts(enabled, priority, id);`,
   '0192': `CREATE TABLE IF NOT EXISTS aichat_model_names (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,
@@ -3672,6 +3687,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   cf_container_runtime_sessions: { session_id: 'pk', container_id: 'fk+idx', image_record_hash: 'fk' },
   cf_container_runtime_events: { event_id: 'pk', container_id: 'fk+idx', session_id: 'fk', source: 'uk', source_event_id: 'uk' },
   cf_container_work_targets: { target_id: 'pk', parent_target_id: 'fk' },
+  conversation_stream_hosts: { id: 'pk', origin: 'uk', enabled: 'idx', priority: 'idx' },
   cf_container_session_targets: { session_id: 'pk+fk', target_id: 'pk+fk' },
   cf_container_runtime_notes: { note_id: 'pk', session_id: 'uk+fk', entry_key: 'uk', revision: 'uk' },
   cf_container_cost_observations: { cost_record_id: 'pk', session_id: 'uk+fk', cost_key: 'uk', revision: 'uk', source: 'uk', source_ref: 'uk' },
@@ -3914,6 +3930,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   cf_container_runtime_sessions: 'system',
   cf_container_runtime_events: 'system',
   cf_container_work_targets: 'system',
+  conversation_stream_hosts: 'system',
   cf_container_session_targets: 'system',
   cf_container_runtime_notes: 'system',
   cf_container_cost_observations: 'system',
@@ -7086,17 +7103,114 @@ app.get('/aichat/worker-stream', authMiddleware, (c) => {
 });
 app.get('/api/aichat/conversation-stream/health', authMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
-  let routes: ConversationStreamRoutes;
+  let loaded: LoadedConversationStreamRoutes;
   try {
-    routes = resolveConversationStreamRoutes();
+    // 台帳を既定とし、D1 conversation_stream_hosts で上書きした接続先。D1が読めなければ台帳だけで動き、registryに理由を残す。
+    loaded = await loadConversationStreamRoutes(c.env.DB);
   } catch (error) {
     // 台帳(src/data/conversation-stream-routes.json)が不正なら、理由を返す。
     const message = error instanceof Error ? error.message : String(error);
     logger.error('Conversation stream routes are invalid', { error: message });
     return c.json({ healthy: false, availableHosts: [], error: message }, 500);
   }
-  const availableHosts = await conversationStreamHealthy(routes);
-  return c.json({ healthy: availableHosts.length > 0, availableHosts });
+  const availableHosts = await conversationStreamHealthy(loaded.config);
+  return c.json({ healthy: availableHosts.length > 0, availableHosts, registry: loaded.registry });
+});
+
+/**
+ * 会話ストリームの接続先の上書き(D1 conversation_stream_hosts、マイグレーション0194)。
+ * 台帳(src/data/conversation-stream-routes.json)が既定で、ここで登録した行が同じIDを上書きする・新しいIDを加える・enabled=falseで外す。
+ * 行を消すと台帳の値に戻る。一覧はログインした利用者、変更は管理者(CF_DASHBOARD_ADMIN_GITHUB_IDS)だけ、同じOriginからだけ。
+ */
+const CONVERSATION_STREAM_HOSTS_MAX = 50;
+function conversationStreamMutationRejected(c: Context<{ Bindings: Bindings; Variables: Variables }>): Response | null {
+  const user = c.get('user');
+  if (!isCfDashboardAdmin(user.github_id, c.env.CF_DASHBOARD_ADMIN_GITHUB_IDS)) return c.json({ error: '管理者権限が必要です' }, 403);
+  const origin = c.req.header('Origin');
+  if (origin && origin !== new URL(c.req.url).origin) return c.json({ error: 'Originが一致しません' }, 403);
+  if (!c.env.DB) return c.json({ error: 'D1が設定されていません' }, 503);
+  return null;
+}
+function conversationStreamRegistryError(c: Context<{ Bindings: Bindings; Variables: Variables }>, action: string, error: unknown): Response {
+  const detail = error instanceof Error ? error.message : String(error);
+  logger.warn('Conversation stream host registry write failed', { action, error: detail });
+  return c.json({ error: `接続先を${action}できませんでした。D1のマイグレーション0194を確認してください。`, detail }, 503);
+}
+
+app.get('/api/aichat/conversation-stream/hosts', authMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  let loaded: LoadedConversationStreamRoutes;
+  try {
+    loaded = await loadConversationStreamRoutes(c.env.DB);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error('Conversation stream routes are invalid', { error: message });
+    return c.json({ error: message }, 500);
+  }
+  let hosts: Awaited<ReturnType<typeof readConversationStreamHostRows>> = [];
+  if (c.env.DB && loaded.registry.error !== 'registry_unavailable') {
+    try { hosts = await readConversationStreamHostRows(c.env.DB); } catch (error) { return conversationStreamRegistryError(c, '読み込み', error); }
+  }
+  const { routes, autoPriority } = loaded.config;
+  return c.json({ hosts, routes: routes.map(({ id, origin, label }) => ({ id, origin, label })), autoPriority, registry: loaded.registry });
+});
+
+app.post('/api/aichat/conversation-stream/hosts', authMiddleware, async (c) => {
+  const rejected = conversationStreamMutationRejected(c);
+  if (rejected) return rejected;
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const normalized = normalizeConversationStreamHost(body);
+  if (!normalized.ok) return c.json({ error: normalized.detail, errorCode: normalized.errorCode }, 400);
+  const host = normalized.value;
+  const enabled = typeof body?.enabled === 'boolean' ? body.enabled : true;
+  const db = c.env.DB!;
+  try {
+    const conflict = await db.prepare('SELECT id FROM conversation_stream_hosts WHERE id = ? OR origin = ?').bind(host.id, host.origin).first<{ id: string }>();
+    if (conflict) return c.json({ error: '接続先のIDまたはURLが既に登録されています', errorCode: 'duplicate' }, 409);
+    const count = await db.prepare('SELECT COUNT(*) AS count FROM conversation_stream_hosts').first<{ count: number }>();
+    if ((count?.count ?? 0) >= CONVERSATION_STREAM_HOSTS_MAX) return c.json({ error: `接続先は${CONVERSATION_STREAM_HOSTS_MAX}件まで登録できます`, errorCode: 'too_many' }, 409);
+    const now = new Date().toISOString();
+    await db.prepare('INSERT INTO conversation_stream_hosts (id, label, origin, priority, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .bind(host.id, host.label, host.origin, host.priority, enabled ? 1 : 0, now, now).run();
+    return c.json({ host: { ...host, enabled } }, 201, { 'Cache-Control': 'no-store' });
+  } catch (error) {
+    return conversationStreamRegistryError(c, '保存', error);
+  }
+});
+
+app.put('/api/aichat/conversation-stream/hosts/:id', authMiddleware, async (c) => {
+  const rejected = conversationStreamMutationRejected(c);
+  if (rejected) return rejected;
+  const body = await c.req.json().catch(() => null) as Record<string, unknown> | null;
+  const id = c.req.param('id');
+  const normalized = normalizeConversationStreamHost(body && typeof body === 'object' ? { ...body, id } : body);
+  if (!normalized.ok) return c.json({ error: normalized.detail, errorCode: normalized.errorCode }, 400);
+  const host = normalized.value;
+  // enabledを省いたときは、今の値を保つ(省略で有効に戻さない)。
+  const enabled = typeof body?.enabled === 'boolean' ? (body.enabled ? 1 : 0) : null;
+  const db = c.env.DB!;
+  try {
+    const conflict = await db.prepare('SELECT id FROM conversation_stream_hosts WHERE origin = ? AND id <> ?').bind(host.origin, id).first<{ id: string }>();
+    if (conflict) return c.json({ error: '接続先のURLが既に登録されています', errorCode: 'duplicate' }, 409);
+    const result = await db.prepare('UPDATE conversation_stream_hosts SET label = ?, origin = ?, priority = ?, enabled = COALESCE(?, enabled), updated_at = ? WHERE id = ?')
+      .bind(host.label, host.origin, host.priority, enabled, new Date().toISOString(), id).run();
+    if (!result.meta.changes) return c.json({ error: '接続先が見つかりません', errorCode: 'not_found' }, 404);
+    return c.json({ host }, 200, { 'Cache-Control': 'no-store' });
+  } catch (error) {
+    return conversationStreamRegistryError(c, '更新', error);
+  }
+});
+
+app.delete('/api/aichat/conversation-stream/hosts/:id', authMiddleware, async (c) => {
+  const rejected = conversationStreamMutationRejected(c);
+  if (rejected) return rejected;
+  try {
+    const result = await c.env.DB!.prepare('DELETE FROM conversation_stream_hosts WHERE id = ?').bind(c.req.param('id')).run();
+    if (!result.meta.changes) return c.json({ error: '接続先が見つかりません', errorCode: 'not_found' }, 404);
+    return c.json({ deleted: true }, 200, { 'Cache-Control': 'no-store' });
+  } catch (error) {
+    return conversationStreamRegistryError(c, '削除', error);
+  }
 });
 
 /** /aichatの入力窓の枠色に使うMuseの死活確認（認証が必要）。停止中のコンテナは起動しない。 */
@@ -7115,11 +7229,11 @@ app.get('/api/aichat/muse-health', authMiddleware, async (c) => {
  * 会話ストリームの接続先の台帳をdynamicneko(tree-view)へ渡す(サービスバインディング経由、AICHAT_EXTERNAL_SECRETで認証)。
  * 接続先を台帳1か所で切り替えられるよう、tree-viewのiframeの接続先とCSPのframe-srcはこの応答から作る。
  */
-app.get('/api/tree-view/conversation-stream-routes-external', (c) => {
+app.get('/api/tree-view/conversation-stream-routes-external', async (c) => {
   if (!checkJevScoreBoardExternalBearer(c)) return jsonUtf8({ error: 'Unauthorized' }, 401);
   try {
-    const { routes, autoPriority } = resolveConversationStreamRoutes();
-    return jsonUtf8({ routes: routes.map(({ id, origin, label }) => ({ id, origin, label })), autoPriority });
+    const { config: { routes, autoPriority }, registry } = await loadConversationStreamRoutes(c.env.DB);
+    return jsonUtf8({ routes: routes.map(({ id, origin, label }) => ({ id, origin, label })), autoPriority, registry });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('Conversation stream routes are invalid', { error: message });
@@ -7175,12 +7289,12 @@ app.get('/aichat', authMiddleware, async (c) => {
       );
     }
   }
-  // 会話ストリームの接続先は台帳(src/data/conversation-stream-routes.json)で決まる。
+  // 会話ストリームの接続先は台帳(src/data/conversation-stream-routes.json)を既定とし、D1 conversation_stream_hosts で上書きする。
   // 台帳が不正なら、埋め込みを許可しない(frame-src 'none')うえで画面に理由を出す。
   let streamRoutes: ConversationStreamRoutes | null = null;
   let streamRoutesError: string | undefined;
   try {
-    streamRoutes = resolveConversationStreamRoutes();
+    streamRoutes = (await loadConversationStreamRoutes(c.env.DB)).config;
   } catch (error) {
     streamRoutesError = error instanceof Error ? error.message : String(error);
     logger.error('Conversation stream routes are invalid', { error: streamRoutesError });
