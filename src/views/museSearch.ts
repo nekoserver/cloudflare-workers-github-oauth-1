@@ -807,11 +807,13 @@ export const MUSE_SEARCH_SCRIPT = `
       else if (isMuseThreadOpen(link)) closeMuseThread(link, item);
       else openMuseThread(doc, fetchFn, semaphore, link, item);
     }
-    function loadMuseThreads(doc, fetchFn, container) {
+    // isCurrent: 取り直しの応答が前後しても、いちばん新しい取り直しの結果だけを出す(古い応答は、画面を上書きしない)。
+    function loadMuseThreads(doc, fetchFn, container, isCurrent) {
       container.textContent = '読み込んでいます…';
       fetchFn('/api/muse-search/threads').then(function (res) {
         return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
       }).then(function (r) {
+        if (isCurrent && !isCurrent()) return;
         container.textContent = '';
         if (!r.ok) {
           container.appendChild(museSearchEl(doc, 'p', 'muse-search-error', failText(r, 'スレッドの一覧')));
@@ -892,6 +894,7 @@ export const MUSE_SEARCH_SCRIPT = `
         });
         container.appendChild(list);
       }).catch(function (error) {
+        if (isCurrent && !isCurrent()) return;
         container.textContent = '';
         container.appendChild(museSearchEl(doc, 'p', 'muse-search-error', 'スレッドの一覧を読み込めませんでした: ' + (error && error.message ? error.message : String(error))));
       });
@@ -908,8 +911,43 @@ export const MUSE_SEARCH_SCRIPT = `
       keysButton.addEventListener('click', function () { openMuseKeysModal(doc, fetchFn, keysButton); });
       var handleButton = doc.querySelector('button[data-action="handle"]');
       handleButton.addEventListener('click', function () { openMuseHandleModal(doc, fetchFn, handleButton); });
+      // 水平タブ(ユーザー指定 2026-11-19): 「スレッド一覧」「検索結果」。読み込み時は「スレッド一覧」が選ばれている。検索すると「検索結果」へ移る。
+      // 「スレッド一覧」が選ばれるたびに、一覧を取り直す(読み込み時の1回も同じ)。「検索結果」は、前の結果をそのまま見せる。
       var threads = doc.querySelector('[data-field="threads"]');
-      loadMuseThreads(doc, fetchFn, threads);
+      var tabs = { threads: doc.querySelector('[data-tab="threads"]'), results: doc.querySelector('[data-tab="results"]') };
+      var panels = { threads: threads, results: doc.querySelector('[data-panel="results"]') };
+      var TAB_ORDER = ['threads', 'results'];
+      var threadsLoadNumber = 0;
+      function reloadThreads() {
+        threadsLoadNumber += 1;
+        var mine = threadsLoadNumber;
+        loadMuseThreads(doc, fetchFn, threads, function () { return mine === threadsLoadNumber; });
+      }
+      function selectTab(name) {
+        TAB_ORDER.forEach(function (tabName) {
+          var on = tabName === name;
+          tabs[tabName].setAttribute('aria-selected', on ? 'true' : 'false');
+          tabs[tabName].tabIndex = on ? 0 : -1;
+          panels[tabName].hidden = !on;
+        });
+        if (name === 'threads') reloadThreads();
+      }
+      TAB_ORDER.forEach(function (tabName) {
+        tabs[tabName].addEventListener('click', function () { selectTab(tabName); });
+      });
+      tabs.threads.parentNode.addEventListener('keydown', function (event) {
+        var at = tabs.threads.getAttribute('aria-selected') === 'true' ? 0 : 1;
+        var target = null;
+        if (event.key === 'ArrowRight') target = TAB_ORDER[(at + 1) % TAB_ORDER.length];
+        else if (event.key === 'ArrowLeft') target = TAB_ORDER[(at + TAB_ORDER.length - 1) % TAB_ORDER.length];
+        else if (event.key === 'Home') target = TAB_ORDER[0];
+        else if (event.key === 'End') target = TAB_ORDER[TAB_ORDER.length - 1];
+        if (!target) return;
+        event.preventDefault();
+        selectTab(target);
+        tabs[target].focus();
+      });
+      selectTab('threads');
 
       // スマホ幅の縦並びの設定(ユーザー指定 2026-11-19)。初期値はOFF(今までの表のまま)。この端末のブラウザにだけ保存する(サーバーには送らない)。
       // ONのときだけ <html> に muse-stacked を付け、幅560px以下の検索キーの表が縦並びになる。ブラウザの保存が使えなくても、スイッチはその場で効く。
@@ -944,6 +982,8 @@ export const MUSE_SEARCH_SCRIPT = `
       form.addEventListener('submit', function (event) {
         event.preventDefault();
         if (busy) return;
+        // 検索の結果・メッセージは「検索結果」のタブにあるので、そのタブへ移る(検索を始めた時点で)。
+        selectTab('results');
         var query = input.value.trim();
         if (!query) {
           clearResults();
@@ -953,7 +993,6 @@ export const MUSE_SEARCH_SCRIPT = `
         }
         busy = true;
         button.disabled = true;
-        threads.hidden = true;
         status.className = 'muse-search-status';
         status.textContent = '検索しています…';
         fetchFn('/api/muse-search?q=' + encodeURIComponent(query)).then(function (res) {
@@ -1018,6 +1057,9 @@ export function getMuseSearchPage(): string {
     .muse-handle-register:disabled { opacity: 0.5; cursor: not-allowed; }
     .muse-setting { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 4px; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
     .muse-setting input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-color); }
+    .muse-tabs { display: flex; gap: 4px; margin: 12px 0 8px; border-bottom: 1px solid var(--border-color); }
+    .muse-tab { min-height: 36px; padding: 0 16px; margin-bottom: -1px; color: var(--text-secondary); background: none; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; cursor: pointer; font: inherit; }
+    .muse-tab[aria-selected="true"] { color: var(--text-primary); background: var(--card-bg); border-color: var(--border-color); font-weight: 600; }
     .muse-threads { margin: 16px 0 0; }
     .muse-thread-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
     .muse-thread-filter { flex: 1 1 auto; min-width: 0; min-height: 36px; box-sizing: border-box; padding: 0 12px; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; font: inherit; }
@@ -1094,11 +1136,17 @@ export function getMuseSearchPage(): string {
       <button type="button" data-action="keys" aria-label="検索キーの一覧を開く" title="検索キーの一覧(AIチャットでの出現回数の順)">🔑</button>
       <button type="button" data-action="handle" aria-label="ハンドルネームを設定する" title="ハンドルネームの設定">👤</button>
     </form>
+    <div class="muse-tabs" role="tablist" aria-label="表示の切り替え">
+      <button type="button" class="muse-tab" role="tab" id="muse-tab-threads" data-tab="threads" aria-selected="true" aria-controls="muse-panel-threads">スレッド一覧</button>
+      <button type="button" class="muse-tab" role="tab" id="muse-tab-results" data-tab="results" aria-selected="false" aria-controls="muse-panel-results" tabindex="-1">検索結果</button>
+    </div>
     <p class="muse-search-note">質問と回答の両方を探します(大文字と小文字は区別しません)。新しい順に、最大100件まで表示します。</p>
     <label class="muse-setting"><input type="checkbox" data-setting="stacked"> スマホ幅(幅560px以下)で、検索キーの表を縦並びにする</label>
-    <p class="muse-search-status" data-field="status" role="status" aria-live="polite"></p>
-    <ul class="muse-search-results" data-field="results"></ul>
-    <section class="muse-threads" data-field="threads" aria-label="スレッド(最終書き込みの新しい順)"></section>
+    <div class="muse-tabpanel" role="tabpanel" id="muse-panel-results" data-panel="results" aria-labelledby="muse-tab-results" hidden>
+      <p class="muse-search-status" data-field="status" role="status" aria-live="polite"></p>
+      <ul class="muse-search-results" data-field="results"></ul>
+    </div>
+    <section class="muse-threads" role="tabpanel" id="muse-panel-threads" data-panel="threads" aria-labelledby="muse-tab-threads" data-field="threads"></section>
   </main>
   <script>${MUSE_SEARCH_SCRIPT}
     initMuseSearchPage(document, function (url, init) { var options = init || {}; var headers = Object.assign({ Accept: 'application/json' }, options.headers || {}); return fetch(url, Object.assign({}, options, { headers: headers })); });
