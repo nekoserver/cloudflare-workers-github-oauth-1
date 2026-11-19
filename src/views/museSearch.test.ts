@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // /muse-search のページ(2026-11-19)。上流から来た文字列は textContent でしか表示しない(innerHTML を使わない)。
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { MUSE_SEARCH_SCRIPT, getMuseSearchPage } from './museSearch';
 
@@ -155,16 +155,22 @@ describe('🔑ボタンのモーダル', () => {
     expect(cells.map((td) => td.getAttribute('data-label'))).toEqual([null, 'AIチャットでの出現回数', 'tree-viewでの出現回数', '検索回数', '最後に検索した日時(日本時間)']);
     expect(cells.slice(0, 4).map((td) => td.textContent)).toEqual(['alpha', '30', '—', '5']);
   });
-  it('CSS: 狭い幅(560px以下)では、表を縦並び(項目名: 値)にして、横にはみ出させない。固定色は使わない', () => {
+  it('CSS: 縦並び(項目名: 値)は、設定がON(.muse-stacked)で、幅560px以下のときだけ。設定がOFFのときの既定の表には、縦並びの指定を入れない。固定色は使わない', () => {
     const html = getMuseSearchPage();
     const start = html.indexOf('<style id="muse-search-style">');
     const style = html.slice(start, html.indexOf('</style>', start));
-    const media = style.slice(style.indexOf('@media (max-width: 560px)'));
-    expect(style).toContain('@media (max-width: 560px)');
-    expect(media).toMatch(/\.muse-keys-list tr, \.muse-keys-list td \{ display: block;/);
-    expect(media).toMatch(/\.muse-keys-list td\[data-label\]::before \{[^}]*content: attr\(data-label\)/);
-    expect(media).toMatch(/\.muse-keys-list thead tr \{[^}]*display: flex; flex-wrap: wrap/);
-    expect(media).not.toMatch(/\.muse-keys-list thead \{[^}]*position: absolute/);
+    const mediaStart = style.indexOf('@media (max-width: 560px)');
+    const before = style.slice(0, mediaStart);
+    const media = style.slice(mediaStart);
+    expect(mediaStart).toBeGreaterThan(0);
+    expect(media).toMatch(/\.muse-stacked \.muse-keys-list tr, \.muse-stacked \.muse-keys-list td \{ display: block;/);
+    expect(media).toMatch(/\.muse-stacked \.muse-keys-list td\[data-label\]::before \{[^}]*content: attr\(data-label\)/);
+    expect(media).toMatch(/\.muse-stacked \.muse-keys-list thead tr \{[^}]*display: flex; flex-wrap: wrap/);
+    // メディアクエリの中のセレクタは、すべて .muse-stacked から始まる(設定がOFFなら、何も効かない)。
+    const selectors = [...media.matchAll(/^\s{6}([^{}\n]+?) \{/gm)].flatMap((m) => m[1].split(',').map((x) => x.trim()));
+    expect(selectors.length).toBeGreaterThan(5);
+    for (const selector of selectors) expect(selector.startsWith('.muse-stacked ')).toBe(true);
+    expect(before).not.toContain('content: attr(data-label)');
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
   it('押すと /api/muse-search/keys を読み、モーダルに、AIチャットでの出現回数の順(APIの順)に並べて出す', async () => {
@@ -1177,6 +1183,63 @@ describe('初期画面のスレッド一覧', () => {
     expect(style).toMatch(/\.muse-thread-paragraph \{[^}]*white-space: pre-wrap/);
     expect(style).toMatch(/\.muse-thread-last \{[^}]*var\(--/);
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
+// スマホ幅の縦並びの設定(2026-11-19、ユーザー指定): 設定で選べるようにし、初期値はOFF(今までの表のまま)。
+describe('スマホ幅の縦並びの設定(切り替えスイッチ)', () => {
+  const KEY = 'museSearchStackedTables';
+  const reply = (body: unknown) => vi.fn(async () => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
+  const toggle = () => document.querySelector<HTMLInputElement>('input[data-setting="stacked"]')!;
+  const stackedOn = () => document.documentElement.classList.contains('muse-stacked');
+  const reset = () => { try { window.localStorage.clear(); } catch { /* 無ければ、何もしない */ } document.documentElement.classList.remove('muse-stacked'); };
+  beforeEach(reset);
+  afterEach(() => { reset(); vi.restoreAllMocks(); });
+
+  it('ページにスイッチがある(名前を持つ)。初期値はOFF: 保存が無ければ、チェックなし・縦並びのクラスなし', () => {
+    mount(reply({ threads: [] }));
+    expect(toggle()).not.toBeNull();
+    expect(toggle().type).toBe('checkbox');
+    expect(toggle().closest('label')!.textContent).toContain('スマホ幅');
+    expect(toggle().checked).toBe(false);
+    expect(stackedOn()).toBe(false);
+  });
+  it('ONにすると、縦並びのクラスが付き、この端末のブラウザに保存する。OFFに戻すと、クラスが外れ、保存も消える', () => {
+    mount(reply({ threads: [] }));
+    toggle().checked = true;
+    toggle().dispatchEvent(new Event('change', { bubbles: true }));
+    expect(stackedOn()).toBe(true);
+    expect(window.localStorage.getItem(KEY)).toBe('1');
+    toggle().checked = false;
+    toggle().dispatchEvent(new Event('change', { bubbles: true }));
+    expect(stackedOn()).toBe(false);
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+  it('保存してあれば、ページを開いたときから、ONの状態(チェックあり・クラスあり)。保存の値が「1」以外なら、OFFのまま', () => {
+    window.localStorage.setItem(KEY, '1');
+    mount(reply({ threads: [] }));
+    expect(toggle().checked).toBe(true);
+    expect(stackedOn()).toBe(true);
+    reset();
+    window.localStorage.setItem(KEY, 'on');
+    mount(reply({ threads: [] }));
+    expect(toggle().checked).toBe(false);
+    expect(stackedOn()).toBe(false);
+  });
+  it('ブラウザの保存が使えなくても(例外になっても)、ページは動き、スイッチはその場で効く。初期値はOFF', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied'); });
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('denied'); });
+    expect(() => mount(reply({ threads: [] }))).not.toThrow();
+    expect(toggle().checked).toBe(false);
+    toggle().checked = true;
+    expect(() => toggle().dispatchEvent(new Event('change', { bubbles: true }))).not.toThrow();
+    expect(stackedOn()).toBe(true);
+  });
+  it('スイッチはモーダルの外(ページ)にあり、🔑のモーダルを開いても消えない。検索すると隠れる一覧(スレッド)には含めない', async () => {
+    mount(reply({ threads: [] }));
+    expect(toggle().closest('[data-field="threads"]')).toBeNull();
+    expect(toggle().closest('[role="dialog"]')).toBeNull();
   });
 });
 
