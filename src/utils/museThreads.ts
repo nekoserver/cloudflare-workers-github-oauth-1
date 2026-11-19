@@ -1,0 +1,52 @@
+/**
+ * /muse-search の初期画面(2026-11-19、ユーザー指定): スレッドのタイトルのリンクを、最終書き込みの新しい順に並べ、
+ * 押すと、そのスレッドの最終書き込みを、段落に分けて、リンクの下に出す。
+ * スレッドの一覧・最終書き込みは dynamicneko のD1にあり、本体は持たない(本文を本体のD1へ複製しない)。押すたびに署名付きで取る。
+ * スレッドにタイトル列は無いので、タイトルは dynamicneko が、根の投稿の最初の空でない行から作る。
+ */
+import { callSignedWorkerEndpoint, type RemoteCheckResult, type WorkerFetcher } from './repoOnboardingRemoteCheck';
+
+export const MUSE_THREAD_ID_MAX = 200;
+
+/** dynamicneko の GET /api/tree-view/muse-thread-list の応答の1件。 */
+export type MuseThreadSummary = { threadId: string; title: string; lastPostAt: number };
+export type MuseThreadList = { threads: MuseThreadSummary[] };
+/** dynamicneko の GET /api/tree-view/muse-thread-last の応答。 */
+export type MuseThreadLast = { threadId: string; chatId: string; role: 'user' | 'assistant'; content: string; createdAt: number };
+
+const text = (x: unknown) => typeof x === 'string' && x.trim().length > 0;
+
+export function isMuseThreadList(value: unknown): value is MuseThreadList {
+  if (!value || typeof value !== 'object') return false;
+  const { threads } = value as { threads?: unknown };
+  return Array.isArray(threads) && threads.every((t) => {
+    if (!t || typeof t !== 'object') return false;
+    const v = t as Record<string, unknown>;
+    return text(v.threadId) && typeof v.title === 'string' && typeof v.lastPostAt === 'number' && Number.isInteger(v.lastPostAt);
+  });
+}
+
+export function isMuseThreadLast(value: unknown): value is MuseThreadLast {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return text(v.threadId) && text(v.chatId) && (v.role === 'user' || v.role === 'assistant') && typeof v.content === 'string'
+    && typeof v.createdAt === 'number' && Number.isInteger(v.createdAt);
+}
+
+/** スレッドの一覧(最終書き込みの新しい順)を、署名付きで取る。失敗は理由つきで返し、空の一覧にはしない。 */
+export function fetchMuseThreadList(fetcher: WorkerFetcher | undefined, secret: string | undefined): Promise<RemoteCheckResult<MuseThreadList>> {
+  return callSignedWorkerEndpoint(fetcher, secret, 'https://dynamicneko.internal', '/api/tree-view/muse-thread-list', isMuseThreadList);
+}
+
+/** スレッドの最終書き込みを、署名付きで取る。 */
+export function fetchMuseThreadLast(fetcher: WorkerFetcher | undefined, secret: string | undefined, threadId: string): Promise<RemoteCheckResult<MuseThreadLast>> {
+  return callSignedWorkerEndpoint(fetcher, secret, 'https://dynamicneko.internal', `/api/tree-view/muse-thread-last?threadId=${encodeURIComponent(threadId)}`, isMuseThreadLast);
+}
+
+/**
+ * 本文を段落に分ける。空行(空白だけの行を含む)が区切り。段落の中の改行は残し、前後の空白と空の段落は除く。
+ * 画面は、段落ごとに <p> にして、段落の中の改行は white-space: pre-wrap で残す。
+ */
+export function toParagraphs(content: string): string[] {
+  return content.replace(/\r\n?/g, '\n').split(/\n[ \t]*\n/).map((p) => p.trim()).filter((p) => p.length > 0);
+}
