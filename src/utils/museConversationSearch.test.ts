@@ -37,6 +37,13 @@ describe('isMuseSearchData', () => {
     expect(isMuseSearchData({ posts: [], occurrenceCount: 0 })).toBe(true);
     expect(isMuseSearchData({ posts: [post] })).toBe(true);
   });
+  it('回答ごとの出現回数(answers)は、あってもなくても通す(古い版には無い)。形が違えば通さない', () => {
+    const answer = { answerId: 'a1', chatId: 'c1', threadId: null, occurrences: 2, preview: 'p', createdAt: 1 };
+    expect(isMuseSearchData({ posts: [post], answers: [answer] })).toBe(true);
+    expect(isMuseSearchData({ posts: [post], answers: [] })).toBe(true);
+    expect(isMuseSearchData({ posts: [post] })).toBe(true);
+    for (const answers of ['x', null, [{ ...answer, occurrences: 0 }], [{ ...answer, answerId: 1 }], [answer, 'x']]) expect(isMuseSearchData({ posts: [post], answers })).toBe(false);
+  });
   it('occurrenceCountが、負・小数・数以外・NaNなら通さない(0や別の値に読み替えない)', () => {
     for (const occurrenceCount of [-1, 1.5, '12', null, Number.NaN, Infinity]) expect(isMuseSearchData({ posts: [], occurrenceCount })).toBe(false);
   });

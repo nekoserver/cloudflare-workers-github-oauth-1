@@ -94,11 +94,47 @@ export const MUSE_SEARCH_SCRIPT = `
         if (item.treeViewCount === null) tree.title = 'tree-viewでの出現回数を取得できませんでした';
         row.appendChild(tree);
         row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num'));
-        row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), ''));
+        row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), 'muse-keys-time'));
         body.appendChild(row);
       });
       table.appendChild(body);
       return table;
+    }
+
+    // 🗒️ボタン: 本体D1の回答ごとの記録を、全キー合算で、スレッドごとに(合計の多い順)、回答を出現回数の多い順に並べる。
+    function renderMuseAnswersThreads(doc, threads) {
+      var wrap = museSearchEl(doc, 'div', 'muse-answers');
+      threads.forEach(function (group) {
+        var section = museSearchEl(doc, 'section', 'muse-answers-thread');
+        var label = group.threadId !== null ? 'スレッド ' + group.threadId : 'スレッド化していないチャット ' + group.chatId;
+        section.appendChild(museSearchEl(doc, 'h3', 'muse-answers-heading', label + '(合計' + group.totalOccurrences + '回・回答' + group.answers.length + '件)'));
+        var table = museSearchEl(doc, 'table', 'muse-keys-table');
+        var head = doc.createElement('thead');
+        var headRow = doc.createElement('tr');
+        ['回答ID', 'チャットID', '出現回数', '検索キー', '一致箇所の前後'].forEach(function (text, index) {
+          var th = museSearchEl(doc, 'th', index === 2 ? 'muse-keys-num' : '', text);
+          th.setAttribute('scope', 'col');
+          headRow.appendChild(th);
+        });
+        head.appendChild(headRow);
+        table.appendChild(head);
+        var body = doc.createElement('tbody');
+        group.answers.forEach(function (item) {
+          var row = doc.createElement('tr');
+          row.appendChild(museKeysCell(doc, item.answerId, 'muse-answers-id'));
+          row.appendChild(museKeysCell(doc, item.chatId, 'muse-answers-id'));
+          row.appendChild(museKeysCell(doc, String(item.occurrences), 'muse-keys-num'));
+          row.appendChild(museKeysCell(doc, item.searchKeys.join(', '), 'muse-answers-keys'));
+          row.appendChild(museKeysCell(doc, item.preview, 'muse-answers-preview'));
+          body.appendChild(row);
+        });
+        table.appendChild(body);
+        var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
+        scroll.appendChild(table);
+        section.appendChild(scroll);
+        wrap.appendChild(section);
+      });
+      return wrap;
     }
 
     // 🔑ボタン: 検索キーを、AIチャットでの出現回数の多い順に、tree-viewでの出現回数とともに、最上位のモーダルに出す。
@@ -118,7 +154,14 @@ export const MUSE_SEARCH_SCRIPT = `
       close.type = 'button';
       close.setAttribute('data-action', 'close');
       close.setAttribute('aria-label', '閉じる');
+      var notes = museSearchEl(doc, 'button', 'muse-keys-notes', '🗒️');
+      notes.type = 'button';
+      notes.setAttribute('data-action', 'answers');
+      notes.setAttribute('aria-label', 'スレッドごとの回答の一覧を開く');
+      notes.setAttribute('aria-pressed', 'false');
+      notes.title = 'スレッドごとの回答の一覧(出現回数の順)';
       head.appendChild(title);
+      head.appendChild(notes);
       head.appendChild(close);
       var content = museSearchEl(doc, 'div', 'muse-keys-body', '読み込んでいます…');
       dialog.appendChild(head);
@@ -133,8 +176,8 @@ export const MUSE_SEARCH_SCRIPT = `
       }
       function onKeydown(event) {
         if (event.key === 'Escape') closeModal();
-        // モーダルの中で操作できるのは✕だけなので、Tabでフォーカスが外へ出ないようにする。
-        else if (event.key === 'Tab') { event.preventDefault(); close.focus(); }
+        // モーダルの中で操作できるのは🗒️と✕だけなので、Tabでフォーカスが外へ出ないようにする(2つの間で行き来する)。
+        else if (event.key === 'Tab') { event.preventDefault(); (doc.activeElement === close ? notes : close).focus(); }
       }
       close.addEventListener('click', closeModal);
       overlay.addEventListener('click', function (event) { if (event.target === overlay) closeModal(); });
@@ -145,24 +188,52 @@ export const MUSE_SEARCH_SCRIPT = `
         while (content.firstChild) content.removeChild(content.firstChild);
         content.appendChild(node);
       }
-      fetchFn('/api/muse-search/keys').then(function (res) {
-        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
-      }).then(function (r) {
-        if (!r.ok) {
-          var detail = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
-          show(museSearchEl(doc, 'p', 'muse-search-error', '検索キーの一覧を読み込めませんでした(HTTP ' + r.status + ')' + (detail ? ': ' + detail : '')));
-          return;
-        }
-        if (r.data.keys.length === 0) {
-          show(museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。'));
-          return;
-        }
-        var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
-        scroll.appendChild(renderMuseKeysTable(doc, r.data.keys));
-        show(scroll);
-      }).catch(function (error) {
-        show(museSearchEl(doc, 'p', 'muse-search-error', '検索キーの一覧を読み込めませんでした: ' + (error && error.message ? error.message : String(error))));
-      });
+      // 表示の切り替え。遅れて届いた応答が、いま見ている画面を上書きしないよう、番号で最新の要求だけを反映する。
+      var view = 'keys';
+      var requestNumber = 0;
+      var KEYS_TITLE = '検索キー(AIチャットでの出現回数の多い順)';
+      var ANSWERS_TITLE = 'スレッドごとの回答(出現回数の多い順)';
+      function load(url, failText, build) {
+        requestNumber += 1;
+        var mine = requestNumber;
+        show(museSearchEl(doc, 'p', 'muse-search-status', '読み込んでいます…'));
+        fetchFn(url).then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+        }).then(function (r) {
+          if (mine !== requestNumber) return;
+          if (!r.ok) {
+            var detail = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
+            show(museSearchEl(doc, 'p', 'muse-search-error', failText + '(HTTP ' + r.status + ')' + (detail ? ': ' + detail : '')));
+            return;
+          }
+          show(build(r.data));
+        }).catch(function (error) {
+          if (mine !== requestNumber) return;
+          show(museSearchEl(doc, 'p', 'muse-search-error', failText + ': ' + (error && error.message ? error.message : String(error))));
+        });
+      }
+      function showKeys() {
+        view = 'keys';
+        title.textContent = KEYS_TITLE;
+        notes.setAttribute('aria-pressed', 'false');
+        load('/api/muse-search/keys', '検索キーの一覧を読み込めませんでした', function (data) {
+          if (data.keys.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。');
+          var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
+          scroll.appendChild(renderMuseKeysTable(doc, data.keys));
+          return scroll;
+        });
+      }
+      function showAnswers() {
+        view = 'answers';
+        title.textContent = ANSWERS_TITLE;
+        notes.setAttribute('aria-pressed', 'true');
+        load('/api/muse-search/answers', 'スレッドごとの回答の一覧を読み込めませんでした', function (data) {
+          if (data.threads.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ回答ごとの出現回数が記録されていません。');
+          return renderMuseAnswersThreads(doc, data.threads);
+        });
+      }
+      notes.addEventListener('click', function () { if (view === 'keys') showAnswers(); else showKeys(); });
+      showKeys();
     }
 
     function initMuseSearchPage(doc, fetchFn) {
@@ -262,6 +333,15 @@ export function getMuseSearchPage(): string {
     .muse-keys-dialog { display: flex; flex-direction: column; box-sizing: border-box; width: 100%; max-width: 820px; max-height: min(80vh, 640px); background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; }
     .muse-keys-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border-color); }
     .muse-keys-title { margin: 0; font-size: 16px; }
+    .muse-keys-head .muse-keys-title { flex: 1 1 auto; }
+    .muse-keys-notes { min-width: 36px; min-height: 36px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; }
+    .muse-keys-notes[aria-pressed="true"] { border-color: var(--accent-color); }
+    .muse-answers-thread { margin: 0 0 16px; }
+    .muse-keys-table .muse-answers-id { white-space: nowrap; }
+    .muse-keys-table .muse-keys-num { min-width: 4.5em; }
+    .muse-keys-table .muse-answers-keys { min-width: 8em; overflow-wrap: anywhere; }
+    .muse-keys-table .muse-answers-preview { min-width: 14em; overflow-wrap: anywhere; }
+    .muse-answers-heading { margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
     .muse-keys-close { min-width: 36px; min-height: 36px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; }
     .muse-keys-body { padding: 12px 16px; overflow: auto; min-height: 0; }
     .muse-keys-scroll { overflow: auto; }
@@ -270,7 +350,7 @@ export function getMuseSearchPage(): string {
     .muse-keys-table thead th { position: sticky; top: 0; background: var(--card-bg); color: var(--text-secondary); font-weight: 600; }
     .muse-keys-table .muse-keys-num { text-align: right; min-width: 5.5em; }
     .muse-keys-table .muse-keys-key { min-width: 12em; overflow-wrap: anywhere; }
-    .muse-keys-table tbody td:last-child { white-space: nowrap; }
+    .muse-keys-table .muse-keys-time { white-space: nowrap; }
     .muse-search-form button[data-action="keys"] { padding: 0 12px; }
     .muse-search-snippet mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
   </style>

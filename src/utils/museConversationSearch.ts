@@ -5,6 +5,7 @@
  * サービスバインディング(DYNAMICNEKO)とシークレット(DYNAMICNEKO_WORKER_HMAC_SECRET)を使う。
  * 知見は dynamicneko の NOTICE.20261119.tree-view-muse.md。
  */
+import { isMuseAnswerHit, type MuseAnswerHit } from './museSearchAnswers';
 import { callSignedWorkerEndpoint, type RemoteCheckResult, type WorkerFetcher } from './repoOnboardingRemoteCheck';
 
 export const MUSE_SEARCH_MAX_QUERY = 500;
@@ -24,7 +25,8 @@ export function parseMuseSearchQuery(raw: string | null | undefined): MuseSearch
 
 export type MuseSearchPost = { postId: string; chatId: string; role: 'user' | 'assistant'; content: string; createdAt: number; threadMark: boolean };
 /** occurrenceCount: tree-viewの会話ログでの出現回数(全件の回数)。dynamicnekoの古い版は返さないので、無いこともある。 */
-export type MuseSearchData = { posts: MuseSearchPost[]; occurrenceCount?: number };
+/** answers: 回答ごとの出現回数(🗒️モーダル用)。dynamicnekoの古い版は返さないので、無いこともある。 */
+export type MuseSearchData = { posts: MuseSearchPost[]; occurrenceCount?: number; answers?: MuseAnswerHit[] };
 
 function isMuseSearchPost(value: unknown): value is MuseSearchPost {
   if (!value || typeof value !== 'object') return false;
@@ -35,7 +37,8 @@ function isMuseSearchPost(value: unknown): value is MuseSearchPost {
 
 export function isMuseSearchData(value: unknown): value is MuseSearchData {
   if (!value || typeof value !== 'object') return false;
-  const { posts, occurrenceCount } = value as { posts?: unknown; occurrenceCount?: unknown };
+  const { posts, occurrenceCount, answers } = value as { posts?: unknown; occurrenceCount?: unknown; answers?: unknown };
+  if (answers !== undefined && !(Array.isArray(answers) && answers.every(isMuseAnswerHit))) return false;
   if (occurrenceCount !== undefined && !(typeof occurrenceCount === 'number' && Number.isInteger(occurrenceCount) && occurrenceCount >= 0)) return false;
   return Array.isArray(posts) && posts.every(isMuseSearchPost);
 }

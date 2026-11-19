@@ -271,6 +271,130 @@ describe('🔑ボタンのモーダル', () => {
   });
 });
 
+// 🗒️ボタン(2026-11-19、ユーザー指定): 🔑モーダルのタイトル行の末尾。押すと、本体D1の記録から、スレッドごとに出現回数の多い順に回答を並べる。
+describe('🗒️ボタン(スレッドごとの回答の一覧)', () => {
+  const answer = (over: Record<string, unknown> = {}) => ({ answerId: 'a1', chatId: 'c1', occurrences: 2, searchKeys: ['static'], preview: '前…静的…後', createdAt: 100, ...over });
+  const thread = (over: Record<string, unknown> = {}) => ({ threadId: 't1', chatId: null, totalOccurrences: 7, answers: [answer()], ...over });
+  const router = (routes: Record<string, () => Promise<Response> | Response>) => vi.fn(async (url: string) => {
+    const handler = Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1];
+    if (!handler) throw new Error('想定外のURL: ' + url);
+    return handler();
+  }) as unknown as typeof fetch;
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const keysButton = () => document.querySelector<HTMLButtonElement>('button[data-action="keys"]')!;
+  const notesButton = () => document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="answers"]');
+  const title = () => document.querySelector('#muse-keys-title')!.textContent;
+  const sections = () => [...document.querySelectorAll('[role="dialog"] .muse-answers-thread')];
+  const open = async (fetchFn: typeof fetch) => { mount(fetchFn); keysButton().click(); await flush(); };
+
+  it('モーダルを開いたときだけあり、タイトルと✕の間(タイトル行の末尾側)に置く。名前と状態を持つ', async () => {
+    mount(router({}));
+    expect(document.querySelector('button[data-action="answers"]')).toBeNull();
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }) }));
+    const head = document.querySelector('.muse-keys-head')!;
+    expect([...head.children].map((el) => el.tagName + ':' + (el.getAttribute('data-action') ?? el.id))).toEqual(['H2:muse-keys-title', 'BUTTON:answers', 'BUTTON:close']);
+    expect(notesButton()!.textContent).toContain('🗒️');
+    expect(notesButton()!.getAttribute('aria-label')).toBeTruthy();
+    expect(notesButton()!.getAttribute('aria-pressed')).toBe('false');
+  });
+  it('押すと /api/muse-search/answers を読み、スレッドごとに(APIの順に)、回答を出現回数の順に並べて出す', async () => {
+    const fetchFn = router({
+      '/api/muse-search/keys': json({ keys: [] }),
+      '/api/muse-search/answers': json({ threads: [
+        thread({ threadId: 't2', totalOccurrences: 10, answers: [answer({ answerId: 'b1', chatId: 'c9', occurrences: 10, searchKeys: ['alpha', 'beta'], preview: 'ぷれびゅー' })] }),
+        thread({ threadId: null, chatId: 'c3', totalOccurrences: 4, answers: [answer({ answerId: 'z1', chatId: 'c3', occurrences: 3 }), answer({ answerId: 'z2', chatId: 'c3', occurrences: 1 })] }),
+      ] }),
+    });
+    await open(fetchFn);
+    notesButton()!.click();
+    await flush();
+    expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])).toEqual(['/api/muse-search/keys', '/api/muse-search/answers']);
+    expect(title()).toContain('スレッド');
+    expect(notesButton()!.getAttribute('aria-pressed')).toBe('true');
+    expect(sections().map((el) => el.querySelector('.muse-answers-heading')!.textContent)).toEqual([
+      expect.stringMatching(/スレッド t2.*10回/),
+      expect.stringMatching(/スレッド化していないチャット c3.*4回/),
+    ]);
+    const rows = [...sections()[1].querySelectorAll('tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent));
+    expect(rows).toEqual([['z1', 'c3', '3', 'static', '前…静的…後'], ['z2', 'c3', '1', 'static', '前…静的…後']]);
+    expect([...sections()[0].querySelectorAll('tbody tr')].map((tr) => [...tr.children].map((td) => td.textContent))).toEqual([['b1', 'c9', '10', 'alpha, beta', 'ぷれびゅー']]);
+  });
+  it('読み込み中は表示を出し、記録が無ければ空の案内、読めなければ理由つきのエラー(空の一覧に見せない)', async () => {
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': () => pending }));
+    notesButton()!.click();
+    expect(document.querySelector('.muse-keys-body')!.textContent).toContain('読み込んでいます');
+    release(new Response(JSON.stringify({ threads: [] })));
+    await flush();
+    expect(document.querySelector('.muse-keys-body')!.textContent).toContain('まだ');
+    document.body.innerHTML = '';
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ error: 'x', detail: 'd1 down' }, 503) }));
+    notesButton()!.click();
+    await flush();
+    expect(document.querySelector('.muse-keys-body')!.textContent).toMatch(/503.*d1 down/);
+    expect(sections()).toHaveLength(0);
+  });
+  it('もう一度押すと、🔑の検索キーの一覧へ戻る。タイトルと状態も戻る', async () => {
+    await open(router({ '/api/muse-search/keys': json({ keys: [{ searchKey: 'alpha', aiChatCount: 1, treeViewCount: 1, searchCount: 1, firstSearchedAt: '2026-11-19T00:00:00Z', lastSearchedAt: '2026-11-19T00:00:00Z' }] }), '/api/muse-search/answers': json({ threads: [thread()] }) }));
+    const firstTitle = title();
+    notesButton()!.click();
+    await flush();
+    notesButton()!.click();
+    await flush();
+    expect(title()).toBe(firstTitle);
+    expect(notesButton()!.getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('.muse-keys-table')).not.toBeNull();
+    expect(sections()).toHaveLength(0);
+  });
+  it('遅れて届いた応答が、いま見ている画面を上書きしない(一覧へ戻ったあとに答えが届いても、検索キーのまま)', async () => {
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    await open(router({ '/api/muse-search/keys': json({ keys: [{ searchKey: 'alpha', aiChatCount: 1, treeViewCount: 1, searchCount: 1, firstSearchedAt: '2026-11-19T00:00:00Z', lastSearchedAt: '2026-11-19T00:00:00Z' }] }), '/api/muse-search/answers': () => pending }));
+    notesButton()!.click();
+    notesButton()!.click();
+    await flush();
+    release(new Response(JSON.stringify({ threads: [thread()] })));
+    await flush();
+    expect(document.querySelector('.muse-keys-table')).not.toBeNull();
+    expect(sections()).toHaveLength(0);
+  });
+  it('サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す', async () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ threads: [thread({ threadId: evil, answers: [answer({ answerId: evil, preview: evil, searchKeys: [evil] })] })] }) }));
+    notesButton()!.click();
+    await flush();
+    expect(document.querySelectorAll('[role="dialog"] img')).toHaveLength(0);
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain(evil);
+  });
+  it('🗒️を押してもモーダルは閉じず、Escと✕で閉じる。閉じたあと🔑へフォーカスが戻る', async () => {
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ threads: [thread()] }) }));
+    notesButton()!.click();
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(keysButton());
+  });
+  it('Tabキーは、モーダルの外へ出ず、🗒️と✕の間を行き来する', async () => {
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }) }));
+    const close = document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="close"]')!;
+    expect(document.activeElement).toBe(close);
+    const tab = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    tab();
+    expect(document.activeElement).toBe(notesButton());
+    tab();
+    expect(document.activeElement).toBe(close);
+  });
+  it('CSS: 固定色を使わない(変数のみ)。ページのscriptは構文が通る', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toContain('.muse-answers-thread');
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
 describe('検索キーを記録できなかったときの表示', () => {
   it('keyLogged が false なら、結果は出したまま、記録できなかったことと理由を伝える', async () => {
     const page = mount(reply({ count: 1, posts: [item()], aiChatCount: null, treeViewCount: 3, keyLogged: false, keyLogError: 'd1 down' }));
