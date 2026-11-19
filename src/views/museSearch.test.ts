@@ -286,6 +286,8 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
   const title = () => document.querySelector('#muse-keys-title')!.textContent;
   const sections = () => [...document.querySelectorAll('[role="dialog"] .muse-answers-thread')];
   const open = async (fetchFn: typeof fetch) => { mount(fetchFn); keysButton().click(); await flush(); };
+  /** 見出しの文字(並べ替えの矢印は除く)。 */
+  const headerLabel = (th: Element) => { const c = th.cloneNode(true) as Element; c.querySelectorAll('.muse-sort-indicator').forEach((el) => el.remove()); return c.textContent; };
 
   it('モーダルを開いたときだけあり、タイトルと✕の間(タイトル行の末尾側)に置く。名前と状態を持つ', async () => {
     mount(router({}));
@@ -321,7 +323,110 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
       ['b0', script.formatMuseSearchTime(1763535000), '4', 'static', '前…静的…後'],
       ['b1', script.formatMuseSearchTime(1763538600), '6', 'alpha, beta', 'ぷれびゅー'],
     ]);
-    expect([...sections()[0].querySelectorAll('thead th')].map((th) => th.textContent)).toEqual(['回答ID', '回答日時(日本時間)', '出現回数', '検索キー', '一致箇所の前後']);
+    expect([...sections()[0].querySelectorAll('thead th')].map(headerLabel)).toEqual(['回答ID', '回答日時(日本時間)', '出現回数', '検索キー', '一致箇所の前後']);
+  });
+
+  // 並べ替え(2026-11-19、ユーザー指定): 「出現回数」か「回答日時(日本時間)」の見出しを押すと、その列を基準に降順/昇順に並べ替える。
+  describe('見出しを押して並べ替える', () => {
+    const sortChats = () => ({ chats: [
+      thread({ chatId: 'c-A', threadId: null, totalOccurrences: 12, answers: [
+        answer({ answerId: 'a-mid', occurrences: 5, createdAt: 2000 }),
+        answer({ answerId: 'a-old', occurrences: 9, createdAt: 1000 }),
+        answer({ answerId: 'a-new', occurrences: 2, createdAt: 3000 }),
+        answer({ answerId: 'a-tie', occurrences: 5, createdAt: 2500 }),
+      ] }),
+      thread({ chatId: 'c-B', threadId: 't9', totalOccurrences: 4, answers: [
+        answer({ answerId: 'b-1', occurrences: 1, createdAt: 500 }),
+        answer({ answerId: 'b-2', occurrences: 3, createdAt: 400 }),
+      ] }),
+    ] });
+    const press = (key: string) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    /** 🔑を開き、🗒️へ切り替える。 */
+    const open2 = async () => {
+      await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json(sortChats()) }));
+      notesButton()!.click();
+      await flush();
+    };
+    const ids = (index: number) => [...sections()[index].querySelectorAll('tbody tr td:first-child')].map((td) => td.textContent);
+    const sortButton = (key: string, index = 0) => sections()[index].querySelector<HTMLButtonElement>(`thead button[data-sort-key="${key}"]`)!;
+    const ariaSort = (key: string, index = 0) => sortButton(key, index).closest('th')!.getAttribute('aria-sort');
+    const chatOrder = () => sections().map((el) => el.querySelector('.muse-answers-heading')!.textContent!.slice(0, 8));
+
+    it('「出現回数」と「回答日時(日本時間)」の見出しだけが、押せるボタン。ほかの見出しは押せない', async () => {
+      await open2();
+      expect([...sections()[0].querySelectorAll('thead th')].map((th) => th.querySelector('button')?.getAttribute('data-sort-key') ?? null)).toEqual([null, 'createdAt', 'occurrences', null, null]);
+      expect(sortButton('createdAt').type).toBe('button');
+    });
+    it('最初は回答日時の昇順(これまでと同じ)。見出しにも、そう示す(aria-sort と矢印)', async () => {
+      await open2();
+      expect(ids(0)).toEqual(['a-old', 'a-mid', 'a-tie', 'a-new']);
+      expect(ariaSort('createdAt')).toBe('ascending');
+      expect(ariaSort('occurrences')).toBe('none');
+      expect(sortButton('createdAt').textContent).toContain('▲');
+      expect(sortButton('occurrences').textContent).not.toMatch(/[▲▼]/);
+    });
+    it('回答日時を押すと降順、もう一度押すと昇順に戻る', async () => {
+      await open2();
+      sortButton('createdAt').click();
+      expect(ids(0)).toEqual(['a-new', 'a-tie', 'a-mid', 'a-old']);
+      expect(ariaSort('createdAt')).toBe('descending');
+      expect(sortButton('createdAt').textContent).toContain('▼');
+      sortButton('createdAt').click();
+      expect(ids(0)).toEqual(['a-old', 'a-mid', 'a-tie', 'a-new']);
+      expect(ariaSort('createdAt')).toBe('ascending');
+    });
+    it('出現回数を押すと、まず降順(多い順)。もう一度押すと昇順。同数は回答日時の古い順', async () => {
+      await open2();
+      sortButton('occurrences').click();
+      expect(ids(0)).toEqual(['a-old', 'a-mid', 'a-tie', 'a-new']);
+      expect(ariaSort('occurrences')).toBe('descending');
+      expect(ariaSort('createdAt')).toBe('none');
+      sortButton('occurrences').click();
+      expect(ids(0)).toEqual(['a-new', 'a-mid', 'a-tie', 'a-old']);
+      expect(ariaSort('occurrences')).toBe('ascending');
+    });
+    it('別の列を押すと、その列の降順から始まる。すべてのチャットの表が同じ基準で並ぶ。チャットの並び(合計の多い順)は変わらない', async () => {
+      await open2();
+      sortButton('occurrences').click();
+      expect(ids(1)).toEqual(['b-2', 'b-1']);
+      expect(chatOrder()).toEqual(['チャット c-A', 'チャット c-B']);
+      sortButton('createdAt', 1).click();
+      expect(ids(0)).toEqual(['a-new', 'a-tie', 'a-mid', 'a-old']);
+      expect(ids(1)).toEqual(['b-1', 'b-2']);
+      expect(ariaSort('createdAt', 1)).toBe('descending');
+    });
+    it('並べ替えても、リンクは押せる(回答のモーダルが開く)。押した見出しにフォーカスが残る。タイトルは基準を示す', async () => {
+      await open2();
+      sortButton('occurrences').click();
+      expect(document.activeElement).toBe(sortButton('occurrences'));
+      expect(document.querySelector('#muse-keys-title')!.textContent).toContain('出現回数');
+      expect(document.querySelector('#muse-keys-title')!.textContent).toContain('降順');
+      expect(sections()[0].querySelectorAll('a[data-answer-id]')).toHaveLength(4);
+    });
+    it('🔑の一覧へ戻って🗒️を開き直しても、選んだ基準を覚えている。モーダルを閉じて開き直したら最初に戻る', async () => {
+      await open2();
+      sortButton('occurrences').click();
+      const notes = document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="answers"]')!;
+      notes.click();
+      await flush();
+      notes.click();
+      await flush();
+      expect(ariaSort('occurrences')).toBe('descending');
+      press('Escape');
+      keysButton().click();
+      await flush();
+      document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="answers"]')!.click();
+      await flush();
+      expect(ariaSort('createdAt')).toBe('ascending');
+    });
+  });
+
+  it('回答IDのリンクに下線を付けない', () => {
+    const html = getMuseSearchPage();
+    const style = html.slice(html.indexOf('<style id="muse-search-style">'), html.indexOf('</style>', html.indexOf('<style id="muse-search-style">')));
+    const rule = style.match(/\.muse-answers-link \{[^}]*\}/)![0];
+    expect(rule).toContain('text-decoration: none');
+    expect(rule).not.toContain('underline');
   });
   it('読み込み中は表示を出し、記録が無ければ空の案内、読めなければ理由つきのエラー(空の一覧に見せない)', async () => {
     let release!: (res: Response) => void;
@@ -380,15 +485,28 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(keysButton());
   });
-  it('Tabキーは、モーダルの外へ出ず、🗒️と✕の間を行き来する', async () => {
+  it('Tabキーは、モーダルの外へ出ず、モーダルの中のボタンとリンクの間を行き来する(Shift+Tabは逆向き)。見出しのボタンにも届く', async () => {
     await open(router({ '/api/muse-search/keys': json({ keys: [] }) }));
     const close = document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="close"]')!;
     expect(document.activeElement).toBe(close);
-    const tab = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    const tab = (shiftKey = false) => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }));
     tab();
     expect(document.activeElement).toBe(notesButton());
     tab();
     expect(document.activeElement).toBe(close);
+    tab(true);
+    expect(document.activeElement).toBe(notesButton());
+  });
+  it('Tabは、🗒️の一覧では、見出しのボタン・回答IDのリンクにも届き、最後の次は最初へ戻る', async () => {
+    await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ chats: [thread()] }) }));
+    notesButton()!.click();
+    await flush();
+    const items = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button, [role="dialog"] a[href]')];
+    expect(items.map((el) => el.getAttribute('data-sort-key') ?? el.getAttribute('data-action') ?? el.getAttribute('data-answer-id'))).toEqual(['answers', 'close', 'createdAt', 'occurrences', 'a1']);
+    const tab = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    items[items.length - 1].focus();
+    tab();
+    expect(document.activeElement).toBe(items[0]);
   });
   it('CSS: 固定色を使わない(変数のみ)。ページのscriptは構文が通る', () => {
     const html = getMuseSearchPage();

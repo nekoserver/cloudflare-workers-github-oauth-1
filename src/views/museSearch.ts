@@ -180,7 +180,18 @@ export const MUSE_SEARCH_SCRIPT = `
     }
 
     // 🗒️ボタン: 本体D1の回答ごとの記録を、全キー合算で、チャットIDごとのループ(合計の多い順)の中に、回答IDを回答日時の古い順に並べる。
-    function renderMuseAnswersChats(doc, chats, onOpen) {
+    // 回答の並べ替え。sort は { key: 'createdAt' | 'occurrences', dir: 'asc' | 'desc' }。同数のときは、出現回数なら回答日時の古い順、回答日時なら回答ID順にする。
+    function sortMuseAnswers(answers, sort) {
+      var sign = sort.dir === 'desc' ? -1 : 1;
+      return answers.slice().sort(function (a, b) {
+        var primary = (a[sort.key] - b[sort.key]) * sign;
+        if (primary !== 0) return primary;
+        if (sort.key === 'occurrences' && a.createdAt !== b.createdAt) return a.createdAt - b.createdAt;
+        return a.answerId < b.answerId ? -1 : (a.answerId > b.answerId ? 1 : 0);
+      });
+    }
+
+    function renderMuseAnswersChats(doc, chats, sort, onSort, onOpen) {
       var wrap = museSearchEl(doc, 'div', 'muse-answers');
       chats.forEach(function (group) {
         var section = museSearchEl(doc, 'section', 'muse-answers-thread');
@@ -189,15 +200,28 @@ export const MUSE_SEARCH_SCRIPT = `
         var table = museSearchEl(doc, 'table', 'muse-keys-table');
         var head = doc.createElement('thead');
         var headRow = doc.createElement('tr');
-        ['回答ID', '回答日時(日本時間)', '出現回数', '検索キー', '一致箇所の前後'].forEach(function (text, index) {
-          var th = museSearchEl(doc, 'th', index === 2 ? 'muse-keys-num' : '', text);
+        [['回答ID', ''], ['回答日時(日本時間)', 'createdAt'], ['出現回数', 'occurrences'], ['検索キー', ''], ['一致箇所の前後', '']].forEach(function (column, index) {
+          var th = museSearchEl(doc, 'th', index === 2 ? 'muse-keys-num' : '');
           th.setAttribute('scope', 'col');
+          if (column[1] === '') {
+            th.textContent = column[0];
+          } else {
+            var active = sort.key === column[1];
+            th.setAttribute('aria-sort', active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+            var sortButton = museSearchEl(doc, 'button', 'muse-sort');
+            sortButton.type = 'button';
+            sortButton.setAttribute('data-sort-key', column[1]);
+            sortButton.appendChild(doc.createTextNode(column[0]));
+            sortButton.appendChild(museSearchEl(doc, 'span', 'muse-sort-indicator', active ? (sort.dir === 'asc' ? '▲' : '▼') : ''));
+            sortButton.addEventListener('click', function () { onSort(column[1]); });
+            th.appendChild(sortButton);
+          }
           headRow.appendChild(th);
         });
         head.appendChild(headRow);
         table.appendChild(head);
         var body = doc.createElement('tbody');
-        group.answers.forEach(function (item) {
+        sortMuseAnswers(group.answers, sort).forEach(function (item) {
           var row = doc.createElement('tr');
           var idCell = museKeysCell(doc, '', 'muse-answers-id');
           var idLink = museSearchEl(doc, 'a', 'muse-answers-link', shortenMuseAnswerId(item.answerId));
@@ -264,8 +288,14 @@ export const MUSE_SEARCH_SCRIPT = `
         // 回答のモーダルが上に開いている間は、そちらが操作を受ける(Escで両方が閉じない)。
         if (doc.querySelector('[data-overlay="muse-answer"]')) return;
         if (event.key === 'Escape') closeModal();
-        // モーダルの中で操作できるのは🗒️と✕だけなので、Tabでフォーカスが外へ出ないようにする(2つの間で行き来する)。
-        else if (event.key === 'Tab') { event.preventDefault(); (doc.activeElement === close ? notes : close).focus(); }
+        // Tabでフォーカスがモーダルの外へ出ないようにする(モーダルの中のボタンとリンクの間を行き来する)。
+        else if (event.key === 'Tab') {
+          event.preventDefault();
+          var items = dialog.querySelectorAll('button, a[href]');
+          var at = Array.prototype.indexOf.call(items, doc.activeElement);
+          var next = event.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);
+          items[next].focus();
+        }
       }
       close.addEventListener('click', closeModal);
       overlay.addEventListener('click', function (event) { if (event.target === overlay) closeModal(); });
@@ -280,7 +310,22 @@ export const MUSE_SEARCH_SCRIPT = `
       var view = 'keys';
       var requestNumber = 0;
       var KEYS_TITLE = '検索キー(AIチャットでの出現回数の多い順)';
-      var ANSWERS_TITLE = 'チャットごとの回答(回答日時順)';
+      var SORT_LABELS = { createdAt: '回答日時', occurrences: '出現回数' };
+      // 🗒️の並べ替えの基準。最初は回答日時の昇順。🔑へ戻って開き直しても覚えている(モーダルを閉じたら最初に戻る)。
+      var sortState = { key: 'createdAt', dir: 'asc' };
+      var answersData = null;
+      function answersTitle() { return 'チャットごとの回答(' + SORT_LABELS[sortState.key] + 'の' + (sortState.dir === 'asc' ? '昇順' : '降順') + ')'; }
+      function onSortAnswers(key) {
+        if (sortState.key === key) sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+        else { sortState.key = key; sortState.dir = 'desc'; }
+        show(buildAnswers());
+        title.textContent = answersTitle();
+        var again = content.querySelector('button[data-sort-key="' + key + '"]');
+        if (again) again.focus();
+      }
+      function buildAnswers() {
+        return renderMuseAnswersChats(doc, answersData, sortState, onSortAnswers, function (answerId, opener) { openMuseAnswerModal(doc, fetchFn, opener, answerId); });
+      }
       function load(url, failText, build) {
         requestNumber += 1;
         var mine = requestNumber;
@@ -313,11 +358,12 @@ export const MUSE_SEARCH_SCRIPT = `
       }
       function showAnswers() {
         view = 'answers';
-        title.textContent = ANSWERS_TITLE;
+        title.textContent = answersTitle();
         notes.setAttribute('aria-pressed', 'true');
         load('/api/muse-search/answers', 'チャットごとの回答の一覧を読み込めませんでした', function (data) {
           if (data.chats.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ回答ごとの出現回数が記録されていません。');
-          return renderMuseAnswersChats(doc, data.chats, function (answerId, opener) { openMuseAnswerModal(doc, fetchFn, opener, answerId); });
+          answersData = data.chats;
+          return buildAnswers();
         });
       }
       notes.addEventListener('click', function () { if (view === 'keys') showAnswers(); else showKeys(); });
@@ -430,7 +476,9 @@ export function getMuseSearchPage(): string {
     .muse-keys-table .muse-answers-keys { min-width: 8em; overflow-wrap: anywhere; }
     .muse-keys-table .muse-answers-preview { min-width: 14em; overflow-wrap: anywhere; }
     .muse-answer-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
-    .muse-answers-link { color: var(--accent-color); text-decoration: underline; }
+    .muse-answers-link { color: var(--accent-color); text-decoration: none; }
+    .muse-sort { font: inherit; font-weight: 600; line-height: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; min-height: 0; min-width: 0; height: auto; cursor: pointer; text-align: inherit; white-space: nowrap; }
+    .muse-sort-indicator { display: inline-block; min-width: 1.2em; font-size: 11px; color: var(--accent-color); }
     .muse-answer-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: 14px; }
     .muse-answer-text mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
     .muse-answers-heading { margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
