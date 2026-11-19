@@ -1,15 +1,15 @@
 // /muse-search の🗒️ボタン(2026-11-19、ユーザー指定): 回答ごとの出現回数を本体のD1(muse_search_answer_log、0196)に記録し、
-// スレッドごとに、出現回数の多い順に並べて一覧する。
+// チャットごとに、回答日時順に並べて一覧する。
 // 仮説:
 //   1. 検索のたびに、dynamicneko が返した回答ごとの出現回数を、キー・検索日時とともに追記する(0件なら何も書かず成功)。
 //   2. 一覧は「全キー合算」。同じ回答は、キーごとに最後に検索したときの値だけを足す(同じキーを何度検索しても増えない)。
-//   3. スレッド(スレッド化していなければ、そのチャット)ごとに合計の多い順、スレッドの中は回答ごとの回数の多い順。
-//   4. 回答のスレッドは、その回答の最新の記録に従う(あとでスレッド化されたら、新しい方へ移る。回答が2つに割れない)。
+//   3. チャットIDごとに(チャットは合計の多い順)、チャットの中は回答日時の古い順に回答IDを並べる。
+//   4. 回答のチャットは、その回答の最新の記録に従う(回答が2つに割れない)。
 //   5. 他のユーザーの記録は混ぜない。制約に反する値は、何も残さずに拒否する。失敗は理由つきで返し、空の一覧にしない。
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createD1, createMuseSearchKeysSqlite } from './museSearchKeys.testdb';
-import { groupAnswersByThread, isMuseAnswerHit, listMuseAnswersByThread, recordSearchedAnswers, type MuseAnswerHit } from './museSearchAnswers';
+import { groupAnswersByChat, isMuseAnswerHit, listMuseAnswersByChat, recordSearchedAnswers, type MuseAnswerHit } from './museSearchAnswers';
 
 const hit = (over: Partial<MuseAnswerHit> = {}): MuseAnswerHit => ({ answerId: 'a1', chatId: 'c1', threadId: 't1', occurrences: 2, preview: '前置き…静的…', createdAt: 100, ...over });
 function setup(options: Parameters<typeof createD1>[1] = {}) {
@@ -70,56 +70,61 @@ describe('recordSearchedAnswers', () => {
   });
 });
 
-describe('groupAnswersByThread(全キー合算、スレッドごと)', () => {
+describe('groupAnswersByChat(全キー合算、チャットごと)', () => {
   const row = (over: Record<string, unknown>) => ({ id: 1, search_key: 'k', answer_id: 'a1', chat_id: 'c1', thread_id: 't1', occurrences: 1, preview: 'p', answer_created_at: 100, ...over }) as never;
-  it('同じ回答はキーを足し、スレッドは合計の多い順、スレッドの中は回数の多い順', () => {
-    const groups = groupAnswersByThread([
-      row({ id: 1, search_key: 'x', answer_id: 'a1', occurrences: 2 }),
-      row({ id: 2, search_key: 'y', answer_id: 'a1', occurrences: 3 }),
-      row({ id: 3, search_key: 'x', answer_id: 'a2', occurrences: 1 }),
-      row({ id: 4, search_key: 'x', answer_id: 'b1', chat_id: 'c9', thread_id: 't2', occurrences: 9 }),
+  it('同じ回答はキーを足し、チャットは合計の多い順、チャットの中は回答日時の古い順(会話の流れ)', () => {
+    const groups = groupAnswersByChat([
+      row({ id: 1, search_key: 'x', answer_id: 'a1', occurrences: 2, answer_created_at: 300 }),
+      row({ id: 2, search_key: 'y', answer_id: 'a1', occurrences: 3, answer_created_at: 300 }),
+      row({ id: 3, search_key: 'x', answer_id: 'a2', occurrences: 1, answer_created_at: 100 }),
+      row({ id: 4, search_key: 'x', answer_id: 'a3', occurrences: 9, answer_created_at: 200 }),
+      row({ id: 5, search_key: 'x', answer_id: 'b1', chat_id: 'c9', thread_id: 't2', occurrences: 20, answer_created_at: 50 }),
     ]);
-    expect(groups.map((g) => [g.threadId, g.totalOccurrences, g.answers.map((a) => [a.answerId, a.occurrences, a.searchKeys])])).toEqual([
-      ['t2', 9, [['b1', 9, ['x']]]],
-      ['t1', 6, [['a1', 5, ['x', 'y']], ['a2', 1, ['x']]]],
+    expect(groups.map((g) => [g.chatId, g.threadId, g.totalOccurrences, g.answers.map((a) => [a.answerId, a.occurrences, a.searchKeys])])).toEqual([
+      ['c9', 't2', 20, [['b1', 20, ['x']]]],
+      ['c1', 't1', 15, [['a2', 1, ['x']], ['a3', 9, ['x']], ['a1', 5, ['x', 'y']]]],
     ]);
   });
-  it('スレッド化していない回答は、チャットごとに1つのまとまり(threadId は null)', () => {
-    const groups = groupAnswersByThread([
+  it('スレッド化していないチャットも、チャットごとのまとまり(threadId は null)。同じチャットの回答は、スレッドの有無が混ざっても1つにまとまる', () => {
+    const groups = groupAnswersByChat([
       row({ id: 1, answer_id: 'a1', chat_id: 'c1', thread_id: null, occurrences: 1 }),
-      row({ id: 2, answer_id: 'a2', chat_id: 'c1', thread_id: null, occurrences: 2 }),
+      row({ id: 2, answer_id: 'a2', chat_id: 'c1', thread_id: 't1', occurrences: 2, answer_created_at: 200 }),
       row({ id: 3, answer_id: 'a3', chat_id: 'c2', thread_id: null, occurrences: 4 }),
     ]);
-    expect(groups.map((g) => [g.threadId, g.chatId, g.totalOccurrences])).toEqual([[null, 'c2', 4], [null, 'c1', 3]]);
+    expect(groups.map((g) => [g.chatId, g.threadId, g.totalOccurrences])).toEqual([['c2', null, 4], ['c1', 't1', 3]]);
   });
-  it('回答のスレッドは最新の記録に従う(2つに割れない)。同数のときは回答の新しい順', () => {
-    const groups = groupAnswersByThread([
-      row({ id: 1, search_key: 'x', answer_id: 'a1', thread_id: null, occurrences: 1 }),
-      row({ id: 2, search_key: 'y', answer_id: 'a1', thread_id: 't1', occurrences: 1 }),
-      row({ id: 3, search_key: 'x', answer_id: 'a2', thread_id: 't1', occurrences: 2, answer_created_at: 50 }),
-      row({ id: 4, search_key: 'x', answer_id: 'a3', thread_id: 't1', occurrences: 2, answer_created_at: 300 }),
+  it('回答のチャットは最新の記録に従う(2つに割れない)。回答日時が同じなら回答IDの順。合計が同じなら、新しい回答を含むチャットが先', () => {
+    const groups = groupAnswersByChat([
+      row({ id: 1, search_key: 'x', answer_id: 'a1', chat_id: 'c1', occurrences: 1 }),
+      row({ id: 2, search_key: 'y', answer_id: 'a1', chat_id: 'c2', occurrences: 1 }),
+      row({ id: 3, search_key: 'x', answer_id: 'b', chat_id: 'c2', occurrences: 1 }),
+      row({ id: 4, search_key: 'x', answer_id: 'a', chat_id: 'c2', occurrences: 1 }),
     ]);
     expect(groups).toHaveLength(1);
-    expect(groups[0].answers.map((a) => a.answerId)).toEqual(['a3', 'a1', 'a2']);
-    expect(groups[0].totalOccurrences).toBe(6);
+    expect(groups[0].answers.map((a) => a.answerId)).toEqual(['a', 'a1', 'b']);
+    const tie = groupAnswersByChat([
+      row({ id: 1, answer_id: 'o', chat_id: 'old', occurrences: 2, answer_created_at: 10 }),
+      row({ id: 2, answer_id: 'n', chat_id: 'new', occurrences: 2, answer_created_at: 99 }),
+    ]);
+    expect(tie.map((g) => g.chatId)).toEqual(['new', 'old']);
   });
-  it('記録が無ければ空', () => expect(groupAnswersByThread([])).toEqual([]));
+  it('記録が無ければ空', () => expect(groupAnswersByChat([])).toEqual([]));
 });
 
-describe('listMuseAnswersByThread(D1から)', () => {
+describe('listMuseAnswersByChat(D1から)', () => {
   it('同じキーを何度検索しても増えず、最後の値だけを足す。他のユーザーは混ぜない', async () => {
     const { db } = setup();
     await recordSearchedAnswers(db, 'u1', 'k', [hit({ occurrences: 5 })], '2026-11-19T00:00:00Z');
     await recordSearchedAnswers(db, 'u1', 'k', [hit({ occurrences: 7 })], '2026-11-19T01:00:00Z');
     await recordSearchedAnswers(db, 'u1', 'other', [hit({ occurrences: 1 })], '2026-11-19T02:00:00Z');
     await recordSearchedAnswers(db, 'someone', 'k', [hit({ answerId: 'zz', occurrences: 99 })]);
-    const groups = await listMuseAnswersByThread(db, 'u1');
+    const groups = await listMuseAnswersByChat(db, 'u1');
     expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ threadId: 't1', totalOccurrences: 8 });
+    expect(groups[0]).toMatchObject({ chatId: 'c1', threadId: 't1', totalOccurrences: 8 });
     expect(groups[0].answers[0]).toMatchObject({ answerId: 'a1', occurrences: 8, searchKeys: ['k', 'other'], preview: '前置き…静的…' });
   });
   it('読めなかったときは空の一覧にせず、例外にする', async () => {
     const { db } = setup({ failOn: /FROM muse_search_answer_log/ });
-    await expect(listMuseAnswersByThread(db, 'u1')).rejects.toThrow('d1 down');
+    await expect(listMuseAnswersByChat(db, 'u1')).rejects.toThrow('d1 down');
   });
 });

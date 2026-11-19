@@ -499,7 +499,7 @@ import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
 import { listMuseSearchKeys, recordSearchedKey } from './utils/museSearchKeys';
-import { listMuseAnswersByThread, recordSearchedAnswers } from './utils/museSearchAnswers';
+import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
 import { fetchMuseMonitor } from './utils/museMonitor';
@@ -20859,16 +20859,16 @@ app.get('/api/muse-search/keys', authMiddleware, cfDashboardAdminMiddleware, asy
   }
 });
 
-/** 🗒️ボタンの一覧。全キー合算で、スレッドごとに出現回数の多い順に回答を並べて返す。読めなかったときは、空の一覧にせず理由つきで失敗にする。 */
+/** 🗒️ボタンの一覧。全キー合算で、チャットごとに(合計の多い順)、回答を回答日時の古い順に並べて返す。読めなかったときは、空の一覧にせず理由つきで失敗にする。 */
 app.get('/api/muse-search/answers', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
-  const error = 'スレッドごとの回答の一覧を読めませんでした';
+  const error = 'チャットごとの回答の一覧を読めませんでした';
   if (!c.env.DB) return c.json({ error, detail: 'D1(DB)が未設定です' }, 503);
   try {
-    return c.json({ threads: await listMuseAnswersByThread(c.env.DB, c.get('user').sub) });
+    return c.json({ chats: await listMuseAnswersByChat(c.env.DB, c.get('user').sub) });
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause);
-    logger.error('muse-search: スレッドごとの回答の一覧を読めませんでした', { error: detail });
+    logger.error('muse-search: チャットごとの回答の一覧を読めませんでした', { error: detail });
     return c.json({ error, detail }, 503);
   }
 });

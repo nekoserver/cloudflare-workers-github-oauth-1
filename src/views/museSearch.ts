@@ -101,17 +101,17 @@ export const MUSE_SEARCH_SCRIPT = `
       return table;
     }
 
-    // 🗒️ボタン: 本体D1の回答ごとの記録を、全キー合算で、スレッドごとに(合計の多い順)、回答を出現回数の多い順に並べる。
-    function renderMuseAnswersThreads(doc, threads) {
+    // 🗒️ボタン: 本体D1の回答ごとの記録を、全キー合算で、チャットIDごとのループ(合計の多い順)の中に、回答IDを回答日時の古い順に並べる。
+    function renderMuseAnswersChats(doc, chats) {
       var wrap = museSearchEl(doc, 'div', 'muse-answers');
-      threads.forEach(function (group) {
+      chats.forEach(function (group) {
         var section = museSearchEl(doc, 'section', 'muse-answers-thread');
-        var label = group.threadId !== null ? 'スレッド ' + group.threadId : 'スレッド化していないチャット ' + group.chatId;
-        section.appendChild(museSearchEl(doc, 'h3', 'muse-answers-heading', label + '(合計' + group.totalOccurrences + '回・回答' + group.answers.length + '件)'));
+        var threadLabel = group.threadId !== null ? 'スレッド ' + group.threadId : 'スレッド化なし';
+        section.appendChild(museSearchEl(doc, 'h3', 'muse-answers-heading', 'チャット ' + group.chatId + '(' + threadLabel + '・合計' + group.totalOccurrences + '回・回答' + group.answers.length + '件)'));
         var table = museSearchEl(doc, 'table', 'muse-keys-table');
         var head = doc.createElement('thead');
         var headRow = doc.createElement('tr');
-        ['回答ID', 'チャットID', '出現回数', '検索キー', '一致箇所の前後'].forEach(function (text, index) {
+        ['回答ID', '回答日時(日本時間)', '出現回数', '検索キー', '一致箇所の前後'].forEach(function (text, index) {
           var th = museSearchEl(doc, 'th', index === 2 ? 'muse-keys-num' : '', text);
           th.setAttribute('scope', 'col');
           headRow.appendChild(th);
@@ -122,7 +122,7 @@ export const MUSE_SEARCH_SCRIPT = `
         group.answers.forEach(function (item) {
           var row = doc.createElement('tr');
           row.appendChild(museKeysCell(doc, item.answerId, 'muse-answers-id'));
-          row.appendChild(museKeysCell(doc, item.chatId, 'muse-answers-id'));
+          row.appendChild(museKeysCell(doc, formatMuseSearchTime(item.createdAt), 'muse-keys-time'));
           row.appendChild(museKeysCell(doc, String(item.occurrences), 'muse-keys-num'));
           row.appendChild(museKeysCell(doc, item.searchKeys.join(', '), 'muse-answers-keys'));
           row.appendChild(museKeysCell(doc, item.preview, 'muse-answers-preview'));
@@ -157,9 +157,9 @@ export const MUSE_SEARCH_SCRIPT = `
       var notes = museSearchEl(doc, 'button', 'muse-keys-notes', '🗒️');
       notes.type = 'button';
       notes.setAttribute('data-action', 'answers');
-      notes.setAttribute('aria-label', 'スレッドごとの回答の一覧を開く');
+      notes.setAttribute('aria-label', 'チャットごとの回答の一覧を開く');
       notes.setAttribute('aria-pressed', 'false');
-      notes.title = 'スレッドごとの回答の一覧(出現回数の順)';
+      notes.title = 'チャットごとの回答の一覧(回答日時の順)';
       head.appendChild(title);
       head.appendChild(notes);
       head.appendChild(close);
@@ -192,7 +192,7 @@ export const MUSE_SEARCH_SCRIPT = `
       var view = 'keys';
       var requestNumber = 0;
       var KEYS_TITLE = '検索キー(AIチャットでの出現回数の多い順)';
-      var ANSWERS_TITLE = 'スレッドごとの回答(出現回数の多い順)';
+      var ANSWERS_TITLE = 'チャットごとの回答(回答日時順)';
       function load(url, failText, build) {
         requestNumber += 1;
         var mine = requestNumber;
@@ -227,9 +227,9 @@ export const MUSE_SEARCH_SCRIPT = `
         view = 'answers';
         title.textContent = ANSWERS_TITLE;
         notes.setAttribute('aria-pressed', 'true');
-        load('/api/muse-search/answers', 'スレッドごとの回答の一覧を読み込めませんでした', function (data) {
-          if (data.threads.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ回答ごとの出現回数が記録されていません。');
-          return renderMuseAnswersThreads(doc, data.threads);
+        load('/api/muse-search/answers', 'チャットごとの回答の一覧を読み込めませんでした', function (data) {
+          if (data.chats.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ回答ごとの出現回数が記録されていません。');
+          return renderMuseAnswersChats(doc, data.chats);
         });
       }
       notes.addEventListener('click', function () { if (view === 'keys') showAnswers(); else showKeys(); });
