@@ -294,7 +294,7 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
     expect(document.querySelector('button[data-action="answers"]')).toBeNull();
     await open(router({ '/api/muse-search/keys': json({ keys: [] }) }));
     const head = document.querySelector('.muse-keys-head')!;
-    expect([...head.children].map((el) => el.tagName + ':' + (el.getAttribute('data-action') ?? el.id))).toEqual(['H2:muse-keys-title', 'BUTTON:answers', 'BUTTON:close']);
+    expect([...head.children].map((el) => el.tagName + ':' + (el.getAttribute('data-action') ?? el.id))).toEqual(['H2:muse-keys-title', 'BUTTON:answers', 'BUTTON:recent', 'BUTTON:close']);
     expect(notesButton()!.textContent).toContain('🗒️');
     expect(notesButton()!.getAttribute('aria-label')).toBeTruthy();
     expect(notesButton()!.getAttribute('aria-pressed')).toBe('false');
@@ -485,24 +485,27 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(keysButton());
   });
-  it('Tabキーは、モーダルの外へ出ず、モーダルの中のボタンとリンクの間を行き来する(Shift+Tabは逆向き)。見出しのボタンにも届く', async () => {
+  it('Tabキーは、モーダルの外へ出ず、モーダルの中のボタンとリンクの間を行き来する(Shift+Tabは逆向き)', async () => {
     await open(router({ '/api/muse-search/keys': json({ keys: [] }) }));
     const close = document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="close"]')!;
+    const recent = document.querySelector<HTMLButtonElement>('[role="dialog"] button[data-action="recent"]')!;
     expect(document.activeElement).toBe(close);
     const tab = (shiftKey = false) => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true }));
     tab();
     expect(document.activeElement).toBe(notesButton());
     tab();
+    expect(document.activeElement).toBe(recent);
+    tab();
     expect(document.activeElement).toBe(close);
     tab(true);
-    expect(document.activeElement).toBe(notesButton());
+    expect(document.activeElement).toBe(recent);
   });
   it('Tabは、🗒️の一覧では、見出しのボタン・回答IDのリンクにも届き、最後の次は最初へ戻る', async () => {
     await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ chats: [thread()] }) }));
     notesButton()!.click();
     await flush();
     const items = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button, [role="dialog"] a[href]')];
-    expect(items.map((el) => el.getAttribute('data-sort-key') ?? el.getAttribute('data-action') ?? el.getAttribute('data-answer-id'))).toEqual(['answers', 'close', 'createdAt', 'occurrences', 'a1']);
+    expect(items.map((el) => el.getAttribute('data-sort-key') ?? el.getAttribute('data-action') ?? el.getAttribute('data-answer-id'))).toEqual(['answers', 'recent', 'close', 'createdAt', 'occurrences', 'a1']);
     const tab = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     items[items.length - 1].focus();
     tab();
@@ -687,6 +690,189 @@ describe('回答IDのリンクと、回答のモーダル', () => {
     const style = html.slice(start, html.indexOf('</style>', start));
     expect(style).toMatch(/\.muse-answer-overlay \{ position: fixed; inset: 0;/);
     expect(style).toMatch(/\.muse-answer-text mark \{[^}]*var\(--/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
+// 📅ボタン(2026-11-19、ユーザー指定。撤回と言い直しあり): 検索キーのモーダルの🗒️の右。押すと、最上位のレイヤーに、スレッドを問わず日付順に回答を並べて出す。
+// 検索キーのモーダルの表示・開いた直後のフォーカス(✕)は変えない。
+describe('📅ボタン(最上位レイヤーに、スレッドを問わず日付順の回答)', () => {
+  const answer = (over: Record<string, unknown> = {}) => ({ answerId: 'a1', occurrences: 2, searchKeys: ['static'], preview: '前…静的…後', createdAt: 1763535000, ...over });
+  const chats = () => ({ chats: [
+    { chatId: 'c-A', threadId: 't1', totalOccurrences: 9, answers: [answer({ answerId: 'answer-A-old-0001', createdAt: 1000, occurrences: 4 }), answer({ answerId: 'answer-A-new-0002', createdAt: 4000, occurrences: 5 })] },
+    { chatId: 'c-B', threadId: null, totalOccurrences: 3, answers: [answer({ answerId: 'answer-B-mid-0003', createdAt: 3000, occurrences: 3 })] },
+    { chatId: 'c-C', threadId: 't2', totalOccurrences: 1, answers: [answer({ answerId: 'answer-C-tie-0004', createdAt: 3000, occurrences: 1 })] },
+  ] });
+  const router = (routes: Record<string, () => Promise<Response> | Response>) => vi.fn(async (url: string) => {
+    const handler = Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1];
+    if (!handler) throw new Error('想定外のURL: ' + url);
+    return handler();
+  }) as unknown as typeof fetch;
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const keysButton = () => document.querySelector<HTMLButtonElement>('button[data-action="keys"]')!;
+  const keysOverlay = () => document.querySelector<HTMLElement>('[data-overlay="muse-keys"]');
+  const recentOverlay = () => document.querySelector<HTMLElement>('[data-overlay="muse-recent"]');
+  const answerOverlay = () => document.querySelector<HTMLElement>('[data-overlay="muse-answer"]');
+  const recentButton = () => document.querySelector<HTMLButtonElement>('[data-overlay="muse-keys"] button[data-action="recent"]')!;
+  const notes = () => document.querySelector<HTMLButtonElement>('[data-overlay="muse-keys"] button[data-action="answers"]')!;
+  const press = (key: string) => document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+  const routes = (extra: Record<string, () => Promise<Response> | Response> = {}) => ({ '/api/muse-search/keys': json({ keys: [{ searchKey: 'alpha', aiChatCount: 1, treeViewCount: 1, searchCount: 1, firstSearchedAt: '2026-11-19T00:00:00Z', lastSearchedAt: '2026-11-19T00:00:00Z' }] }), '/api/muse-search/answers': json(chats()), ...extra });
+  const open = async (fetchFn: typeof fetch) => { mount(fetchFn); keysButton().click(); await flush(); };
+  const rows = () => [...document.querySelectorAll('[data-overlay="muse-recent"] .muse-recent-table tbody tr')];
+  const withPageCss = async (run: () => Promise<void>) => {
+    const html = getMuseSearchPage();
+    const style = document.createElement('style');
+    style.textContent = html.slice(html.indexOf('<style id="muse-search-style">') + 30, html.indexOf('</style>', html.indexOf('<style id="muse-search-style">')));
+    document.head.appendChild(style);
+    try { await run(); } finally { style.remove(); }
+  };
+
+  it('🗒️の右に📅がある(タイトル → 🗒️ → 📅 → ✕)。名前を持つ。検索キーのモーダルを開いたときだけある', async () => {
+    mount(router({}));
+    expect(document.querySelector('button[data-action="recent"]')).toBeNull();
+    await open(router(routes()));
+    expect(notes().nextElementSibling).toBe(recentButton());
+    expect(recentButton().nextElementSibling!.getAttribute('data-action')).toBe('close');
+    expect(recentButton().textContent).toContain('📅');
+    expect(recentButton().getAttribute('aria-label')).toBeTruthy();
+  });
+  it('開いた直後は、検索キーの一覧のまま(タイトルも同じ)。フォーカスは✕のまま。📅を押すまで、回答の一覧は読まない', async () => {
+    const fetchFn = router(routes());
+    await open(fetchFn);
+    expect(document.querySelector('#muse-keys-title')!.textContent).toContain('検索キー');
+    expect(document.querySelector('.muse-keys-table')).not.toBeNull();
+    expect(document.activeElement).toBe(document.querySelector('[data-overlay="muse-keys"] button[data-action="close"]'));
+    expect(recentOverlay()).toBeNull();
+    expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])).toEqual(['/api/muse-search/keys']);
+  });
+  it('押すと、最上位のレイヤーに、チャットもスレッドも問わず、回答を日付の新しい順に1つの表で出す。同時刻は回答ID順。検索キーのモーダルは下に残る', async () => {
+    const fetchFn = router(routes());
+    await open(fetchFn);
+    recentButton().click();
+    await flush();
+    expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0])).toEqual(['/api/muse-search/keys', '/api/muse-search/answers']);
+    const dialog = recentOverlay()!.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+    expect(dialog.querySelector('.muse-recent-title')!.textContent).toContain('新しい順');
+    expect(keysOverlay()).not.toBeNull();
+    expect(keysOverlay()!.querySelector('.muse-keys-table')).not.toBeNull();
+    expect(recentOverlay()!.querySelectorAll('.muse-answers-thread')).toHaveLength(0);
+    expect([...recentOverlay()!.querySelectorAll('.muse-recent-table thead th')].map((th) => th.textContent)).toEqual(['回答日時(日本時間)', '回答ID', 'チャットID', '出現回数', '検索キー', '一致箇所の前後']);
+    expect(rows().map((tr) => [...tr.children].map((td) => td.textContent))).toEqual([
+      [script.formatMuseSearchTime(4000), 'answ…0002', 'c-A', '5', 'static', '前…静的…後'],
+      [script.formatMuseSearchTime(3000), 'answ…0003', 'c-B', '3', 'static', '前…静的…後'],
+      [script.formatMuseSearchTime(3000), 'answ…0004', 'c-C', '1', 'static', '前…静的…後'],
+      [script.formatMuseSearchTime(1000), 'answ…0001', 'c-A', '4', 'static', '前…静的…後'],
+    ]);
+    expect(document.activeElement).toBe(dialog.querySelector('button[data-action="close"]'));
+  });
+  it('重なり順は、検索キーのモーダルより上(getNextZ)', async () => {
+    await withPageCss(async () => {
+      await open(router(routes()));
+      recentButton().click();
+      await flush();
+      expect(Number(recentOverlay()!.style.zIndex)).toBe(Number(keysOverlay()!.style.zIndex) + 100);
+    });
+  });
+  it('回答IDはリンク。押すと回答のモーダルが、📅のレイヤーのさらに上に開く', async () => {
+    await withPageCss(async () => {
+      await open(router(routes({ '/api/muse-search/answer?': json({ answerId: 'answer-A-new-0002', chatId: 'c-A', createdAt: 4000, keys: ['static'], truncated: false, segments: [{ text: '本文', hit: false }] }) })));
+      recentButton().click();
+      await flush();
+      const links = recentOverlay()!.querySelectorAll<HTMLAnchorElement>('a[data-answer-id]');
+      expect(links).toHaveLength(4);
+      expect(links[0].getAttribute('data-answer-id')).toBe('answer-A-new-0002');
+      links[0].click();
+      await flush();
+      expect(answerOverlay()).not.toBeNull();
+      expect(Number(answerOverlay()!.style.zIndex)).toBe(Number(recentOverlay()!.style.zIndex) + 100);
+    });
+  });
+  it('Escは、いちばん上のレイヤーだけを閉じる(回答 → 📅 → 検索キーの順)。閉じたあと、開いたボタンへフォーカスが戻る', async () => {
+    await open(router(routes({ '/api/muse-search/answer?': json({ answerId: 'x', chatId: 'c', createdAt: 1, keys: ['k'], truncated: false, segments: [{ text: 't', hit: false }] }) })));
+    recentButton().focus();
+    recentButton().click();
+    await flush();
+    const link = recentOverlay()!.querySelector<HTMLAnchorElement>('a[data-answer-id]')!;
+    link.focus();
+    link.click();
+    await flush();
+    press('Escape');
+    expect(answerOverlay()).toBeNull();
+    expect(recentOverlay()).not.toBeNull();
+    expect(document.activeElement).toBe(link);
+    press('Escape');
+    expect(recentOverlay()).toBeNull();
+    expect(keysOverlay()).not.toBeNull();
+    expect(document.activeElement).toBe(recentButton());
+    press('Escape');
+    expect(keysOverlay()).toBeNull();
+  });
+  it('✕と外側のクリックで、📅のレイヤーだけを閉じる。Tabは📅のレイヤーの外へ出ない', async () => {
+    await open(router(routes()));
+    recentButton().click();
+    await flush();
+    const close = recentOverlay()!.querySelector<HTMLButtonElement>('button[data-action="close"]')!;
+    press('Tab');
+    expect(document.activeElement).toBe(recentOverlay()!.querySelector('a[data-answer-id]'));
+    close.click();
+    expect(recentOverlay()).toBeNull();
+    expect(keysOverlay()).not.toBeNull();
+    recentButton().click();
+    await flush();
+    recentOverlay()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(recentOverlay()).toBeNull();
+    expect(keysOverlay()).not.toBeNull();
+  });
+  it('🗒️は今までどおり、検索キーの一覧とチャットごとの一覧を切り替える(📅の影響を受けない)', async () => {
+    await open(router(routes()));
+    notes().click();
+    await flush();
+    expect(document.querySelector('#muse-keys-title')!.textContent).toContain('チャットごと');
+    notes().click();
+    await flush();
+    expect(document.querySelector('#muse-keys-title')!.textContent).toContain('検索キー');
+    expect(notes().getAttribute('aria-pressed')).toBe('false');
+  });
+  it('開いている間に📅をもう一度押しても重ねない。閉じたあとの遅れた応答は、画面を出さない', async () => {
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    await open(router(routes({ '/api/muse-search/answers': () => pending })));
+    recentButton().click();
+    recentButton().click();
+    expect(document.querySelectorAll('[data-overlay="muse-recent"]')).toHaveLength(1);
+    expect(recentOverlay()!.textContent).toContain('読み込んでいます');
+    press('Escape');
+    release(new Response(JSON.stringify(chats())));
+    await flush();
+    expect(recentOverlay()).toBeNull();
+    expect(document.querySelector('.muse-recent-table')).toBeNull();
+  });
+  it('記録が無ければ空の案内、読めなければ理由つきのエラー(空の一覧に見せない)', async () => {
+    await open(router(routes({ '/api/muse-search/answers': json({ chats: [] }) })));
+    recentButton().click();
+    await flush();
+    expect(recentOverlay()!.textContent).toContain('まだ');
+    document.body.innerHTML = '';
+    await open(router(routes({ '/api/muse-search/answers': json({ error: 'x', detail: 'd1 down' }, 503) })));
+    recentButton().click();
+    await flush();
+    expect(recentOverlay()!.textContent).toMatch(/503.*d1 down/);
+    expect(rows()).toHaveLength(0);
+  });
+  it('サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す', async () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    await open(router(routes({ '/api/muse-search/answers': json({ chats: [{ chatId: evil, threadId: null, totalOccurrences: 1, answers: [answer({ answerId: evil, searchKeys: [evil], preview: evil })] }] }) })));
+    recentButton().click();
+    await flush();
+    expect(recentOverlay()!.querySelectorAll('img')).toHaveLength(0);
+    expect(recentOverlay()!.querySelector('.muse-recent-table')!.textContent).toContain(evil);
+  });
+  it('CSS: 📅のレイヤーは固定位置で、固定色を使わない', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-recent-overlay \{ position: fixed; inset: 0;/);
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });

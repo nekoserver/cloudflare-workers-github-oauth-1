@@ -247,6 +247,131 @@ export const MUSE_SEARCH_SCRIPT = `
       return wrap;
     }
 
+    // 📅ボタン: スレッド・チャットを問わず、回答を回答日時の新しい順に1つの表で出す(同時刻は回答ID順)。回答の一覧(チャットごと)の応答をそのまま平らにして使う。
+    function flattenMuseAnswers(chats) {
+      var rows = [];
+      chats.forEach(function (group) {
+        group.answers.forEach(function (item) {
+          rows.push({ answerId: item.answerId, chatId: group.chatId, threadId: group.threadId, occurrences: item.occurrences, searchKeys: item.searchKeys, preview: item.preview, createdAt: item.createdAt });
+        });
+      });
+      return rows.sort(function (a, b) {
+        if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
+        return a.answerId < b.answerId ? -1 : (a.answerId > b.answerId ? 1 : 0);
+      });
+    }
+
+    function renderMuseRecentAnswers(doc, rows, onOpen) {
+      var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
+      var table = museSearchEl(doc, 'table', 'muse-keys-table muse-recent-table');
+      var head = doc.createElement('thead');
+      var headRow = doc.createElement('tr');
+      ['回答日時(日本時間)', '回答ID', 'チャットID', '出現回数', '検索キー', '一致箇所の前後'].forEach(function (text, index) {
+        var th = museSearchEl(doc, 'th', index === 3 ? 'muse-keys-num' : '', text);
+        th.setAttribute('scope', 'col');
+        headRow.appendChild(th);
+      });
+      head.appendChild(headRow);
+      table.appendChild(head);
+      var body = doc.createElement('tbody');
+      rows.forEach(function (item) {
+        var row = doc.createElement('tr');
+        row.appendChild(museKeysCell(doc, formatMuseSearchTime(item.createdAt), 'muse-keys-time'));
+        var idCell = museKeysCell(doc, '', 'muse-answers-id');
+        var idLink = museSearchEl(doc, 'a', 'muse-answers-link', shortenMuseAnswerId(item.answerId));
+        idLink.setAttribute('href', '#');
+        idLink.setAttribute('data-answer-id', item.answerId);
+        idLink.setAttribute('aria-label', '回答 ' + item.answerId + ' の全文を開く');
+        idLink.title = item.answerId;
+        idLink.addEventListener('click', function (event) { event.preventDefault(); onOpen(idLink.getAttribute('data-answer-id'), idLink); });
+        idCell.appendChild(idLink);
+        row.appendChild(idCell);
+        row.appendChild(museKeysCell(doc, item.chatId, 'muse-answers-id'));
+        row.appendChild(museKeysCell(doc, String(item.occurrences), 'muse-keys-num'));
+        row.appendChild(museKeysCell(doc, item.searchKeys.join(', '), 'muse-answers-keys'));
+        row.appendChild(museKeysCell(doc, item.preview, 'muse-answers-preview'));
+        body.appendChild(row);
+      });
+      table.appendChild(body);
+      scroll.appendChild(table);
+      return scroll;
+    }
+
+    // 📅ボタンのレイヤー: 検索キーのモーダルの上(最上位)に、スレッド・チャットを問わず、回答を日付の新しい順に1つの表で出す。
+    // 回答IDのリンクを押すと、回答のモーダルが、このレイヤーのさらに上に開く。Esc・✕・外側のクリックで、このレイヤーだけを閉じる。
+    function openMuseRecentModal(doc, fetchFn, opener) {
+      if (doc.querySelector('[data-overlay="muse-recent"]')) return;
+      var overlay = museSearchEl(doc, 'div', 'muse-recent-overlay');
+      overlay.setAttribute('data-overlay', 'muse-recent');
+      overlay.style.zIndex = String(getNextZ(doc));
+      var dialog = museSearchEl(doc, 'div', 'muse-keys-dialog');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.setAttribute('aria-labelledby', 'muse-recent-title');
+      var head = museSearchEl(doc, 'div', 'muse-keys-head');
+      var title = museSearchEl(doc, 'h2', 'muse-keys-title muse-recent-title', '最新の回答(スレッド問わず日付の新しい順)');
+      title.id = 'muse-recent-title';
+      var close = museSearchEl(doc, 'button', 'muse-keys-close', '✕');
+      close.type = 'button';
+      close.setAttribute('data-action', 'close');
+      close.setAttribute('aria-label', '閉じる');
+      head.appendChild(title);
+      head.appendChild(close);
+      var content = museSearchEl(doc, 'div', 'muse-keys-body', '読み込んでいます…');
+      dialog.appendChild(head);
+      dialog.appendChild(content);
+      overlay.appendChild(dialog);
+      doc.body.appendChild(overlay);
+
+      var closed = false;
+      function closeModal() {
+        closed = true;
+        doc.removeEventListener('keydown', onKeydown);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (opener && opener.focus) opener.focus();
+      }
+      function onKeydown(event) {
+        // 回答のモーダルが上に開いている間は、そちらが操作を受ける。
+        if (doc.querySelector('[data-overlay="muse-answer"]')) return;
+        if (event.key === 'Escape') closeModal();
+        else if (event.key === 'Tab') {
+          event.preventDefault();
+          var items = dialog.querySelectorAll('button, a[href]');
+          var at = Array.prototype.indexOf.call(items, doc.activeElement);
+          var next = event.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);
+          items[next].focus();
+        }
+      }
+      close.addEventListener('click', closeModal);
+      overlay.addEventListener('click', function (event) { if (event.target === overlay) closeModal(); });
+      doc.addEventListener('keydown', onKeydown);
+      close.focus();
+
+      function show(node) {
+        while (content.firstChild) content.removeChild(content.firstChild);
+        content.appendChild(node);
+      }
+      fetchFn('/api/muse-search/answers').then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+      }).then(function (r) {
+        if (closed) return;
+        if (!r.ok) {
+          var why = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
+          show(museSearchEl(doc, 'p', 'muse-search-error', '回答の一覧を読み込めませんでした(HTTP ' + r.status + ')' + (why ? ': ' + why : '')));
+          return;
+        }
+        var rows = flattenMuseAnswers(r.data.chats);
+        if (rows.length === 0) {
+          show(museSearchEl(doc, 'p', 'muse-search-status', 'まだ回答ごとの出現回数が記録されていません。'));
+          return;
+        }
+        show(renderMuseRecentAnswers(doc, rows, function (answerId, link) { openMuseAnswerModal(doc, fetchFn, link, answerId); }));
+      }).catch(function (error) {
+        if (closed) return;
+        show(museSearchEl(doc, 'p', 'muse-search-error', '回答の一覧を読み込めませんでした: ' + (error && error.message ? error.message : String(error))));
+      });
+    }
+
     // 🔑ボタン: 検索キーを、AIチャットでの出現回数の多い順に、tree-viewでの出現回数とともに、最上位のモーダルに出す。
     function openMuseKeysModal(doc, fetchFn, opener) {
       if (doc.querySelector('[data-overlay="muse-keys"]')) return;
@@ -270,8 +395,15 @@ export const MUSE_SEARCH_SCRIPT = `
       notes.setAttribute('aria-label', 'チャットごとの回答の一覧を開く');
       notes.setAttribute('aria-pressed', 'false');
       notes.title = 'チャットごとの回答の一覧(回答日時の順)';
+      // 📅は🗒️の右。押すと、最上位のレイヤーに、スレッド・チャットを問わず、回答を日付の新しい順に出す。
+      var recent = museSearchEl(doc, 'button', 'muse-keys-notes muse-keys-recent', '📅');
+      recent.type = 'button';
+      recent.setAttribute('data-action', 'recent');
+      recent.setAttribute('aria-label', 'スレッド問わず日付順の回答の一覧を開く');
+      recent.title = 'スレッド問わず日付順の回答の一覧';
       head.appendChild(title);
       head.appendChild(notes);
+      head.appendChild(recent);
       head.appendChild(close);
       var content = museSearchEl(doc, 'div', 'muse-keys-body', '読み込んでいます…');
       dialog.appendChild(head);
@@ -285,8 +417,8 @@ export const MUSE_SEARCH_SCRIPT = `
         if (opener && opener.focus) opener.focus();
       }
       function onKeydown(event) {
-        // 回答のモーダルが上に開いている間は、そちらが操作を受ける(Escで両方が閉じない)。
-        if (doc.querySelector('[data-overlay="muse-answer"]')) return;
+        // 回答・📅のレイヤーが上に開いている間は、そちらが操作を受ける(Escで重なった全部が閉じない)。
+        if (doc.querySelector('[data-overlay="muse-answer"], [data-overlay="muse-recent"]')) return;
         if (event.key === 'Escape') closeModal();
         // Tabでフォーカスがモーダルの外へ出ないようにする(モーダルの中のボタンとリンクの間を行き来する)。
         else if (event.key === 'Tab') {
@@ -345,10 +477,13 @@ export const MUSE_SEARCH_SCRIPT = `
           show(museSearchEl(doc, 'p', 'muse-search-error', failText + ': ' + (error && error.message ? error.message : String(error))));
         });
       }
+      function markView(name) {
+        view = name;
+        notes.setAttribute('aria-pressed', name === 'answers' ? 'true' : 'false');
+      }
       function showKeys() {
-        view = 'keys';
+        markView('keys');
         title.textContent = KEYS_TITLE;
-        notes.setAttribute('aria-pressed', 'false');
         load('/api/muse-search/keys', '検索キーの一覧を読み込めませんでした', function (data) {
           if (data.keys.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。');
           var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
@@ -357,16 +492,16 @@ export const MUSE_SEARCH_SCRIPT = `
         });
       }
       function showAnswers() {
-        view = 'answers';
+        markView('answers');
         title.textContent = answersTitle();
-        notes.setAttribute('aria-pressed', 'true');
         load('/api/muse-search/answers', 'チャットごとの回答の一覧を読み込めませんでした', function (data) {
           if (data.chats.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ回答ごとの出現回数が記録されていません。');
           answersData = data.chats;
           return buildAnswers();
         });
       }
-      notes.addEventListener('click', function () { if (view === 'keys') showAnswers(); else showKeys(); });
+      notes.addEventListener('click', function () { if (view === 'answers') showKeys(); else showAnswers(); });
+      recent.addEventListener('click', function () { openMuseRecentModal(doc, fetchFn, recent); });
       showKeys();
     }
 
@@ -476,11 +611,15 @@ export function getMuseSearchPage(): string {
     .muse-keys-table .muse-answers-keys { min-width: 8em; overflow-wrap: anywhere; }
     .muse-keys-table .muse-answers-preview { min-width: 14em; overflow-wrap: anywhere; }
     .muse-answer-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
+    .muse-recent-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-answers-link { color: var(--accent-color); text-decoration: none; }
     .muse-sort { font: inherit; font-weight: 600; line-height: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; min-height: 0; min-width: 0; height: auto; cursor: pointer; text-align: inherit; white-space: nowrap; }
     .muse-sort-indicator { display: inline-block; min-width: 1.2em; font-size: 11px; color: var(--accent-color); }
     .muse-answer-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: 14px; }
     .muse-answer-text mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
+    .muse-keys-table.muse-recent-table th { white-space: nowrap; }
+    .muse-keys-table.muse-recent-table .muse-answers-preview { min-width: 8em; }
+    .muse-keys-table.muse-recent-table .muse-answers-keys { min-width: 6em; }
     .muse-answers-heading { margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
     .muse-keys-close { min-width: 36px; min-height: 36px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; }
     .muse-keys-body { padding: 12px 16px; overflow: auto; min-height: 0; }
