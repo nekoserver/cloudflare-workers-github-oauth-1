@@ -46,6 +46,125 @@ export const MUSE_SEARCH_SCRIPT = `
       return item;
     }
 
+    // 重なり順は固定値で書かず、いま画面にある固定位置の要素の z-index の最大値 + 100 にする(CLAUDE.mdルール26)。
+    // このページには静的なモーダルが無いので、staticZDefaults は空。静的なモーダルを足すときは、ここに登録する。
+    var staticZDefaults = {};
+    function getNextZ(doc) {
+      var max = 700;
+      var all = doc.querySelectorAll('*');
+      for (var i = 0; i < all.length; i++) {
+        var style = doc.defaultView.getComputedStyle(all[i]);
+        if (style.position === 'fixed') {
+          var z = parseInt(style.zIndex, 10) || 0;
+          if (z > max && z < 9000) max = z;
+        }
+      }
+      Object.keys(staticZDefaults).forEach(function (id) {
+        var el = doc.getElementById(id);
+        if (el && el.classList.contains('open')) {
+          var z2 = parseInt(el.style.zIndex, 10) || staticZDefaults[id];
+          if (z2 > max) max = z2;
+        }
+      });
+      return max + 100;
+    }
+
+    function museKeysCell(doc, text, className) {
+      var td = museSearchEl(doc, 'td', className, text);
+      return td;
+    }
+
+    function renderMuseKeysTable(doc, keys) {
+      var table = museSearchEl(doc, 'table', 'muse-keys-table');
+      var head = doc.createElement('thead');
+      var headRow = doc.createElement('tr');
+      ['検索キー', 'AIチャットでの出現回数', 'tree-viewでの出現回数', '検索回数', '最後に検索した日時(日本時間)'].forEach(function (label, index) {
+        var th = museSearchEl(doc, 'th', index > 0 && index < 4 ? 'muse-keys-num' : '', label);
+        th.setAttribute('scope', 'col');
+        headRow.appendChild(th);
+      });
+      head.appendChild(headRow);
+      table.appendChild(head);
+      var body = doc.createElement('tbody');
+      keys.forEach(function (item) {
+        var row = doc.createElement('tr');
+        row.appendChild(museKeysCell(doc, item.searchKey, 'muse-keys-key'));
+        row.appendChild(museKeysCell(doc, String(item.aiChatCount), 'muse-keys-num'));
+        var tree = museKeysCell(doc, item.treeViewCount === null ? '—' : String(item.treeViewCount), 'muse-keys-num');
+        if (item.treeViewCount === null) tree.title = 'tree-viewでの出現回数を取得できませんでした';
+        row.appendChild(tree);
+        row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num'));
+        row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), ''));
+        body.appendChild(row);
+      });
+      table.appendChild(body);
+      return table;
+    }
+
+    // 🔑ボタン: 検索キーを、AIチャットでの出現回数の多い順に、tree-viewでの出現回数とともに、最上位のモーダルに出す。
+    function openMuseKeysModal(doc, fetchFn, opener) {
+      if (doc.querySelector('[data-overlay="muse-keys"]')) return;
+      var overlay = museSearchEl(doc, 'div', 'muse-keys-overlay');
+      overlay.setAttribute('data-overlay', 'muse-keys');
+      overlay.style.zIndex = String(getNextZ(doc));
+      var dialog = museSearchEl(doc, 'div', 'muse-keys-dialog');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.setAttribute('aria-labelledby', 'muse-keys-title');
+      var head = museSearchEl(doc, 'div', 'muse-keys-head');
+      var title = museSearchEl(doc, 'h2', 'muse-keys-title', '検索キー(AIチャットでの出現回数の多い順)');
+      title.id = 'muse-keys-title';
+      var close = museSearchEl(doc, 'button', 'muse-keys-close', '✕');
+      close.type = 'button';
+      close.setAttribute('data-action', 'close');
+      close.setAttribute('aria-label', '閉じる');
+      head.appendChild(title);
+      head.appendChild(close);
+      var content = museSearchEl(doc, 'div', 'muse-keys-body', '読み込んでいます…');
+      dialog.appendChild(head);
+      dialog.appendChild(content);
+      overlay.appendChild(dialog);
+      doc.body.appendChild(overlay);
+
+      function closeModal() {
+        doc.removeEventListener('keydown', onKeydown);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (opener && opener.focus) opener.focus();
+      }
+      function onKeydown(event) {
+        if (event.key === 'Escape') closeModal();
+        // モーダルの中で操作できるのは✕だけなので、Tabでフォーカスが外へ出ないようにする。
+        else if (event.key === 'Tab') { event.preventDefault(); close.focus(); }
+      }
+      close.addEventListener('click', closeModal);
+      overlay.addEventListener('click', function (event) { if (event.target === overlay) closeModal(); });
+      doc.addEventListener('keydown', onKeydown);
+      close.focus();
+
+      function show(node) {
+        while (content.firstChild) content.removeChild(content.firstChild);
+        content.appendChild(node);
+      }
+      fetchFn('/api/muse-search/keys').then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+      }).then(function (r) {
+        if (!r.ok) {
+          var detail = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
+          show(museSearchEl(doc, 'p', 'muse-search-error', '検索キーの一覧を読み込めませんでした(HTTP ' + r.status + ')' + (detail ? ': ' + detail : '')));
+          return;
+        }
+        if (r.data.keys.length === 0) {
+          show(museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。'));
+          return;
+        }
+        var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
+        scroll.appendChild(renderMuseKeysTable(doc, r.data.keys));
+        show(scroll);
+      }).catch(function (error) {
+        show(museSearchEl(doc, 'p', 'muse-search-error', '検索キーの一覧を読み込めませんでした: ' + (error && error.message ? error.message : String(error))));
+      });
+    }
+
     function initMuseSearchPage(doc, fetchFn) {
       var form = doc.querySelector('form');
       var input = doc.querySelector('input[name="q"]');
@@ -53,6 +172,8 @@ export const MUSE_SEARCH_SCRIPT = `
       var status = doc.querySelector('[data-field="status"]');
       var list = doc.querySelector('[data-field="results"]');
       var busy = false;
+      var keysButton = doc.querySelector('button[data-action="keys"]');
+      keysButton.addEventListener('click', function () { openMuseKeysModal(doc, fetchFn, keysButton); });
 
       function clearResults() {
         while (list.firstChild) list.removeChild(list.firstChild);
@@ -91,6 +212,10 @@ export const MUSE_SEARCH_SCRIPT = `
             return;
           }
           status.textContent = r.data.count + '件見つかりました。';
+          if (r.data.keyLogged === false) {
+            status.textContent += '(検索キーを記録できませんでした' + (r.data.keyLogError ? ': ' + r.data.keyLogError : '') + ')';
+            status.className = 'muse-search-status muse-search-error';
+          }
           r.data.posts.forEach(function (post) { list.appendChild(renderMuseSearchItem(doc, post)); });
         }).catch(function (error) {
           fail('検索できませんでした: ' + (error && error.message ? error.message : String(error)));
@@ -133,6 +258,20 @@ export function getMuseSearchPage(): string {
     .muse-search-role { padding: 0 8px; border-radius: 10px; background: var(--badge-bg); color: var(--text-primary); border: 1px solid var(--border-color); }
     .muse-search-meta { color: var(--text-muted); }
     .muse-search-snippet { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
+    .muse-keys-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
+    .muse-keys-dialog { display: flex; flex-direction: column; box-sizing: border-box; width: 100%; max-width: 820px; max-height: min(80vh, 640px); background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; }
+    .muse-keys-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border-color); }
+    .muse-keys-title { margin: 0; font-size: 16px; }
+    .muse-keys-close { min-width: 36px; min-height: 36px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; }
+    .muse-keys-body { padding: 12px 16px; overflow: auto; min-height: 0; }
+    .muse-keys-scroll { overflow: auto; }
+    .muse-keys-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .muse-keys-table th, .muse-keys-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    .muse-keys-table thead th { position: sticky; top: 0; background: var(--card-bg); color: var(--text-secondary); font-weight: 600; }
+    .muse-keys-table .muse-keys-num { text-align: right; min-width: 5.5em; }
+    .muse-keys-table .muse-keys-key { min-width: 12em; overflow-wrap: anywhere; }
+    .muse-keys-table tbody td:last-child { white-space: nowrap; }
+    .muse-search-form button[data-action="keys"] { padding: 0 12px; }
     .muse-search-snippet mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
   </style>
 </head>
@@ -142,6 +281,7 @@ export function getMuseSearchPage(): string {
     <form class="muse-search-form" role="search">
       <input type="search" name="q" placeholder="tree-view の Museタブの会話から探す" aria-label="検索する文字" maxlength="500" autocomplete="off">
       <button type="submit">検索</button>
+      <button type="button" data-action="keys" aria-label="検索キーの一覧を開く" title="検索キーの一覧(AIチャットでの出現回数の順)">🔑</button>
     </form>
     <p class="muse-search-note">質問と回答の両方を探します(大文字と小文字は区別しません)。新しい順に、最大100件まで表示します。</p>
     <p class="muse-search-status" data-field="status" role="status" aria-live="polite"></p>

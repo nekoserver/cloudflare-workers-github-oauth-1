@@ -72,7 +72,7 @@ describe('GET /api/muse-search', () => {
   it('一致が無いときは、空の一覧を 200 で返す(失敗と区別する)', async () => {
     const res = await request(q('無い'), { env: upstream(dynamicneko(async () => Response.json({ posts: [] }))) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ count: 0, posts: [] });
+    expect(await res.json()).toMatchObject({ count: 0, posts: [] });
   });
   it('バインディング・シークレットが未設定なら 503 で、理由を返す', async () => {
     const noBinding = await request(q('x'), { env: { DYNAMICNEKO_WORKER_HMAC_SECRET: 's' } });

@@ -104,8 +104,45 @@ dynamicneko は全ルートの前に、オーナーのセッションを要求�
   - 実際の投稿数での検索の速さ
   - 案A・案Bの作り(構想のみ)。`/neko qsearch` の履歴への保存の扱い、サイドバーの結果欄の拡張点は、コードを読んだだけで、試していない
 
+## 6. 検索キーの記録と🔑モーダル(実装済み・本体の PR に含む)
+
+**対象**: `muse_search_key_log` テーブル(本体の D1、`migrations/0195`)、`src/utils/museSearchKeys.ts`、`GET /api/muse-search/keys`、`/muse-search` の🔑ボタンとモーダル、dynamicneko の `occurrenceCount` — 検索したキーを、AIチャットの応答ログでの出現回数・tree-view の会話での出現回数・検索日時とともに記録し、🔑で出現回数の多い順に見られるようにする。
+
+### 背景
+
+- 何を探してきたかが残らず、よく探すキーを見返せなかった。
+- 出現回数は「件数」ではなく「本文の中に現れた回数の合計」(重ならない一致、大文字小文字なし)と解釈した。
+
+### 記録と表示
+
+| 項目 | 内容 |
+|---|---|
+| 記録の契機 | `GET /api/muse-search` が成功するたびに1行を追記(0件でも残す)。追記専用で、一覧は読むときにキーごとの最新行を集計 |
+| `ai_chat_count` | 本体の `ai_chat_shares.answer`(自分の分・`deleted_at IS NULL`)での出現回数。質問文は数えない |
+| `tree_view_count` | dynamicneko の `occurrenceCount`。上流が古く値が無いときは NULL(画面は「—」)。0 とは区別する |
+| 並び順 | AIチャットでの出現回数の降順 → tree-view の降順 → 最後に検索した日時の新しい順 → キー |
+| 上限 | 200キー |
+| モーダル | 🔑で開く最上位のモーダル(`getNextZ()`。Esc・✕・外側クリックで閉じる。フォーカスを戻す。二重に開かない) |
+| 登録 | 5つのレジストリ(`STATUS_TABLE_DEFINITIONS`・`STATUS_MIGRATION_SQL`・`TABLE_COLUMN_KEYS`・`TABLE_GROUP_MAP`・`COLUMN_FK_TARGETS`)に登録 |
+
+### 失敗の見え方
+
+| 状況 | 動作 |
+|---|---|
+| 記録に失敗 | 検索結果は返す。応答に `keyLogged: false` と `keyLogError`、ログにも出し、画面の状態行に警告 |
+| 一覧の読み出しに失敗・DB 未設定 | `GET /api/muse-search/keys` が 503(`error`・`detail`)。モーダルに理由を表示(空の一覧に見せない) |
+| 本番の D1 に 0195 が未適用 | 検索は動くが `keyLogged: false`(no such table)。**デプロイ前に流す** |
+
+### 注意事項
+
+- マイグレーション 0195 は**本体の D1**(`workers-github-oauth`)用。dynamicneko の D1 ではない。外部キーは張らない(別の DB を指せない)。
+- tree-view の出現回数は dynamicneko の `occurrenceCount`(dynamicneko の PR 459)に依存する。未デプロイの間は「—」。
+- 出現回数の SQL(`replace` の長さの差)が、大きな `ai_chat_shares` で遅くないかは測っていない。
+- 「AIチャットの応答ログ」を `ai_chat_shares.answer` と解釈した(確認が要る)。
+
 ## 関連
 
+- dynamicneko の PR(出現回数): [nekoserver/dynamicneko#459](https://github.com/nekoserver/dynamicneko/pull/459)
 - dynamicneko の PR: [nekoserver/dynamicneko#457](https://github.com/nekoserver/dynamicneko/pull/457)(検索 API と、門番の例外1本)。知見は dynamicneko の `NOTICE.20261119.tree-view-muse.md`。
 - 認証の基準方式: CLAUDE.mdルール38、`SPEC.cloudflare-workers-github-oauth-1.20261008.worker-auth-policy.md`。
 - Museへの経路の一覧: `SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md`。

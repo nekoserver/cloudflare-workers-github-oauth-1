@@ -32,6 +32,14 @@ describe('parseMuseSearchQuery', () => {
 describe('isMuseSearchData', () => {
   it('正しい形を通す', () => expect(isMuseSearchData({ posts: [post] })).toBe(true));
   it('空の結果も通す', () => expect(isMuseSearchData({ posts: [] })).toBe(true));
+  it('tree-viewでの出現回数(occurrenceCount)は、あってもなくても通す(古い版には無い)', () => {
+    expect(isMuseSearchData({ posts: [post], occurrenceCount: 12 })).toBe(true);
+    expect(isMuseSearchData({ posts: [], occurrenceCount: 0 })).toBe(true);
+    expect(isMuseSearchData({ posts: [post] })).toBe(true);
+  });
+  it('occurrenceCountが、負・小数・数以外・NaNなら通さない(0や別の値に読み替えない)', () => {
+    for (const occurrenceCount of [-1, 1.5, '12', null, Number.NaN, Infinity]) expect(isMuseSearchData({ posts: [], occurrenceCount })).toBe(false);
+  });
   it('形が違うものは通さない', () => {
     for (const v of [null, {}, { posts: 'x' }, { posts: [{ ...post, role: 'system' }] }, { posts: [{ ...post, createdAt: '100' }] },
       { posts: [{ ...post, content: undefined }] }, { posts: [{ ...post, threadMark: 1 }] }, { posts: [{ postId: 'a' }] }]) expect(isMuseSearchData(v)).toBe(false);
