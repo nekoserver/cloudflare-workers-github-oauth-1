@@ -580,16 +580,41 @@ export const MUSE_SEARCH_SCRIPT = `
       if (data.truncated) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '本文が長いため、途中までを表示しています。'));
       return wrap;
     }
-    function toggleMuseThread(doc, fetchFn, link, item) {
-      var panel = item.querySelector('.muse-thread-last');
-      if (panel) {
-        // 開いている・閉じている → 切り替える。取れていない(読み込み中・失敗)ときは、取り直す。
-        if (panel.getAttribute('data-state') === 'loaded' || panel.getAttribute('data-state') === 'loading') {
-          panel.hidden = !panel.hidden;
-          link.setAttribute('aria-expanded', panel.hidden ? 'false' : 'true');
-          return;
+    // 同時に取りにいく数の上限。「全開」で多数のスレッドを開いても、一度に何十本も送らない。
+    function createMuseSemaphore(limit) {
+      var active = 0;
+      var queue = [];
+      return {
+        acquire: function () {
+          return new Promise(function (resolve) {
+            if (active < limit) { active += 1; resolve(); } else queue.push(resolve);
+          });
+        },
+        release: function () {
+          var next = queue.shift();
+          if (next) next(); else active -= 1;
         }
-      } else {
+      };
+    }
+    var MUSE_THREAD_FETCH_LIMIT = 4;
+
+    function isMuseThreadOpen(link) {
+      return link.getAttribute('aria-expanded') === 'true';
+    }
+    function closeMuseThread(link, item) {
+      var panel = item.querySelector('.muse-thread-last');
+      if (panel) panel.hidden = true;
+      link.setAttribute('aria-expanded', 'false');
+    }
+    // 開く。取れている本文は取り直さない。読み込み中なら、そのまま表示する。失敗していたら、取り直す。
+    function openMuseThread(doc, fetchFn, semaphore, link, item) {
+      var panel = item.querySelector('.muse-thread-last');
+      if (panel && (panel.getAttribute('data-state') === 'loaded' || panel.getAttribute('data-state') === 'loading')) {
+        panel.hidden = false;
+        link.setAttribute('aria-expanded', 'true');
+        return;
+      }
+      if (!panel) {
         panel = museSearchEl(doc, 'div', 'muse-thread-last');
         item.appendChild(panel);
       }
@@ -597,21 +622,30 @@ export const MUSE_SEARCH_SCRIPT = `
       panel.setAttribute('data-state', 'loading');
       panel.textContent = '読み込んでいます…';
       link.setAttribute('aria-expanded', 'true');
-      fetchFn('/api/muse-search/thread?threadId=' + encodeURIComponent(link.getAttribute('data-thread-id'))).then(function (res) {
-        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
-      }).then(function (r) {
-        if (!r.ok) {
+      semaphore.acquire().then(function () {
+        return fetchFn('/api/muse-search/thread?threadId=' + encodeURIComponent(link.getAttribute('data-thread-id'))).then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+        }).then(function (r) {
+          if (!r.ok) {
+            panel.setAttribute('data-state', 'failed');
+            panel.textContent = failText(r, '最終書き込み');
+            return;
+          }
+          panel.setAttribute('data-state', 'loaded');
+          panel.textContent = '';
+          panel.appendChild(renderMuseThreadLast(doc, r.data));
+        }).catch(function (error) {
           panel.setAttribute('data-state', 'failed');
-          panel.textContent = failText(r, '最終書き込み');
-          return;
-        }
-        panel.setAttribute('data-state', 'loaded');
-        panel.textContent = '';
-        panel.appendChild(renderMuseThreadLast(doc, r.data));
-      }).catch(function (error) {
-        panel.setAttribute('data-state', 'failed');
-        panel.textContent = '最終書き込みを読み込めませんでした: ' + (error && error.message ? error.message : String(error));
+          panel.textContent = '最終書き込みを読み込めませんでした: ' + (error && error.message ? error.message : String(error));
+        }).then(function () { semaphore.release(); });
       });
+    }
+    // リンクを押したとき。開いていれば閉じ、閉じていれば開く。ただし、取れなかった(失敗した)ときは、押し直すと取り直す。
+    function toggleMuseThread(doc, fetchFn, semaphore, link, item) {
+      var panel = item.querySelector('.muse-thread-last');
+      if (panel && panel.getAttribute('data-state') === 'failed') openMuseThread(doc, fetchFn, semaphore, link, item);
+      else if (isMuseThreadOpen(link)) closeMuseThread(link, item);
+      else openMuseThread(doc, fetchFn, semaphore, link, item);
     }
     function loadMuseThreads(doc, fetchFn, container) {
       container.textContent = '読み込んでいます…';
@@ -631,6 +665,54 @@ export const MUSE_SEARCH_SCRIPT = `
           container.appendChild(museSearchEl(doc, 'p', 'muse-search-status', 'スレッドがまだありません。'));
           return;
         }
+        var semaphore = createMuseSemaphore(MUSE_THREAD_FETCH_LIMIT);
+        var items = [];
+
+        // 検索窓(表示中のスレッドのタイトルを絞り込む。ブラウザ側だけで、サーバーは呼ばない)と、「全開/全閉」ボタン。
+        var tools = museSearchEl(doc, 'div', 'muse-thread-tools');
+        var filter = museSearchEl(doc, 'input', 'muse-thread-filter');
+        filter.type = 'search';
+        filter.setAttribute('data-field', 'thread-filter');
+        filter.setAttribute('placeholder', '表示中のスレッドを絞り込む');
+        filter.setAttribute('aria-label', 'スレッドのタイトルで絞り込む');
+        filter.setAttribute('maxlength', '500');
+        filter.setAttribute('autocomplete', 'off');
+        var toggleAll = museSearchEl(doc, 'button', 'muse-thread-toggle-all', '全開');
+        toggleAll.type = 'button';
+        toggleAll.setAttribute('data-action', 'toggle-all');
+        toggleAll.title = '表示中のスレッドの最終書き込みを、すべて開く/閉じる';
+        tools.appendChild(filter);
+        tools.appendChild(toggleAll);
+        container.appendChild(tools);
+        var noMatch = museSearchEl(doc, 'p', 'muse-thread-nomatch', 'タイトルに一致するスレッドはありません。');
+        noMatch.hidden = true;
+        container.appendChild(noMatch);
+
+        function visibleItems() { return items.filter(function (entry) { return !entry.item.hidden; }); }
+        // ボタンの文字は、表示中のスレッドがすべて開いていれば「全閉」、そうでなければ「全開」。
+        function updateToggleAll() {
+          var visible = visibleItems();
+          var allOpen = visible.length > 0 && visible.every(function (entry) { return isMuseThreadOpen(entry.link); });
+          toggleAll.textContent = allOpen ? '全閉' : '全開';
+        }
+        filter.addEventListener('input', function () {
+          var query = filter.value.trim().toLowerCase();
+          items.forEach(function (entry) {
+            entry.item.hidden = query !== '' && entry.link.textContent.toLowerCase().indexOf(query) < 0;
+          });
+          noMatch.hidden = query === '' || visibleItems().length > 0;
+          updateToggleAll();
+        });
+        toggleAll.addEventListener('click', function () {
+          var visible = visibleItems();
+          var allOpen = visible.length > 0 && visible.every(function (entry) { return isMuseThreadOpen(entry.link); });
+          visible.forEach(function (entry) {
+            if (allOpen) closeMuseThread(entry.link, entry.item);
+            else if (!isMuseThreadOpen(entry.link)) openMuseThread(doc, fetchFn, semaphore, entry.link, entry.item);
+          });
+          updateToggleAll();
+        });
+
         var list = museSearchEl(doc, 'ul', 'muse-thread-list');
         r.data.threads.forEach(function (thread) {
           var item = museSearchEl(doc, 'li', 'muse-thread-item');
@@ -639,9 +721,14 @@ export const MUSE_SEARCH_SCRIPT = `
           link.setAttribute('data-thread-id', thread.threadId);
           link.setAttribute('aria-expanded', 'false');
           link.title = '最終書き込み: ' + formatMuseSearchTime(thread.lastPostAt);
-          link.addEventListener('click', function (event) { event.preventDefault(); toggleMuseThread(doc, fetchFn, link, item); });
+          link.addEventListener('click', function (event) {
+            event.preventDefault();
+            toggleMuseThread(doc, fetchFn, semaphore, link, item);
+            updateToggleAll();
+          });
           item.appendChild(link);
           list.appendChild(item);
+          items.push({ item: item, link: link });
         });
         container.appendChild(list);
       }).catch(function (error) {
@@ -764,6 +851,10 @@ export function getMuseSearchPage(): string {
     .muse-setting { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 4px; color: var(--text-secondary); font-size: 13px; cursor: pointer; }
     .muse-setting input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent-color); }
     .muse-threads { margin: 16px 0 0; }
+    .muse-thread-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
+    .muse-thread-filter { flex: 1 1 auto; min-width: 0; min-height: 36px; box-sizing: border-box; padding: 0 12px; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; font: inherit; }
+    .muse-thread-toggle-all { flex: 0 0 auto; min-height: 36px; padding: 0 14px; white-space: nowrap; color: var(--text-primary); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font: inherit; }
+    .muse-thread-nomatch { margin: 0 0 8px; color: var(--text-secondary); }
     .muse-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
     .muse-thread-link { color: var(--accent-color); text-decoration: none; overflow-wrap: anywhere; }
     .muse-thread-last { margin: 6px 0 4px 4px; padding: 6px 0 2px 12px; border-left: 2px solid var(--border-color); color: var(--text-primary); }
