@@ -29,13 +29,20 @@ export const MUSE_SEARCH_SCRIPT = `
       return el;
     }
 
-    function renderMuseSearchItem(doc, post) {
+    function renderMuseSearchItem(doc, post, onChat) {
       var item = museSearchEl(doc, 'li', 'muse-search-item');
       var head = museSearchEl(doc, 'div', 'muse-search-head');
       head.appendChild(museSearchEl(doc, 'span', 'muse-search-role muse-search-role-' + post.role, MUSE_SEARCH_ROLE_LABELS[post.role] || post.role));
       head.getElementsByTagName('span')[0].setAttribute('data-field', 'role');
       head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', formatMuseSearchTime(post.createdAt)));
-      head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', 'チャット ' + post.chatId));
+      // チャットIDはリンク。押すと、同じチャットIDを持つ質問と回答を、セットで、最上位のモーダルに出す(2026-11-20、ユーザー指定)。
+      var chatMeta = museSearchEl(doc, 'span', 'muse-search-meta', 'チャット ');
+      var chatLink = museSearchEl(doc, 'a', 'muse-chat-link', post.chatId);
+      chatLink.setAttribute('href', '#');
+      chatLink.setAttribute('data-chat-id', post.chatId);
+      chatLink.addEventListener('click', function (event) { event.preventDefault(); if (onChat) onChat(chatLink, post.chatId); });
+      chatMeta.appendChild(chatLink);
+      head.appendChild(chatMeta);
       if (post.threadMark) head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', 'スレッド化済み'));
       item.appendChild(head);
       var body = museSearchEl(doc, 'p', 'muse-search-snippet');
@@ -215,6 +222,88 @@ export const MUSE_SEARCH_SCRIPT = `
       }).catch(function (error) {
         if (closed) return;
         show(museSearchEl(doc, 'p', 'muse-search-error', '回答を読み込めませんでした: ' + (error && error.message ? error.message : String(error))));
+      });
+    }
+
+    // 検索結果のチャットIDのリンクを押したときの、最上位のモーダル(2026-11-20、ユーザー指定)。同じチャットIDを持つ質問と回答を、セットで、やりとりの順に出す。
+    // 各投稿は段落ごと。閲覧ユーザーのキーワードの強調区間はサーバーで計算済み(文字は textContent だけで入れる)。
+    function openMuseChatModal(doc, fetchFn, opener, chatId) {
+      if (doc.querySelector('[data-overlay="muse-chat"]')) return;
+      var overlay = museSearchEl(doc, 'div', 'muse-answer-overlay');
+      overlay.setAttribute('data-overlay', 'muse-chat');
+      overlay.style.zIndex = String(getNextZ(doc));
+      var dialog = museSearchEl(doc, 'div', 'muse-keys-dialog');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.setAttribute('aria-labelledby', 'muse-chat-title');
+      var head = museSearchEl(doc, 'div', 'muse-keys-head');
+      var title = museSearchEl(doc, 'h2', 'muse-keys-title', 'チャット ' + chatId);
+      title.id = 'muse-chat-title';
+      var close = museSearchEl(doc, 'button', 'muse-keys-close', '✕');
+      close.type = 'button';
+      close.setAttribute('data-action', 'close');
+      close.setAttribute('aria-label', '閉じる');
+      head.appendChild(title);
+      head.appendChild(close);
+      var content = museSearchEl(doc, 'div', 'muse-keys-body', '読み込んでいます…');
+      dialog.appendChild(head);
+      dialog.appendChild(content);
+      overlay.appendChild(dialog);
+      doc.body.appendChild(overlay);
+
+      var closed = false;
+      function closeModal() {
+        closed = true;
+        doc.removeEventListener('keydown', onKeydown);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        if (opener && opener.focus) opener.focus();
+      }
+      function onKeydown(event) {
+        if (event.key === 'Escape') closeModal();
+        else if (event.key === 'Tab') { event.preventDefault(); close.focus(); }
+      }
+      close.addEventListener('click', closeModal);
+      overlay.addEventListener('click', function (event) { if (event.target === overlay) closeModal(); });
+      doc.addEventListener('keydown', onKeydown);
+      close.focus();
+
+      function show(node) {
+        while (content.firstChild) content.removeChild(content.firstChild);
+        content.appendChild(node);
+      }
+      fetchFn('/api/muse-search/chat?chatId=' + encodeURIComponent(chatId)).then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+      }).then(function (r) {
+        if (closed) return;
+        if (!r.ok) {
+          var why = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
+          show(museSearchEl(doc, 'p', 'muse-search-error', 'チャットを読み込めませんでした(HTTP ' + r.status + ')' + (why ? ': ' + why : '')));
+          return;
+        }
+        var wrap = museSearchEl(doc, 'div', 'muse-chat');
+        if (r.data.highlightError) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta muse-thread-highlight-error', 'キーワードの強調は、できませんでした: ' + r.data.highlightError));
+        r.data.posts.forEach(function (post) {
+          var section = museSearchEl(doc, 'section', 'muse-chat-post');
+          section.setAttribute('data-role', post.role);
+          var meta = museSearchEl(doc, 'div', 'muse-chat-meta');
+          meta.appendChild(museSearchEl(doc, 'span', 'muse-chat-role', post.role === 'user' ? '質問' : '回答'));
+          meta.appendChild(museSearchEl(doc, 'span', 'muse-chat-time', formatMuseSearchTime(post.createdAt)));
+          section.appendChild(meta);
+          post.paragraphs.forEach(function (segments) {
+            var p = museSearchEl(doc, 'p', 'muse-thread-paragraph');
+            segments.forEach(function (segment) {
+              if (segment.hit) p.appendChild(museSearchEl(doc, 'mark', '', segment.text));
+              else p.appendChild(doc.createTextNode(segment.text));
+            });
+            section.appendChild(p);
+          });
+          if (post.truncated) section.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '長いため、途中までを表示しています。'));
+          wrap.appendChild(section);
+        });
+        show(wrap);
+      }).catch(function (error) {
+        if (closed) return;
+        show(museSearchEl(doc, 'p', 'muse-search-error', 'チャットを読み込めませんでした: ' + (error && error.message ? error.message : String(error))));
       });
     }
 
@@ -1252,7 +1341,7 @@ export const MUSE_SEARCH_SCRIPT = `
             status.textContent += '(検索キーを記録できませんでした' + (r.data.keyLogError ? ': ' + r.data.keyLogError : '') + ')';
             status.className = 'muse-search-status muse-search-error';
           }
-          r.data.posts.forEach(function (post) { list.appendChild(renderMuseSearchItem(doc, post)); });
+          r.data.posts.forEach(function (post) { list.appendChild(renderMuseSearchItem(doc, post, function (link, chatId) { openMuseChatModal(doc, fetchFn, link, chatId); })); });
         }).catch(function (error) {
           fail('検索できませんでした: ' + (error && error.message ? error.message : String(error)));
         }).then(function () {
@@ -1347,6 +1436,10 @@ export function getMuseSearchPage(): string {
     .muse-keys-table tbody td { transform: translateX(var(--swipe-x, 0px)); transition: transform 0.2s ease; background: var(--card-bg); touch-action: pan-y; }
     .muse-keys-table tbody tr.swiping td { transition: none; }
     .muse-keys-table tbody tr.swipe-open td:first-child, .muse-keys-table tbody tr.swiping td:first-child { position: sticky; left: 0; z-index: 1; transform: none; }
+    .muse-chat-link { color: var(--accent-color, var(--text-primary)); text-decoration: underline; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .muse-chat-post { padding: 10px 0; border-bottom: 1px solid var(--border-light); }
+    .muse-chat-meta { display: flex; gap: 10px; align-items: baseline; margin-bottom: 4px; color: var(--text-secondary); font-size: 13px; }
+    .muse-chat-role { font-weight: 700; color: var(--text-primary); }
     .muse-confirm-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-confirm-dialog { box-sizing: border-box; width: 100%; max-width: 340px; padding: 20px 18px 16px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; }
     .muse-confirm-title { margin: 0 0 8px; font-size: 15px; }

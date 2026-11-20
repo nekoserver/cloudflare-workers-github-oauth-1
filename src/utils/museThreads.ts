@@ -44,6 +44,26 @@ export function fetchMuseThreadLast(fetcher: WorkerFetcher | undefined, secret: 
   return callSignedWorkerEndpoint(fetcher, secret, 'https://dynamicneko.internal', `/api/tree-view/muse-thread-last?threadId=${encodeURIComponent(threadId)}`, isMuseThreadLast);
 }
 
+/** dynamicneko の GET /api/tree-view/muse-chat の応答(チャットIDが同じ質問と回答を、やりとりの順に)。 */
+export type MuseChatPost = { answerId: string; role: 'user' | 'assistant'; content: string; createdAt: number };
+export type MuseChat = { chatId: string; posts: MuseChatPost[] };
+
+export function isMuseChat(value: unknown): value is MuseChat {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  if (!text(v.chatId) || !Array.isArray(v.posts) || v.posts.length === 0) return false;
+  return v.posts.every((post) => {
+    if (!post || typeof post !== 'object') return false;
+    const q = post as Record<string, unknown>;
+    return text(q.answerId) && (q.role === 'user' || q.role === 'assistant') && typeof q.content === 'string' && typeof q.createdAt === 'number' && Number.isInteger(q.createdAt);
+  });
+}
+
+/** チャットIDが同じ質問と回答を、署名付きで取る(2026-11-20、ユーザー指定)。失敗は理由つきで返し、空のチャットにはしない。 */
+export function fetchMuseChat(fetcher: WorkerFetcher | undefined, secret: string | undefined, chatId: string): Promise<RemoteCheckResult<MuseChat>> {
+  return callSignedWorkerEndpoint(fetcher, secret, 'https://dynamicneko.internal', `/api/tree-view/muse-chat?chatId=${encodeURIComponent(chatId)}`, isMuseChat);
+}
+
 /**
  * 本文を段落に分ける。空行(空白だけの行を含む)が区切り。段落の中の改行は残し、前後の空白と空の段落は除く。
  * 画面は、段落ごとに <p> にして、段落の中の改行は white-space: pre-wrap で残す。

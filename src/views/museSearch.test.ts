@@ -2307,3 +2307,134 @@ describe('🔑モーダルの削除の確認モーダル', () => {
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });
+
+// 検索結果のチャットIDのリンク(2026-11-20、ユーザー指定): チャットIDをタップすると、同じチャットIDを持つ質問と回答を、セットで、最上位レイヤーのモーダルに出す。
+describe('検索結果のチャットIDのリンクと、チャットのモーダル', () => {
+  const seg = (text: string, hit = false) => ({ text, hit });
+  const chatBody = (over: Record<string, unknown> = {}) => ({ chatId: 'c-00001', posts: [
+    { role: 'user', createdAt: 100, truncated: false, paragraphs: [[seg('静的アセットとは?')]] },
+    { role: 'assistant', createdAt: 160, truncated: false, paragraphs: [[seg('Workers の '), seg('Static', true), seg(' Assets です')], [seg('二段落目')]] },
+  ], ...over });
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const open = async (chat: () => Promise<Response> | Response = json(chatBody()), posts = [item(), item({ postId: 'a:assistant', role: 'assistant' })]) => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url === '/api/muse-search/threads') return json({ threads: [] })();
+      if (url.startsWith('/api/muse-search?')) return json({ count: posts.length, posts })();
+      if (url.startsWith('/api/muse-search/chat?')) return chat();
+      throw new Error('想定外のURL: ' + url);
+    }) as unknown as typeof fetch;
+    const page = mount(fetchFn);
+    page.submit('静的');
+    await flush();
+    return { fetchFn, page };
+  };
+  const link = (i = 0) => document.querySelectorAll<HTMLAnchorElement>('a.muse-chat-link')[i];
+  const modal = () => document.querySelector<HTMLElement>('[data-overlay="muse-chat"]');
+  const chatCalls = (fetchFn: typeof fetch) => callUrls(fetchFn).filter((u) => u.startsWith('/api/muse-search/chat?'));
+
+  it('検索結果のチャットIDは、リンクになる(文字は「チャット 〜」のまま。リンクの文字はチャットIDだけ)', async () => {
+    const { page } = await open();
+    expect(link()).not.toBeUndefined();
+    expect(document.querySelectorAll('a.muse-chat-link')).toHaveLength(2);
+    expect(link().textContent).toBe('c-00001');
+    expect(link().getAttribute('data-chat-id')).toBe('c-00001');
+    expect(link().getAttribute('href')).toBeTruthy();
+    expect(page.items()[0].textContent).toContain('チャット c-00001');
+  });
+  it('タップすると、そのチャットIDで /api/muse-search/chat を読み、最上位のモーダルを開く(ページ遷移はしない)', async () => {
+    const { fetchFn } = await open();
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    link().dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(modal()).not.toBeNull();
+    expect(modal()!.querySelector('[role="dialog"]')!.getAttribute('aria-modal')).toBe('true');
+    expect(modal()!.querySelector('h2')!.textContent).toBe('チャット c-00001');
+    expect(Number(modal()!.style.zIndex)).toBeGreaterThanOrEqual(800);
+    await flush();
+    expect(chatCalls(fetchFn)).toEqual(['/api/muse-search/chat?chatId=c-00001']);
+  });
+  it('チャットIDが同じ質問と回答を、セットで、やりとりの順に出す(質問→回答。役割・時刻・段落つき)。強調は <mark>', async () => {
+    await open();
+    link().click();
+    await flush();
+    const posts = [...modal()!.querySelectorAll<HTMLElement>('.muse-chat-post')];
+    expect(posts.map((p) => p.querySelector('.muse-chat-role')!.textContent)).toEqual(['質問', '回答']);
+    expect(posts.map((p) => p.getAttribute('data-role'))).toEqual(['user', 'assistant']);
+    expect(posts[0].querySelector('.muse-chat-time')!.textContent).toBe(script.formatMuseSearchTime(100));
+    expect(posts[1].querySelectorAll('p.muse-thread-paragraph')).toHaveLength(2);
+    expect(posts[1].querySelector('p.muse-thread-paragraph')!.textContent).toBe('Workers の Static Assets です');
+    expect([...posts[1].querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Static']);
+    expect(posts[0].querySelectorAll('mark')).toHaveLength(0);
+  });
+  it('読み込み中の表示を出す。サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す(強調の中も)', async () => {
+    const evil = '<img src=x onerror="window.__xss=1">';
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    await open(() => pending);
+    link().click();
+    expect(modal()!.textContent).toContain('読み込んでいます');
+    release(new Response(JSON.stringify(chatBody({ posts: [{ role: 'assistant', createdAt: 1, truncated: false, paragraphs: [[seg(evil), seg('<b>x</b>', true)]] }] })), { status: 200 }));
+    await flush();
+    expect(modal()!.querySelector('img')).toBeNull();
+    expect(modal()!.querySelector('b')).toBeNull();
+    expect(modal()!.textContent).toContain(evil);
+    expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
+  });
+  it('失敗(HTTP・通信)は、理由つきで出す(空のチャットに見せない)', async () => {
+    await open(json({ errorCode: 'http_error', detail: 'upstream 404' }, 502));
+    link().click();
+    await flush();
+    expect(modal()!.textContent).toMatch(/502.*upstream 404/);
+    expect(modal()!.querySelectorAll('.muse-chat-post')).toHaveLength(0);
+    document.body.innerHTML = '';
+    await open(() => { throw new Error('network down'); });
+    link().click();
+    await flush();
+    expect(modal()!.textContent).toContain('network down');
+  });
+  it('切り詰めた投稿には、その旨を出す。強調できなかったときは、その理由を出す', async () => {
+    await open(json(chatBody({ highlightError: 'd1 down', posts: [{ role: 'assistant', createdAt: 1, truncated: true, paragraphs: [[seg('長い')]] }] })));
+    link().click();
+    await flush();
+    expect(modal()!.textContent).toContain('長いため');
+    expect(modal()!.textContent).toContain('キーワードの強調は、できませんでした');
+    expect(modal()!.textContent).toContain('d1 down');
+  });
+  it('✕・Esc・背景のクリックで閉じ、フォーカスはチャットIDのリンクへ戻る。開いている間にもう一度押しても、2つは開かない', async () => {
+    const { fetchFn } = await open();
+    link().click();
+    link().click();
+    expect(document.querySelectorAll('[data-overlay="muse-chat"]')).toHaveLength(1);
+    await flush();
+    expect(chatCalls(fetchFn)).toHaveLength(1);
+    modal()!.querySelector<HTMLButtonElement>('button[data-action="close"]')!.click();
+    expect(modal()).toBeNull();
+    expect(document.activeElement).toBe(link());
+    link().click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(modal()).toBeNull();
+    link().click();
+    modal()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(modal()).toBeNull();
+  });
+  it('読み込みの途中で閉じても、遅れて届いた応答で何も出さない(エラーにもならない)', async () => {
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    await open(() => pending);
+    link().click();
+    modal()!.querySelector<HTMLButtonElement>('button[data-action="close"]')!.click();
+    release(new Response(JSON.stringify(chatBody()), { status: 200 }));
+    await flush();
+    expect(modal()).toBeNull();
+  });
+  it('CSS: チャットIDのリンク・投稿の見た目は変数だけ(固定色なし)', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-chat-link \{[^}]*var\(--/);
+    // 実ブラウザ(スマホ幅)で見つけた表示: タップしたリンクのハイライトが、開いたモーダルの上に、青い四角として透けて見えた。
+    expect(style).toMatch(/\.muse-chat-link \{[^}]*-webkit-tap-highlight-color: transparent/);
+    expect(style).toMatch(/\.muse-chat-post \{[^}]*border[^}]*var\(--/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
