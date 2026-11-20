@@ -1070,6 +1070,43 @@ describe('初期画面のスレッド一覧', () => {
     expect(links()[0].getAttribute('aria-expanded')).toBe('false');
     expect(document.querySelectorAll('.muse-thread-last')).toHaveLength(0);
   });
+  it('スレッドのチャットIDリンクから共通モーダルでチャット全体を開く', async () => {
+    const storageKey = 'muse-chat-highlight';
+    localStorage.setItem(storageKey, '0');
+    try {
+      const chatId = 'c/A 2';
+      const post = (role: string, createdAt: number, markdown: string) => ({ role, createdAt, markdown, truncated: false, paragraphs: [[{ text: '本文', hit: true }]] });
+      const fetchFn = router(threadsRoutes({
+        '/api/muse-search/thread?': json(lastPost({ chatId })),
+        '/api/muse-search/chat?': json({ chatId, posts: [post('user', 10, '## 質問'), post('assistant', 20, '以前の本文'), post('assistant', 30, '**本文**')] }),
+      }));
+      mount(fetchFn);
+      await flush();
+      const threadLink = links()[0];
+      threadLink.click();
+      await flush();
+      const panel = panelOf(threadLink)!;
+      const chatLink = panel.querySelector<HTMLAnchorElement>('.muse-chat-link')!;
+      expect(chatLink).not.toBeNull();
+      expect(chatLink.textContent).toBe(chatId);
+      const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+      chatLink.dispatchEvent(click);
+      await flush();
+
+      expect(click.defaultPrevented).toBe(true);
+      expect(calls(fetchFn).at(-1)).toBe('/api/muse-search/chat?chatId=c%2FA%202');
+      const modal = document.querySelector<HTMLElement>('[data-overlay="muse-chat"]')!;
+      expect(modal.querySelector('h2')!.textContent).toBe('チャット ' + chatId);
+      expect(modal.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
+      expect(modal.querySelector('.muse-chat-markdown strong mark')!.textContent).toBe('本文');
+      expect([...modal.querySelectorAll<HTMLDetailsElement>('details')].map((post) => post.open)).toEqual([true, false, true]);
+      modal.querySelector<HTMLButtonElement>('button[data-action="close"]')!.click();
+      expect(document.activeElement).toBe(chatLink);
+      expect(panel.hidden).toBe(false);
+    } finally {
+      localStorage.removeItem(storageKey);
+    }
+  });
   it('押すと /api/muse-search/thread をスレッドIDをエンコードして読み、リンクの下に、最終書き込みを段落ごとの <p> で出す(段落の中の改行は残す)。ページ遷移はしない', async () => {
     const fetchFn = router(threadsRoutes());
     mount(fetchFn);

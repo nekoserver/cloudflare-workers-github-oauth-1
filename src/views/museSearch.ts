@@ -51,18 +51,25 @@ export const MUSE_SEARCH_SCRIPT = `
       return row;
     }
 
-    function renderMuseSearchItem(doc, pair, onChat) {
+    function createMuseChatLink(doc, fetchFn, chatId, answerId) {
+      var link = museSearchEl(doc, 'a', 'muse-chat-link', chatId);
+      link.setAttribute('href', '#');
+      link.setAttribute('data-chat-id', chatId);
+      link.addEventListener('click', function (event) {
+        event.preventDefault();
+        openMuseChatModal(doc, fetchFn, link, chatId, answerId);
+      });
+      return link;
+    }
+
+    function renderMuseSearchItem(doc, fetchFn, pair) {
       var item = museSearchEl(doc, 'li', 'muse-search-item');
       item.setAttribute('data-answer-id', pair.answerId);
       var head = museSearchEl(doc, 'div', 'muse-search-head');
       head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', formatMuseSearchTime(pair.createdAt)));
       // チャットIDはリンク。押すと、このペア(質問と回答)の全文を、最上位のモーダルに出す(2026-11-20、ユーザー指定)。
       var chatMeta = museSearchEl(doc, 'span', 'muse-search-meta', 'チャット ');
-      var chatLink = museSearchEl(doc, 'a', 'muse-chat-link', pair.chatId);
-      chatLink.setAttribute('href', '#');
-      chatLink.setAttribute('data-chat-id', pair.chatId);
-      chatLink.addEventListener('click', function (event) { event.preventDefault(); if (onChat) onChat(chatLink, pair.chatId, pair.answerId); });
-      chatMeta.appendChild(chatLink);
+      chatMeta.appendChild(createMuseChatLink(doc, fetchFn, pair.chatId, pair.answerId));
       head.appendChild(chatMeta);
       if ((pair.question.hit && pair.question.threadMark) || (pair.answer.hit && pair.answer.threadMark)) head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', 'スレッド化済み'));
       item.appendChild(head);
@@ -302,7 +309,7 @@ export const MUSE_SEARCH_SCRIPT = `
       return body;
     }
 
-    // チャットIDのリンクから、選択したペアの質問と回答をモーダルに表示する。
+    // チャットIDのリンクから質問と回答を表示する。回答IDがあれば選択したペアに絞る。
     function openMuseChatModal(doc, fetchFn, opener, chatId, answerId) {
       if (doc.querySelector('[data-overlay="muse-chat"]')) return;
       var overlay = museSearchEl(doc, 'div', 'muse-answer-overlay');
@@ -1121,9 +1128,11 @@ export const MUSE_SEARCH_SCRIPT = `
       var why = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
       return what + 'を読み込めませんでした(HTTP ' + r.status + ')' + (why ? ': ' + why : '');
     }
-    function renderMuseThreadLast(doc, data) {
+    function renderMuseThreadLast(doc, fetchFn, data) {
       var wrap = museSearchEl(doc, 'div', 'muse-thread-body');
-      wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '最終書き込み: ' + formatMuseSearchTime(data.createdAt) + '・' + (MUSE_THREAD_ROLE_LABELS[data.role] || data.role) + '・チャット ' + data.chatId));
+      var meta = museSearchEl(doc, 'p', 'muse-thread-meta', '最終書き込み: ' + formatMuseSearchTime(data.createdAt) + '・' + (MUSE_THREAD_ROLE_LABELS[data.role] || data.role) + '・チャット ');
+      meta.appendChild(createMuseChatLink(doc, fetchFn, data.chatId));
+      wrap.appendChild(meta);
       // 各段落は、強調の区間(サーバーが、閲覧ユーザーが持つキーワードで計算済み)の並び。強調(hit)は <mark>、それ以外は文字。文字は textContent だけで入れる。
       data.paragraphs.forEach(function (segments) {
         var paragraph = museSearchEl(doc, 'p', 'muse-thread-paragraph');
@@ -1193,7 +1202,7 @@ export const MUSE_SEARCH_SCRIPT = `
           }
           panel.setAttribute('data-state', 'loaded');
           panel.textContent = '';
-          panel.appendChild(renderMuseThreadLast(doc, r.data));
+          panel.appendChild(renderMuseThreadLast(doc, fetchFn, r.data));
         }).catch(function (error) {
           panel.setAttribute('data-state', 'failed');
           panel.textContent = '最終書き込みを読み込めませんでした: ' + (error && error.message ? error.message : String(error));
@@ -1449,7 +1458,7 @@ export const MUSE_SEARCH_SCRIPT = `
             status.textContent += '(検索キーを記録できませんでした' + (r.data.keyLogError ? ': ' + r.data.keyLogError : '') + ')';
             status.className = 'muse-search-status muse-search-error';
           }
-          r.data.pairs.forEach(function (pair) { list.appendChild(renderMuseSearchItem(doc, pair, function (link, chatId, answerId) { openMuseChatModal(doc, fetchFn, link, chatId, answerId); })); });
+          r.data.pairs.forEach(function (pair) { list.appendChild(renderMuseSearchItem(doc, fetchFn, pair)); });
         }).catch(function (error) {
           fail('検索できませんでした: ' + (error && error.message ? error.message : String(error)));
         }).then(function () {
