@@ -2033,6 +2033,11 @@ describe('🔑モーダルの左スワイプ削除', () => {
     await flush();
     return fetchFn;
   };
+  const confirmBtn = () => document.querySelector<HTMLButtonElement>('button[data-action="confirm-delete-key"]');
+  const cancelBtn = () => document.querySelector<HTMLButtonElement>('button[data-action="cancel-delete-key"]');
+  const confirmBox = () => document.querySelector<HTMLElement>('[data-overlay="muse-key-delete-confirm"]');
+  /** 削除エリアを押して確認モーダルを出し、「削除する」を押す(確認を取ってから実行される)。 */
+  const deleteWithConfirm = () => { area().click(); confirmBtn()!.click(); };
   const deletes = (fetchFn: typeof fetch) => (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === 'DELETE').map((c) => c[0] as string);
 
   it('左に50px以上スワイプすると、その行の削除エリアが出る(行は左へ動く)。初期は出ていない', async () => {
@@ -2071,14 +2076,14 @@ describe('🔑モーダルの左スワイプ削除', () => {
     swipe(rows()[1], 200, 120);
     expect(rows().map((tr) => tr.classList.contains('swipe-open'))).toEqual([false, true]);
     expect(area().getAttribute('aria-label')).toContain('beta');
-    area().click();
+    deleteWithConfirm();
     await flush();
     expect(deletes(fetchFn)).toEqual(['/api/muse-search/key?key=beta']);
   });
   it('削除エリアをタップすると、そのキーをDELETEで削除し、成功を確かめてから、画面の行を消す。ほかの行は残り、一覧は取り直さない', async () => {
     const fetchFn = await open(['alpha', 'beta', 'gamma']);
     swipe(rows()[1], 200, 120);
-    area().click();
+    deleteWithConfirm();
     await flush();
     expect(deletes(fetchFn)).toEqual(['/api/muse-search/key?key=beta']);
     expect(names()).toEqual(['alpha', 'gamma']);
@@ -2088,7 +2093,7 @@ describe('🔑モーダルの左スワイプ削除', () => {
   it('削除したキーは、並べ替えで表を作り直しても戻らない。キーの文字はURLエンコードして送る', async () => {
     const fetchFn = await open(['a b&c', 'zeta']);
     swipe(rows()[0], 200, 120);
-    area().click();
+    deleteWithConfirm();
     await flush();
     expect(deletes(fetchFn)).toEqual(['/api/muse-search/key?key=' + encodeURIComponent('a b&c')]);
     document.querySelector<HTMLButtonElement>('button[data-sort-key="searchKey"]')!.click();
@@ -2097,7 +2102,7 @@ describe('🔑モーダルの左スワイプ削除', () => {
   it('最後の1件を削除すると、「まだ検索キーが記録されていません。」を出す', async () => {
     await open(['alpha']);
     swipe(rows()[0], 200, 120);
-    area().click();
+    deleteWithConfirm();
     await flush();
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('まだ検索キーが記録されていません。');
     expect(rows()).toHaveLength(0);
@@ -2105,7 +2110,7 @@ describe('🔑モーダルの左スワイプ削除', () => {
   it('削除に失敗したら(503・通信の失敗・deleted が true でない200)、行は残し、理由を出す。成功の表示にしない。削除エリアは開いたまま、押し直せる', async () => {
     const fetchFn = await open(['alpha'], json({ deleted: false, errorCode: 'db_error', detail: 'd1 down' }, 503));
     swipe(rows()[0], 200, 120);
-    area().click();
+    deleteWithConfirm();
     await flush();
     expect(names()).toEqual(['alpha']);
     expect(note()!.textContent).toMatch(/503.*d1 down/);
@@ -2115,26 +2120,28 @@ describe('🔑モーダルの左スワイプ削除', () => {
     document.body.innerHTML = '';
     await open(['alpha'], () => { throw new Error('network down'); });
     swipe(rows()[0], 200, 120);
-    area().click();
+    deleteWithConfirm();
     await flush();
     expect(names()).toEqual(['alpha']);
     expect(note()!.textContent).toContain('network down');
     document.body.innerHTML = '';
     await open(['alpha'], json({ ok: true }));
     swipe(rows()[0], 200, 120);
-    area().click();
+    deleteWithConfirm();
     await flush();
     expect(names()).toEqual(['alpha']);
     expect(note()!.textContent).toContain('削除できませんでした');
   });
-  it('送信中は削除エリアを無効にし、続けて押しても1回しか送らない。成功したら、前の失敗の注記を消す', async () => {
+  it('送信中は確認モーダルのボタンを無効にし、続けて押しても1回しか送らない。成功したら、前の失敗の注記を消す', async () => {
     let release!: (res: Response) => void;
     const pending = new Promise<Response>((resolve) => { release = resolve; });
     const fetchFn = await open(['alpha', 'beta'], () => pending);
     swipe(rows()[0], 200, 120);
     area().click();
-    expect(area().disabled).toBe(true);
-    area().click();
+    confirmBtn()!.click();
+    expect(confirmBtn()!.disabled).toBe(true);
+    expect(cancelBtn()!.disabled).toBe(true);
+    confirmBtn()!.click();
     release(new Response(JSON.stringify({ deleted: true, keyRows: 1, answerRows: 0 }), { status: 200 }));
     await flush();
     expect(deletes(fetchFn)).toHaveLength(1);
@@ -2166,6 +2173,137 @@ describe('🔑モーダルの左スワイプ削除', () => {
     expect(style).toMatch(/\.muse-keys-table tbody tr\.swipe-open td:first-child, \.muse-keys-table tbody tr\.swiping td:first-child \{[^}]*position: sticky; left: 0; z-index: 1; transform: none/);
     // 実機で見つかった不具合: 幅の広い表では、横スワイプが表の横スクロールに奪われ、開いた直後に閉じた。行のセルは縦スクロールだけをブラウザに任せる(touch-action は table-row には効かないので、td に付ける)。
     expect(style).toMatch(/\.muse-keys-table tbody td \{[^}]*touch-action: pan-y/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
+});
+
+// 削除の確認(2026-11-20、ユーザー指定「確認モーダルを出してちゃんと確認を取ってから削除が実行されるように」): 削除エリアのタップでは削除せず、確認モーダルを出す。「削除する」で初めてDELETEを送る。
+describe('🔑モーダルの削除の確認モーダル', () => {
+  const key = (name: string) => ({ searchKey: name, aiChatCount: 7, treeViewCount: 3, searchCount: 2, firstSearchedAt: '2026-11-19T01:00:00.000Z', lastSearchedAt: '2026-11-19T03:00:00.000Z' });
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const rows = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] tbody tr')];
+  const names = () => rows().map((tr) => tr.querySelector('td')!.textContent);
+  const area = () => document.querySelector<HTMLButtonElement>('button[data-action="delete-key"]')!;
+  const box = () => document.querySelector<HTMLElement>('[data-overlay="muse-key-delete-confirm"]');
+  const confirmBtn = () => document.querySelector<HTMLButtonElement>('button[data-action="confirm-delete-key"]')!;
+  const cancelBtn = () => document.querySelector<HTMLButtonElement>('button[data-action="cancel-delete-key"]')!;
+  const touch = (target: Element, type: string, x: number) => {
+    const event = new Event(type, { bubbles: true });
+    Object.assign(event, type === 'touchend' ? { changedTouches: [{ clientX: x, clientY: 0 }] } : { touches: [{ clientX: x, clientY: 0 }] });
+    target.dispatchEvent(event);
+  };
+  const swipe = (target: Element) => { touch(target, 'touchstart', 200); touch(target, 'touchmove', 120); touch(target, 'touchend', 120); };
+  const open = async (del: () => Promise<Response> | Response = json({ deleted: true, keyRows: 1, answerRows: 0 })) => {
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/muse-search/keys') return json({ keys: [key('alpha'), key('beta')] })();
+      if (url.startsWith('/api/muse-search/key?') && init?.method === 'DELETE') return del();
+      throw new Error('想定外のURL: ' + url);
+    }) as unknown as typeof fetch;
+    mount(fetchFn);
+    document.querySelector<HTMLButtonElement>('button[data-action="keys"]')!.click();
+    await flush();
+    swipe(rows()[1]);
+    return fetchFn;
+  };
+  const deletes = (fetchFn: typeof fetch) => (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === 'DELETE').length;
+
+  it('削除エリアを押しても、すぐには削除しない。確認モーダルを出す(キー名と、消えるものの説明つき)。DELETEはまだ送らない', async () => {
+    const fetchFn = await open();
+    expect(box()).toBeNull();
+    area().click();
+    expect(box()).not.toBeNull();
+    expect(box()!.querySelector('[role="alertdialog"]')!.getAttribute('aria-modal')).toBe('true');
+    const text = box()!.textContent!;
+    expect(text).toContain('beta');
+    expect(text).toContain('削除');
+    expect(text).toContain('元に戻せません');
+    expect(text).toContain('回答');
+    expect(deletes(fetchFn)).toBe(0);
+    expect(names()).toEqual(['alpha', 'beta']);
+  });
+  it('確認モーダルは、キー名を文字のまま出す(HTMLとして解釈しない)', async () => {
+    const fetchFn = vi.fn(async (url: string) => (url === '/api/muse-search/keys' ? json({ keys: [key('<img src=x onerror=alert(1)>')] })() : json({})())) as unknown as typeof fetch;
+    mount(fetchFn);
+    document.querySelector<HTMLButtonElement>('button[data-action="keys"]')!.click();
+    await flush();
+    swipe(rows()[0]);
+    area().click();
+    expect(box()!.querySelector('img')).toBeNull();
+    expect(box()!.textContent).toContain('<img src=x onerror=alert(1)>');
+  });
+  it('最初のフォーカスは「キャンセル」(うっかりEnterで消さない)。確認モーダルは、キーのモーダルより手前に出る', async () => {
+    await open();
+    area().click();
+    expect(document.activeElement).toBe(cancelBtn());
+    expect(Number(box()!.style.zIndex)).toBeGreaterThan(Number(document.querySelector<HTMLElement>('[data-overlay="muse-keys"]')!.style.zIndex));
+  });
+  it('「キャンセル」・背景のクリック・Escで、閉じる。削除しない。行は残り、キーのモーダルは開いたまま(Escで、重なった全部が閉じない)。フォーカスは削除エリアへ戻る', async () => {
+    const fetchFn = await open();
+    area().click();
+    cancelBtn().click();
+    expect(box()).toBeNull();
+    expect(document.activeElement).toBe(area());
+    area().click();
+    box()!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(box()).toBeNull();
+    area().click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(box()).toBeNull();
+    expect(document.querySelector('[data-overlay="muse-keys"]')).not.toBeNull();
+    expect(deletes(fetchFn)).toBe(0);
+    expect(names()).toEqual(['alpha', 'beta']);
+  });
+  it('確認モーダルの中をクリックしても閉じない', async () => {
+    await open();
+    area().click();
+    box()!.querySelector('[role="alertdialog"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(box()).not.toBeNull();
+  });
+  it('Tabは、確認モーダルの中(キャンセル・削除する)の間を行き来し、外へ出ない', async () => {
+    await open();
+    area().click();
+    expect(document.activeElement).toBe(cancelBtn());
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(confirmBtn());
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(cancelBtn());
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(confirmBtn());
+  });
+  it('「削除する」を押すと、初めてDELETEを送り、成功したら確認モーダルを閉じて、行を消す', async () => {
+    const fetchFn = await open();
+    area().click();
+    confirmBtn().click();
+    await flush();
+    expect(deletes(fetchFn)).toBe(1);
+    expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'DELETE')![0]).toBe('/api/muse-search/key?key=beta');
+    expect(box()).toBeNull();
+    expect(names()).toEqual(['alpha']);
+  });
+  it('失敗したら、確認モーダルは閉じ、行は残り、理由をキーのモーダルに出す', async () => {
+    await open(json({ deleted: false, errorCode: 'db_error', detail: 'd1 down' }, 503));
+    area().click();
+    confirmBtn().click();
+    await flush();
+    expect(box()).toBeNull();
+    expect(names()).toEqual(['alpha', 'beta']);
+    expect(document.querySelector('.muse-keys-delete-error')!.textContent).toMatch(/503.*d1 down/);
+  });
+  it('削除エリアを開いたまま(別の行へ移る・閉じる)にしたあとは、前のキーの確認が残らない', async () => {
+    await open();
+    area().click();
+    cancelBtn().click();
+    swipe(rows()[0]);
+    area().click();
+    expect(box()!.textContent).toContain('alpha');
+    expect(box()!.textContent).not.toContain('beta');
+  });
+  it('CSS: 確認モーダルの見た目は変数だけ(固定色なし)。削除ボタンは危険色', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-confirm-overlay \{[^}]*position: fixed[^}]*var\(--modal-overlay\)/);
+    expect(style).toMatch(/\.muse-confirm-danger \{[^}]*background: var\(--danger-color\)/);
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });
