@@ -1,3 +1,4 @@
+import { getModelRunParams } from './aichatModelConfig';
 import { parseChangedFilePaths } from './diffFileList';
 
 export const DEFAULT_AI_MODEL = '@cf/google/gemma-4-26b-a4b-it';
@@ -22,6 +23,11 @@ export const DESIGN_SPEC_CHECKLIST = [
 
 export function resolveAiModel(envValue: string | undefined): string {
   return envValue?.trim() || DEFAULT_AI_MODEL;
+}
+
+export function resolvePrSummaryModel(envValue: string | undefined): string {
+  const model = resolveAiModel(envValue);
+  return model === FALLBACK_AI_MODEL ? DEFAULT_AI_MODEL : model;
 }
 
 export function describeModelSwitch(row: { model?: string | null; fallback_used?: number | null; primary_model?: string | null }): string {
@@ -181,30 +187,38 @@ export async function generateAiSummary(
     );
   }
 
-  const aiRes = await ai.run(model, {
-    messages: [
-      {
-        role: 'system',
-        content:
-          'あなたはコードレビュー支援AIです。プルリクエストのタイトル・説明・差分が英語で書かれている場合は、まず日本語に翻訳してから要約してください。変更点・目的・影響範囲を日本語で簡潔にまとめ、最終的な出力は日本語のみとしてください。',
-      },
-      {
-        role: 'user',
-        content: userParts.join('\n\n'),
-      },
-    ],
-  });
+  const instructions =
+    'あなたはコードレビュー支援AIです。プルリクエストのタイトル・説明・差分が英語で書かれている場合は、まず日本語に翻訳してから要約してください。変更点・目的・影響範囲を日本語で簡潔にまとめ、最終的な出力は日本語のみとしてください。';
+  const prompt = userParts.join('\n\n');
+  const isGemma4 = model === DEFAULT_AI_MODEL;
+  // Gemma 4 は system メッセージがあると推論を無効化する設定を無視することがある。
+  const messages = isGemma4
+    ? [{ role: 'user', content: instructions + '\n\n' + prompt }]
+    : [{ role: 'system', content: instructions }, { role: 'user', content: prompt }];
+  const modelParams = isGemma4 ? getModelRunParams(model, {}) : {};
+  const aiRes = await ai.run(model, { ...modelParams, messages });
 
-  if (aiRes && typeof aiRes === 'object' && 'response' in aiRes) {
-    const raw = (aiRes as { response: string }).response;
-    if (raw) {
-      return { ok: true, summary: raw };
-    }
-    return {
-      ok: false,
-      errorCode: 'EMPTY_RESPONSE',
-      detail: `keys=${Object.keys(aiRes).join(',')} response=${JSON.stringify(raw)}`,
+  if (aiRes && typeof aiRes === 'object') {
+    const result = aiRes as {
+      response?: unknown;
+      choices?: { message?: { content?: unknown } }[];
     };
+    const choices = isGemma4 && Array.isArray(result.choices) ? result.choices : undefined;
+    const content = choices?.[0]?.message?.content;
+    if (typeof result.response === 'string' && result.response.trim()) {
+      return { ok: true, summary: result.response };
+    }
+    if (typeof content === 'string' && content.trim()) {
+      return { ok: true, summary: content };
+    }
+    if ('response' in result || choices) {
+      const raw = 'response' in result ? result.response : content;
+      return {
+        ok: false,
+        errorCode: 'EMPTY_RESPONSE',
+        detail: `keys=${Object.keys(result).join(',')} response=${JSON.stringify(raw)}`,
+      };
+    }
   }
 
   return {

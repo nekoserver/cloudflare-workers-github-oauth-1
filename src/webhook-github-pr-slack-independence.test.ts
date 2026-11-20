@@ -27,6 +27,15 @@ describe('POST /webhook/github: pull_request イベントのSlack非依存化', 
     expect(webhookBlock).toContain("eventType === 'pull_request'");
   });
 
+  it('PR 要約と通知に同じ Gemma 4 フォールバック設定を渡す', () => {
+    const prStart = webhookBlock.indexOf("eventType === 'pull_request'");
+    const prSection = webhookBlock.slice(prStart, webhookBlock.indexOf("eventType === 'push'", prStart));
+    expect(prSection).toContain('const aiModel = resolvePrSummaryModel(c.env.AI_MODEL);');
+    expect(prSection).toContain('fallbackModel: DEFAULT_AI_MODEL,');
+    expect(prSection.match(/fallbackModel: DEFAULT_AI_MODEL,/g)).toHaveLength(2);
+    expect(prSection).not.toContain('fallbackModel: FALLBACK_AI_MODEL,');
+  });
+
   it('旧: pr と Slack設定の両方をまとめて要求するゲートが存在しない', () => {
     expect(webhookBlock).not.toContain('if (pr && slackToken && slackChannel) {');
   });

@@ -8,6 +8,7 @@ import {
   classifySummaryResult,
   runSummaryPipeline,
   resolveAiModel,
+  resolvePrSummaryModel,
   extractDesignDiff,
   sanitizeBoxDrawing,
   detectCommitAgentFromText,
@@ -43,6 +44,19 @@ describe('resolveAiModel', () => {
 
   it('環境変数の前後空白はtrimされる', () => {
     expect(resolveAiModel('  @cf/meta/llama-3.3-70b-instruct-fp8-fast  ')).toBe('@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  });
+});
+
+describe('resolvePrSummaryModel', () => {
+  it.each([undefined, '  @cf/meta/llama-3.1-8b-instruct-fp8  '])(
+    '未設定または旧 Llama 設定 (%s) で Gemma 4 を使う',
+    (configuredModel) => {
+      expect(resolvePrSummaryModel(configuredModel)).toBe('@cf/google/gemma-4-26b-a4b-it');
+    },
+  );
+
+  it('別の明示設定は維持する', () => {
+    expect(resolvePrSummaryModel('@cf/google/gemma-3-12b-it')).toBe('@cf/google/gemma-3-12b-it');
   });
 });
 
@@ -141,7 +155,7 @@ describe('fetchPrDiff', () => {
 
 describe('generateAiSummary', () => {
   const baseParams = {
-    model: DEFAULT_AI_MODEL,
+    model: '@cf/meta/llama-3.1-8b-instruct-fp8',
     title: 'Add login feature',
     description: 'Implements GitHub OAuth login',
     trimmedDiff: '',
@@ -150,6 +164,30 @@ describe('generateAiSummary', () => {
   function makeAi(response: unknown): AiBinding {
     return { run: vi.fn().mockResolvedValue(response) };
   }
+
+  it('Gemma 4 に単一の user メッセージを送り、choices から日本語要約を取得する', async () => {
+    const run = vi.fn().mockResolvedValue({
+      choices: [{ message: { content: '概要: ログイン機能を追加' } }],
+    });
+    const model = '@cf/google/gemma-4-26b-a4b-it';
+    const result = await generateAiSummary({ ...baseParams, model, ai: { run } });
+
+    expect(run).toHaveBeenCalledWith(model, {
+      chat_template_kwargs: { enable_thinking: false },
+      messages: [{
+        role: 'user',
+        content: expect.stringMatching(/最終的な出力は日本語のみ[\s\S]*Add login feature/),
+      }],
+    });
+    expect(result).toEqual({ ok: true, summary: '概要: ログイン機能を追加' });
+  });
+
+  it('Gemma 4 の choices に本文がないときは空レスポンスとして扱う', async () => {
+    const ai = makeAi({ choices: [{ message: { content: null } }] });
+    const result = await generateAiSummary({ ...baseParams, model: DEFAULT_AI_MODEL, ai });
+
+    expect(result).toMatchObject({ ok: false, errorCode: 'EMPTY_RESPONSE' });
+  });
 
   it('正常なレスポンスからok:trueとsummaryを返す', async () => {
     const ai = makeAi({ response: '概要: ログイン機能を追加' });
