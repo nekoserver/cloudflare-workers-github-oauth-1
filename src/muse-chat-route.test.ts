@@ -28,6 +28,36 @@ const chat = { chatId: 'c1', posts: [
   { answerId: 'a1', role: 'assistant', content: 'Workers の Static Assets です', createdAt: 101 },
 ] };
 
+// answerId を付けると、そのペア(質問と回答)だけを返す(2026-11-20。検索結果は、質問と回答のペア=回答ID単位で出すため)。
+describe('GET /api/muse-search/chat?answerId=', () => {
+  const twoPairs = { chatId: 'c1', posts: [
+    { answerId: 'a1', role: 'user', content: '一つ目の質問', createdAt: 100 },
+    { answerId: 'a1', role: 'assistant', content: '一つ目の回答', createdAt: 101 },
+    { answerId: 'a2', role: 'user', content: '二つ目の質問', createdAt: 200 },
+    { answerId: 'a2', role: 'assistant', content: '二つ目の回答', createdAt: 201 },
+  ] };
+  it('そのペアの質問と回答だけを返す(同じチャットの別のペアは含めない)', async () => {
+    const { upstream, get } = setup();
+    const body = await (await get('?chatId=c1&answerId=a2', { DYNAMICNEKO: upstream(async () => Response.json(twoPairs)) })).json() as { posts: Array<{ role: string; paragraphs: Array<Array<{ text: string }>> }> };
+    expect(body.posts.map((p) => [p.role, p.paragraphs[0][0].text])).toEqual([['user', '二つ目の質問'], ['assistant', '二つ目の回答']]);
+  });
+  it('answerId を付けないときは、チャットの全部(今までどおり)', async () => {
+    const { upstream, get } = setup();
+    const body = await (await get('?chatId=c1', { DYNAMICNEKO: upstream(async () => Response.json(twoPairs)) })).json() as { posts: unknown[] };
+    expect(body.posts).toHaveLength(4);
+  });
+  it('そのチャットに無い answerId は 404(空のペアにしない)。201文字以上は 400(上流を呼ばない)', async () => {
+    const { upstream, get } = setup();
+    const up = upstream(async () => Response.json(twoPairs));
+    const res = await get('?chatId=c1&answerId=nope', { DYNAMICNEKO: up });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: expect.stringContaining('ペア') });
+    const before = up.fetch.mock.calls.length;
+    expect((await get('?chatId=c1&answerId=' + 'a'.repeat(201), { DYNAMICNEKO: up })).status).toBe(400);
+    expect(up.fetch.mock.calls.length).toBe(before);
+  });
+});
+
 describe('GET /api/muse-search/chat', () => {
   it('未ログインは 401、管理者でなければ 403', async () => {
     const { get } = setup();

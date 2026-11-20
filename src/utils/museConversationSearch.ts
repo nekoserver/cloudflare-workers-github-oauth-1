@@ -75,6 +75,38 @@ export function searchMuseConversations(
   return callSignedWorkerEndpoint(fetcher, secret, 'https://dynamicneko.internal', pathAndQuery, isMuseSearchData);
 }
 
+/**
+ * 検索結果の1組(質問と回答のペア、2026-11-20、ユーザー指定)。ペア = 1往復 = 回答ID(answerId)。質問の投稿と回答の投稿が、同じ回答IDを持つ。
+ * チャットIDは、複数のペアを入れる会話の容れ物なので、ペアの単位にしない。一致した側にだけ snippet を持つ(一致していない側の本文は、ここでは持たない)。
+ */
+export type MuseSearchSide = { hit: true; postId: string; threadMark: boolean; snippet: MuseSnippet } | { hit: false };
+export type MuseSearchPair = { answerId: string; chatId: string; createdAt: number; question: MuseSearchSide; answer: MuseSearchSide };
+
+/** 上流が回答IDを返さないときは、投稿ID(回答ID:user / 回答ID:assistant)から取る。 */
+function answerIdOf(post: MuseSearchPost & { answerId?: unknown }): string {
+  return typeof post.answerId === 'string' && post.answerId ? post.answerId : post.postId.replace(/:(user|assistant)$/, '');
+}
+
+/**
+ * 一致した投稿を、回答IDでまとめて、質問と回答のペアにする。質問と回答の両方に当たっても1組。同じチャットの別のペアは別の組。
+ * 順は上流の順(新しい順)。時刻は、一致した投稿のうち、いちばん古いもの(質問に当たっていれば質問の時刻)。
+ */
+export function groupMuseSearchPairs(posts: MuseSearchPost[], query: string): MuseSearchPair[] {
+  const pairs = new Map<string, MuseSearchPair>();
+  for (const post of posts) {
+    const answerId = answerIdOf(post);
+    let pair = pairs.get(answerId);
+    if (!pair) {
+      pair = { answerId, chatId: post.chatId, createdAt: post.createdAt, question: { hit: false }, answer: { hit: false } };
+      pairs.set(answerId, pair);
+    }
+    pair.createdAt = Math.min(pair.createdAt, post.createdAt);
+    const side: MuseSearchSide = { hit: true, postId: post.postId, threadMark: post.threadMark, snippet: makeMuseSnippet(post.content, query) };
+    if (post.role === 'user') pair.question = side; else pair.answer = side;
+  }
+  return [...pairs.values()];
+}
+
 export type MuseSearchResultItem = Omit<MuseSearchPost, 'content'> & { snippet: MuseSnippet };
 
 /** 画面へ返す形。全文は返さず、一致箇所の前後だけにする。 */

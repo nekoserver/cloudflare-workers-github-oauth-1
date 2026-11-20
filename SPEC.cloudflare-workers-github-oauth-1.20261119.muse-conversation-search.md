@@ -490,6 +490,44 @@ dynamicneko は全ルートの前に、オーナーのセッションを要求�
 
 - **反映の順序**: dynamicneko を先にデプロイする。本体を先にすると、リンクを押したときに上流が404になり、「チャットを読み込めませんでした」と理由つきで出る(壊れはしない)。
 
+## 検索結果は質問と回答のペア(回答ID単位)で出す(2026-11-20)
+
+**対象**: `/muse-search` の検索結果(`GET /api/muse-search`、`src/utils/museConversationSearch.ts` の `groupMuseSearchPairs`、画面の結果の1件)、チャットIDのリンクのモーダル(`GET /api/muse-search/chat?chatId=&answerId=`) — 検索結果の1件を、質問と回答のペアにする(利用者の指定「ちゃんと質問/回答のペアになるものを検索結果に表示」)。**変更は本体Workerだけ。dynamicneko・tree-viewのMuseタブは変えていない。**
+
+### 用語(この文書の範囲)
+
+| 用語 | 意味 |
+|---|---|
+| ペア | 質問1つと回答1つ。1往復。**回答ID(`answerId`)**で見分ける。質問の投稿と回答の投稿が、同じ回答IDを持つ |
+| チャットID | 複数のペアを入れる会話の容れ物(`tree_view_muse_posts.thread_id`)。**1つのチャットに、質問は2つ以上ある**(会話を続けるため)。ペアの単位にはしない |
+
+### 仕様
+
+| 項目 | 内容 |
+|---|---|
+| 結果の1件 | 1組 = 質問と回答のペア。上流(dynamicneko)が返した一致した投稿を、回答IDでまとめる。質問と回答の両方に当たっても1組。同じチャットの別のペアは、別の組 |
+| 各側の表示 | 一致した側は、強調つきの抜粋。一致していない側は「(一致なし)」(本文は、検索結果の段階では持たない) |
+| 件数 | 組の数。状態の文は「N組見つかりました(質問と回答のペア)。」 |
+| 並び・時刻 | 上流の順(新しい順)。時刻は、一致した投稿のうち、いちばん古いもの |
+| チャットIDのリンク | 押すと、**その組のペア(回答ID)だけ**を、最上位のモーダルに出す。`GET /api/muse-search/chat?chatId=&answerId=` |
+| `answerId` なしの `/chat` | 今までどおり、チャットの全部の投稿 |
+| 指定の回答IDがそのチャットに無い | 404(空のペアにしない)。201文字以上は400(上流を呼ばない) |
+| 回答IDが上流の応答に無い | 投稿ID(`回答ID:user` / `回答ID:assistant`)から取る |
+| 応答の形 | `{ count, pairs: [{ answerId, chatId, createdAt, question, answer }], ... }`。`posts` は返さない(**形が変わった**) |
+
+### 修正内容
+
+| ファイル | 内容 |
+|---|---|
+| `src/utils/museConversationSearch.ts` | `groupMuseSearchPairs`・`MuseSearchPair` |
+| `src/index.ts` | `/api/muse-search` が `pairs` を返す。`/api/muse-search/chat` が `answerId` で絞る |
+| `src/views/museSearch.ts` | 組の描画(質問欄・回答欄)、チャットIDのリンクが回答IDも渡す、CSS |
+
+### 注意事項
+
+- 一致していない側の本文は、検索結果の一覧には出ない。見るには、チャットIDを押す(ペアの全文が出る)。一覧に、一致していない側の抜粋も出すには、dynamicneko の検索の応答にペアの本文を足す変更が要る(今回は、本体だけにする指定のため、していない)。
+- 本体と dynamicneko の反映の順序は問わない(dynamicneko は変えていない)。
+
 ## 関連
 
 - dynamicneko の PR(出現回数): [nekoserver/dynamicneko#459](https://github.com/nekoserver/dynamicneko/pull/459)

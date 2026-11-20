@@ -16,7 +16,9 @@ function mount(fetchFn: typeof fetch) {
   const submit = (value: string) => { input.value = value; form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); };
   return { input, submit, status: () => document.querySelector('[data-field="status"]')!.textContent ?? '', items: () => [...document.querySelectorAll('.muse-search-item')] };
 }
-const item = (over: Record<string, unknown> = {}) => ({ postId: 'a:user', chatId: 'c-00001', role: 'user', createdAt: 100, threadMark: false, snippet: { before: '前', match: '静的', after: '後' }, ...over });
+// 検索結果の1組 = 質問と回答のペア(回答ID単位、2026-11-20、ユーザー指定)。一致した側だけが snippet を持つ。
+const hitSide = (over: Record<string, unknown> = {}) => ({ hit: true, postId: 'a:user', threadMark: false, snippet: { before: '前', match: '静的', after: '後' }, ...over });
+const item = (over: Record<string, unknown> = {}) => ({ answerId: 'a', chatId: 'c-00001', createdAt: 100, question: hitSide(), answer: { hit: false }, ...over });
 const reply = (body: unknown, status = 200) => vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof fetch;
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 /** 呼ばれたURLの一覧。読み込み時に必ず取る、初期画面のスレッド一覧(/api/muse-search/threads)は除く(それぞれのテストが見たいのは、そのほかの呼び出し)。 */
@@ -54,7 +56,7 @@ describe('ページの形', () => {
 
 describe('検索の動き', () => {
   it('空の検索文は上流へ送らず、入力を促す', async () => {
-    const fetchFn = reply({ count: 0, posts: [] });
+    const fetchFn = reply({ count: 0, pairs: [] });
     const page = mount(fetchFn);
     page.submit('   ');
     await flush();
@@ -62,22 +64,31 @@ describe('検索の動き', () => {
     expect(page.status()).toContain('検索する文字を入力');
   });
   it('/api/muse-search に検索文を付けて呼び、結果を一致箇所の強調つきで並べる', async () => {
-    const fetchFn = reply({ count: 2, posts: [item(), item({ postId: 'a:assistant', role: 'assistant', threadMark: true, snippet: { before: '', match: '静的', after: 'の回答' } })] });
+    const fetchFn = reply({ count: 2, pairs: [item(), item({ answerId: 'b', question: { hit: false }, answer: hitSide({ postId: 'b:assistant', threadMark: true, snippet: { before: '', match: '静的', after: 'の回答' } }) })] });
     const page = mount(fetchFn);
     page.submit(' 静的 ');
     await flush();
     expect(callUrls(fetchFn)[0]).toBe('/api/muse-search?q=' + encodeURIComponent('静的'));
-    expect(page.status()).toContain('2件');
+    expect(page.status()).toContain('2組');
+    expect(page.status()).toContain('質問と回答のペア');
     expect(page.items()).toHaveLength(2);
-    expect(page.items()[0].querySelector('[data-field="role"]')!.textContent).toBe('質問');
-    expect(page.items()[1].querySelector('[data-field="role"]')!.textContent).toBe('回答');
-    expect(page.items()[0].querySelector('mark')!.textContent).toBe('静的');
+    // 1組に、質問と回答の両方の欄がある(一致した側に強調つきの抜粋、一致していない側は「一致なし」)。
+    const roles = (i: number) => [...page.items()[i].querySelectorAll('[data-field="role"]')].map((el) => el.textContent);
+    expect(roles(0)).toEqual(['質問', '回答']);
+    expect(roles(1)).toEqual(['質問', '回答']);
+    const side = (i: number, role: string) => page.items()[i].querySelector<HTMLElement>(`[data-side="${role}"]`)!;
+    expect(side(0, 'user').querySelector('mark')!.textContent).toBe('静的');
+    expect(side(0, 'assistant').querySelector('mark')).toBeNull();
+    expect(side(0, 'assistant').textContent).toContain('一致なし');
+    expect(side(1, 'user').textContent).toContain('一致なし');
+    expect(side(1, 'assistant').querySelector('mark')!.textContent).toBe('静的');
     expect(page.items()[0].textContent).toContain('c-00001');
     expect(page.items()[1].textContent).toContain('スレッド');
+    expect(page.items()[0].textContent).not.toContain('スレッド化済み');
   });
   it('上流から来た文字列は、HTMLとして解釈せず文字のまま表示する', async () => {
     const evil = '<img src=x onerror="window.__xss=1">';
-    const page = mount(reply({ count: 1, posts: [item({ chatId: evil, snippet: { before: evil, match: '<b>x</b>', after: evil } })] }));
+    const page = mount(reply({ count: 1, pairs: [item({ chatId: evil, question: hitSide({ snippet: { before: evil, match: '<b>x</b>', after: evil } }) })] }));
     page.submit('x');
     await flush();
     expect(document.querySelector('.muse-search-item img')).toBeNull();
@@ -86,7 +97,7 @@ describe('検索の動き', () => {
     expect((window as unknown as { __xss?: number }).__xss).toBeUndefined();
   });
   it('一致が無ければ、その旨を出す(エラーとは別の表示)', async () => {
-    const page = mount(reply({ count: 0, posts: [] }));
+    const page = mount(reply({ count: 0, pairs: [] }));
     page.submit('無い');
     await flush();
     expect(page.status()).toContain('見つかりませんでした');
@@ -115,7 +126,7 @@ describe('検索の動き', () => {
     expect(button.disabled).toBe(true);
     page.submit('x');
     expect(callUrls(fetchFn)).toHaveLength(1);
-    release(new Response(JSON.stringify({ count: 0, posts: [] })));
+    release(new Response(JSON.stringify({ count: 0, pairs: [] })));
     await flush();
     expect(button.disabled).toBe(false);
   });
@@ -1210,7 +1221,7 @@ describe('初期画面のスレッド一覧', () => {
     expect(section().textContent).toContain('network down');
   });
   it('検索を始めると、初期画面のスレッド一覧は隠れる。検索の結果は今までどおり出る。一覧を取り直さない', async () => {
-    const fetchFn = router(threadsRoutes({ '/api/muse-search?': json({ count: 0, posts: [] }) }));
+    const fetchFn = router(threadsRoutes({ '/api/muse-search?': json({ count: 0, pairs: [] }) }));
     const page = mount(fetchFn);
     await flush();
     expect(section().hidden).toBe(false);
@@ -1385,7 +1396,7 @@ describe('初期画面のスレッド一覧', () => {
       expect(links().every((a) => panelOf(a)!.querySelectorAll('p.muse-thread-paragraph').length > 0)).toBe(true);
     });
     it('検索(上の検索窓)を始めると、この検索窓・ボタンも、一覧と一緒に隠れる', async () => {
-      const page = mount(router(threadsRoutes({ '/api/muse-search/threads': json(threeThreads), '/api/muse-search?': json({ count: 0, posts: [] }) })));
+      const page = mount(router(threadsRoutes({ '/api/muse-search/threads': json(threeThreads), '/api/muse-search?': json({ count: 0, pairs: [] }) })));
       await flush();
       page.submit('静的');
       await flush();
@@ -1729,7 +1740,7 @@ describe('水平タブ(スレッド一覧・検索結果)', () => {
     return handler();
   }) as unknown as typeof fetch;
   const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const baseRoutes = (extra: Record<string, () => Promise<Response> | Response> = {}) => ({ '/api/muse-search?': json({ count: 1, posts: [{ postId: 'a:user', chatId: 'c-00001', role: 'user', createdAt: 100, threadMark: false, snippet: { before: '前', match: '静的', after: '後' } }] }), '/api/muse-search/threads': json({ threads: [thread()] }), ...extra });
+  const baseRoutes = (extra: Record<string, () => Promise<Response> | Response> = {}) => ({ '/api/muse-search?': json({ count: 1, pairs: [{ answerId: 'a', chatId: 'c-00001', createdAt: 100, question: { hit: true, postId: 'a:user', threadMark: false, snippet: { before: '前', match: '静的', after: '後' } }, answer: { hit: false } }] }), '/api/muse-search/threads': json({ threads: [thread()] }), ...extra });
   const tab = (name: 'threads' | 'results') => document.querySelector<HTMLButtonElement>(`[role="tab"][data-tab="${name}"]`)!;
   const panel = (name: 'threads' | 'results') => document.querySelector<HTMLElement>(`[role="tabpanel"][data-panel="${name}"]`)!;
   const threadCalls = (fetchFn: typeof fetch) => (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === '/api/muse-search/threads').length;
@@ -1769,7 +1780,7 @@ describe('水平タブ(スレッド一覧・検索結果)', () => {
     expect(panel('threads').hidden).toBe(true);
     expect(panel('results').hidden).toBe(false);
     expect(page.status()).toContain('検索しています');
-    release(new Response(JSON.stringify({ count: 1, posts: [{ postId: 'a:user', chatId: 'c-00001', role: 'user', createdAt: 100, threadMark: false, snippet: { before: '前', match: '静的', after: '後' } }] }), { status: 200 }));
+    release(new Response(JSON.stringify({ count: 1, pairs: [{ answerId: 'a', chatId: 'c-00001', createdAt: 100, question: { hit: true, postId: 'a:user', threadMark: false, snippet: { before: '前', match: '静的', after: '後' } }, answer: { hit: false } }] }), { status: 200 }));
     await flush();
     expect(page.items()).toHaveLength(1);
     expect(tab('results').tabIndex).toBe(0);
@@ -1886,7 +1897,7 @@ describe('水平タブ(スレッド一覧・検索結果)', () => {
 
 describe('検索キーを記録できなかったときの表示', () => {
   it('keyLogged が false なら、結果は出したまま、記録できなかったことと理由を伝える', async () => {
-    const page = mount(reply({ count: 1, posts: [item()], aiChatCount: null, treeViewCount: 3, keyLogged: false, keyLogError: 'd1 down' }));
+    const page = mount(reply({ count: 1, pairs: [item()], aiChatCount: null, treeViewCount: 3, keyLogged: false, keyLogError: 'd1 down' }));
     page.submit('x');
     await flush();
     expect(page.items()).toHaveLength(1);
@@ -1894,7 +1905,7 @@ describe('検索キーを記録できなかったときの表示', () => {
     expect(page.status()).toContain('d1 down');
   });
   it('記録できたときは、その警告を出さない', async () => {
-    const page = mount(reply({ count: 1, posts: [item()], aiChatCount: 2, treeViewCount: 3, keyLogged: true }));
+    const page = mount(reply({ count: 1, pairs: [item()], aiChatCount: 2, treeViewCount: 3, keyLogged: true }));
     page.submit('x');
     await flush();
     expect(page.status()).not.toContain('記録できませんでした');
@@ -2316,10 +2327,10 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     { role: 'assistant', createdAt: 160, truncated: false, paragraphs: [[seg('Workers の '), seg('Static', true), seg(' Assets です')], [seg('二段落目')]] },
   ], ...over });
   const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  const open = async (chat: () => Promise<Response> | Response = json(chatBody()), posts = [item(), item({ postId: 'a:assistant', role: 'assistant' })]) => {
+  const open = async (chat: () => Promise<Response> | Response = json(chatBody()), posts = [item(), item({ answerId: 'b', question: { hit: false }, answer: hitSide({ postId: 'b:assistant' }) })]) => {
     const fetchFn = vi.fn(async (url: string) => {
       if (url === '/api/muse-search/threads') return json({ threads: [] })();
-      if (url.startsWith('/api/muse-search?')) return json({ count: posts.length, posts })();
+      if (url.startsWith('/api/muse-search?')) return json({ count: posts.length, pairs: posts })();
       if (url.startsWith('/api/muse-search/chat?')) return chat();
       throw new Error('想定外のURL: ' + url);
     }) as unknown as typeof fetch;
@@ -2351,7 +2362,14 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect(modal()!.querySelector('h2')!.textContent).toBe('チャット c-00001');
     expect(Number(modal()!.style.zIndex)).toBeGreaterThanOrEqual(800);
     await flush();
-    expect(chatCalls(fetchFn)).toEqual(['/api/muse-search/chat?chatId=c-00001']);
+    // チャットID全体ではなく、そのペア(回答ID)だけを取る(同じチャットに、質問が2つ以上あるため)。
+    expect(chatCalls(fetchFn)).toEqual(['/api/muse-search/chat?chatId=c-00001&answerId=a']);
+  });
+  it('2組目のチャットIDを押すと、その組の回答ID(b)で取る(同じチャットIDでも、押した組のペアだけ)', async () => {
+    const { fetchFn } = await open();
+    link(1).click();
+    await flush();
+    expect(chatCalls(fetchFn)).toEqual(['/api/muse-search/chat?chatId=c-00001&answerId=b']);
   });
   it('チャットIDが同じ質問と回答を、セットで、やりとりの順に出す(質問→回答。役割・時刻・段落つき)。強調は <mark>', async () => {
     await open();
@@ -2467,6 +2485,13 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     release(new Response(JSON.stringify(chatBody()), { status: 200 }));
     await flush();
     expect(modal()).toBeNull();
+  });
+  it('CSS: 検索結果の質問/回答のラベルは、抜粋が長くても縦に割れない(実ブラウザで、「回答」が「回/答」に割れた)', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-search-side \.muse-search-role \{[^}]*flex-shrink: 0[^}]*white-space: nowrap/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
   it('CSS: チャットIDのリンク・投稿の見た目は変数だけ(固定色なし)', () => {
     const html = getMuseSearchPage();
