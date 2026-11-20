@@ -545,16 +545,34 @@ export const MUSE_SEARCH_SCRIPT = `
         row.addEventListener('mousedown', function (event) { if (event.button === 0) dragStart(row, item, event.clientX, event.clientY); });
         row.addEventListener('click', function () { if (!suppressClick && swipeRow === row) closeSwipe(); });
       }
-      // 削除エリアのタップ: DELETE を送り、成功(deleted: true)を確かめてから、データと画面から消す。失敗は、行を残して理由を出す(成功に見せない)。
-      deleteArea.addEventListener('click', function () {
-        if (!swipeItem || deleteArea.disabled) return;
-        var item = swipeItem;
-        deleteArea.disabled = true;
-        clearDeleteNote();
-        fetchFn('/api/muse-search/key?key=' + encodeURIComponent(item.searchKey), { method: 'DELETE' }).then(function (res) {
+      // 削除の確認(2026-11-20、ユーザー指定)。削除エリアのタップでは削除せず、確認モーダルを出す。「削除する」を押して初めて DELETE を送る。
+      // 送り方: 成功(deleted: true)を確かめてから、データと画面から消す。失敗は、行を残して理由を出す(成功に見せない)。
+      var confirmOverlay = null;
+      function closeDeleteConfirm(restoreFocus) {
+        doc.removeEventListener('keydown', onConfirmKeydown);
+        if (confirmOverlay && confirmOverlay.parentNode) confirmOverlay.parentNode.removeChild(confirmOverlay);
+        confirmOverlay = null;
+        if (restoreFocus && !deleteArea.hidden) deleteArea.focus();
+      }
+      function confirmButtons() { return confirmOverlay ? Array.prototype.slice.call(confirmOverlay.querySelectorAll('button')) : []; }
+      function onConfirmKeydown(event) {
+        if (!confirmOverlay) return;
+        var buttons = confirmButtons();
+        var pending = buttons.some(function (button) { return button.disabled; });
+        if (event.key === 'Escape') { event.preventDefault(); if (!pending) closeDeleteConfirm(true); }
+        else if (event.key === 'Tab') {
+          event.preventDefault();
+          if (pending) return;
+          var at = buttons.indexOf(doc.activeElement);
+          var next = event.shiftKey ? (at <= 0 ? buttons.length - 1 : at - 1) : (at < 0 || at === buttons.length - 1 ? 0 : at + 1);
+          buttons[next].focus();
+        }
+      }
+      function runDelete(item) {
+        return fetchFn('/api/muse-search/key?key=' + encodeURIComponent(item.searchKey), { method: 'DELETE' }).then(function (res) {
           return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
         }).then(function (r) {
-          deleteArea.disabled = false;
+          closeDeleteConfirm(false);
           if (r.ok && r.data && r.data.deleted === true) {
             keysData = keysData.filter(function (entry) { return entry !== item; });
             if (view === 'keys') showKeysData();
@@ -563,13 +581,60 @@ export const MUSE_SEARCH_SCRIPT = `
           }
           var detail = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
           showDeleteError('(HTTP ' + r.status + ')' + (detail ? ': ' + detail : ''));
+          deleteArea.focus();
         }).catch(function (error) {
-          deleteArea.disabled = false;
+          closeDeleteConfirm(false);
           showDeleteError(': ' + (error && error.message ? error.message : String(error)));
+          deleteArea.focus();
         });
-      });
+      }
+      function openDeleteConfirm(item) {
+        closeDeleteConfirm(false);
+        clearDeleteNote();
+        confirmOverlay = museSearchEl(doc, 'div', 'muse-confirm-overlay');
+        confirmOverlay.setAttribute('data-overlay', 'muse-key-delete-confirm');
+        // キーのモーダルより必ず手前に出す(getNextZ は、画面の外のスタイルが当たっていない環境では、開いているモーダルを数え落とす)。
+        confirmOverlay.style.zIndex = String(Math.max(getNextZ(doc), (parseInt(overlay.style.zIndex, 10) || 0) + 100));
+        var box = museSearchEl(doc, 'div', 'muse-confirm-dialog');
+        box.setAttribute('role', 'alertdialog');
+        box.setAttribute('aria-modal', 'true');
+        box.setAttribute('aria-labelledby', 'muse-confirm-title');
+        box.setAttribute('aria-describedby', 'muse-confirm-desc');
+        var confirmTitle = museSearchEl(doc, 'h2', 'muse-confirm-title', '検索キーを削除しますか?');
+        confirmTitle.id = 'muse-confirm-title';
+        var confirmKey = museSearchEl(doc, 'p', 'muse-confirm-key', item.searchKey);
+        var confirmDesc = museSearchEl(doc, 'p', 'muse-confirm-desc', 'このキーの検索の記録と、🗒️・📅の回答の一覧に出ているこのキーの記録が、すべて削除されます。元に戻せません。');
+        confirmDesc.id = 'muse-confirm-desc';
+        var buttons = museSearchEl(doc, 'div', 'muse-confirm-buttons');
+        var cancel = museSearchEl(doc, 'button', 'muse-confirm-cancel', 'キャンセル');
+        cancel.type = 'button';
+        cancel.setAttribute('data-action', 'cancel-delete-key');
+        var ok = museSearchEl(doc, 'button', 'muse-confirm-danger', '削除する');
+        ok.type = 'button';
+        ok.setAttribute('data-action', 'confirm-delete-key');
+        buttons.appendChild(cancel);
+        buttons.appendChild(ok);
+        box.appendChild(confirmTitle);
+        box.appendChild(confirmKey);
+        box.appendChild(confirmDesc);
+        box.appendChild(buttons);
+        confirmOverlay.appendChild(box);
+        doc.body.appendChild(confirmOverlay);
+        cancel.addEventListener('click', function () { closeDeleteConfirm(true); });
+        confirmOverlay.addEventListener('click', function (event) { if (event.target === confirmOverlay && !cancel.disabled) closeDeleteConfirm(true); });
+        ok.addEventListener('click', function () {
+          if (ok.disabled) return;
+          ok.disabled = true;
+          cancel.disabled = true;
+          runDelete(item);
+        });
+        doc.addEventListener('keydown', onConfirmKeydown);
+        cancel.focus();
+      }
+      deleteArea.addEventListener('click', function () { if (swipeItem) openDeleteConfirm(swipeItem); });
 
       function closeModal() {
+        closeDeleteConfirm(false);
         doc.removeEventListener('keydown', onKeydown);
         doc.removeEventListener('mousemove', onMouseMove);
         doc.removeEventListener('mouseup', onMouseUp);
@@ -578,7 +643,7 @@ export const MUSE_SEARCH_SCRIPT = `
       }
       function onKeydown(event) {
         // 回答・📅のレイヤーが上に開いている間は、そちらが操作を受ける(Escで重なった全部が閉じない)。
-        if (doc.querySelector('[data-overlay="muse-answer"], [data-overlay="muse-recent"]')) return;
+        if (doc.querySelector('[data-overlay="muse-answer"], [data-overlay="muse-recent"], [data-overlay="muse-key-delete-confirm"]')) return;
         if (event.key === 'Escape') closeModal();
         // Tabでフォーカスがモーダルの外へ出ないようにする(モーダルの中のボタンとリンクの間を行き来する)。
         else if (event.key === 'Tab') {
@@ -1282,6 +1347,16 @@ export function getMuseSearchPage(): string {
     .muse-keys-table tbody td { transform: translateX(var(--swipe-x, 0px)); transition: transform 0.2s ease; background: var(--card-bg); touch-action: pan-y; }
     .muse-keys-table tbody tr.swiping td { transition: none; }
     .muse-keys-table tbody tr.swipe-open td:first-child, .muse-keys-table tbody tr.swiping td:first-child { position: sticky; left: 0; z-index: 1; transform: none; }
+    .muse-confirm-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
+    .muse-confirm-dialog { box-sizing: border-box; width: 100%; max-width: 340px; padding: 20px 18px 16px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; }
+    .muse-confirm-title { margin: 0 0 8px; font-size: 15px; }
+    .muse-confirm-key { margin: 0 0 8px; font-weight: 700; overflow-wrap: anywhere; }
+    .muse-confirm-desc { margin: 0 0 18px; font-size: 13px; line-height: 1.55; color: var(--text-secondary); }
+    .muse-confirm-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+    .muse-confirm-cancel, .muse-confirm-danger { min-height: 36px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--border-color); cursor: pointer; font-size: 13px; }
+    .muse-confirm-cancel { background: var(--bg-secondary); color: var(--text-primary); }
+    .muse-confirm-danger { background: var(--danger-color); color: var(--bg-primary); font-weight: 700; }
+    .muse-confirm-cancel:disabled, .muse-confirm-danger:disabled { opacity: 0.6; cursor: default; }
     .muse-keys-delete-area { position: fixed; width: 72px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; font-size: 12px; font-weight: 700; background: var(--danger-color); color: var(--bg-primary); }
     .muse-keys-delete-area[hidden] { display: none; }
     .muse-keys-delete-area:disabled { opacity: 0.6; cursor: default; }
