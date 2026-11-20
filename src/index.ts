@@ -20963,7 +20963,7 @@ app.get('/api/muse-search/chat', authMiddleware, cfDashboardAdminMiddleware, asy
   if (chosen.length === 0) return c.json({ error: 'このチャットに、指定の質問と回答のペアが見つかりません' }, 404);
   const posts = chosen.map((post) => {
     const { content, truncated } = truncateAnswer(post.content);
-    return { role: post.role, createdAt: post.createdAt, truncated, paragraphs: highlightParagraphs(toParagraphs(content), keywords) };
+    return { role: post.role, createdAt: post.createdAt, truncated, markdown: content, paragraphs: highlightParagraphs(toParagraphs(content), keywords) };
   });
   return c.json({ chatId: result.data.chatId, posts, ...(highlightError ? { highlightError } : {}) });
 });

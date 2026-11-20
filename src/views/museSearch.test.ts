@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// /muse-search のページ(2026-11-19)。上流から来た文字列は textContent でしか表示しない(innerHTML を使わない)。
+// /muse-search の表示と操作を検証する。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { MUSE_SEARCH_SCRIPT, getMuseSearchPage } from './museSearch';
@@ -45,8 +45,8 @@ describe('ページの形', () => {
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(style).toContain('var(--card-bg)');
   });
-  it('innerHTML を使わない。生成HTMLの全scriptが node --check に通る', () => {
-    expect(MUSE_SEARCH_SCRIPT).not.toContain('innerHTML');
+  it('Markdown の描画以外では innerHTML を使わない。生成HTMLの全scriptが node --check に通る', () => {
+    expect(MUSE_SEARCH_SCRIPT.replace('template.innerHTML = parseMuseChatMarkdown(markdown);', '')).not.toContain('innerHTML');
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const scripts = [...doc.querySelectorAll('script')];
     expect(scripts.length).toBeGreaterThan(0);
@@ -2379,11 +2379,29 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect(posts.map((p) => p.querySelector('.muse-chat-role')!.textContent)).toEqual(['質問', '回答']);
     expect(posts.map((p) => p.getAttribute('data-role'))).toEqual(['user', 'assistant']);
     expect(posts[0].querySelector('.muse-chat-time')!.textContent).toBe(script.formatMuseSearchTime(100));
-    expect(posts[1].querySelectorAll('p.muse-thread-paragraph')).toHaveLength(2);
-    expect(posts[1].querySelector('p.muse-thread-paragraph')!.textContent).toBe('Workers の Static Assets です');
+    expect(posts[1].querySelectorAll('.muse-chat-markdown p')).toHaveLength(2);
+    expect(posts[1].querySelector('.muse-chat-markdown p')!.textContent).toBe('Workers の Static Assets です');
     expect([...posts[1].querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Static']);
     expect(posts[0].querySelectorAll('mark')).toHaveLength(0);
   });
+  it('質問と回答の Markdown を描画し、キーワードを装飾の中でも強調する', async () => {
+    const question = { role: 'user', createdAt: 100, truncated: false, markdown: '## 質問の見出し', paragraphs: [[seg('## 質問の見出し')]] };
+    const markdown = '**Static** Assets\n\n- 例\n\n```txt\na\n\n  b\n```\n\n[資料](https://example.com) [危険](javascript:alert) [不正](https://[) <img src=x>';
+    const answer = { role: 'assistant', createdAt: 160, truncated: false, markdown, paragraphs: [[seg('**'), seg('Static', true), seg('** Assets')]] };
+    await open(json(chatBody({ posts: [question, answer] })));
+    link().click();
+    await flush();
+
+    const bodies = modal()!.querySelectorAll('.muse-chat-markdown');
+    expect(bodies[0].querySelector('h2')?.textContent).toBe('質問の見出し');
+    expect(bodies[1].querySelector('strong mark')?.textContent).toBe('Static');
+    expect(bodies[1].querySelector('ul li')?.textContent).toBe('例');
+    expect(bodies[1].querySelector('pre code')?.textContent).toBe('a\n\n  b');
+    expect([...bodies[1].querySelectorAll('a[href]')].map((a) => a.getAttribute('href'))).toEqual(['https://example.com']);
+    expect(bodies[1].querySelector('img')).toBeNull();
+    expect(bodies[1].textContent).toContain('<img src=x>');
+  });
+
   it('質問と1件だけの回答も、役割と日時をまとめた見出しで個別に開閉できる', async () => {
     await open();
     link().click();
@@ -2413,7 +2431,7 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     await flush();
 
     const questionBox = modal()!.querySelector('.muse-chat-post[data-role="user"]')!;
-    expect(questionBox.querySelector('p.muse-thread-paragraph')?.textContent).toBe('静的アセットとは?');
+    expect(questionBox.querySelector('.muse-chat-markdown p')?.textContent).toBe('静的アセットとは?');
     const answers = [...modal()!.querySelectorAll<HTMLDetailsElement>('details.muse-chat-post[data-role="assistant"]')];
     expect(answers.map((answer) => answer.open)).toEqual([true, false]);
     const heading = answers[1].querySelector('summary')!;
@@ -2422,7 +2440,7 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect(heading.textContent).not.toContain('以前の回答');
     heading.click();
     expect(answers[1].open).toBe(true);
-    expect(answers[1].querySelector('p.muse-thread-paragraph')?.textContent).toBe('以前の回答');
+    expect(answers[1].querySelector('.muse-chat-markdown p')?.textContent).toBe('以前の回答');
   });
 
   it('読み込み中の表示を出す。サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す(強調の中も)', async () => {
