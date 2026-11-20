@@ -2366,6 +2366,27 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect([...posts[1].querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Static']);
     expect(posts[0].querySelectorAll('mark')).toHaveLength(0);
   });
+  it('質問と1件だけの回答も、役割と日時をまとめた見出しで個別に開閉できる', async () => {
+    await open();
+    link().click();
+    await flush();
+
+    const [question, answer] = modal()!.querySelectorAll<HTMLDetailsElement>('details.muse-chat-post');
+    const questionHeading = question.querySelector('summary')!;
+    const answerHeading = answer.querySelector('summary')!;
+    expect(questionHeading.textContent).toBe('質問 ' + script.formatMuseSearchTime(100));
+    expect(answerHeading.textContent).toBe('回答 ' + script.formatMuseSearchTime(160));
+    expect([question.open, answer.open]).toEqual([true, true]);
+
+    questionHeading.click();
+    expect([question.open, answer.open]).toEqual([false, true]);
+    answerHeading.click();
+    expect([question.open, answer.open]).toEqual([false, false]);
+    questionHeading.click();
+    answerHeading.click();
+    expect([question.open, answer.open]).toEqual([true, true]);
+  });
+
   it('複数回答では最新の本文だけを開き、以前の回答は見出しから開ける', async () => {
     const [question, latest] = chatBody().posts;
     const older = { ...latest, createdAt: 120, paragraphs: [[seg('以前の回答')]] };
