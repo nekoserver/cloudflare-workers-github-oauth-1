@@ -1,3 +1,4 @@
+import { getMarkdownParserScript, getMarkdownPreviewCSS } from '../utils/markdownRenderer';
 import { getThemeCSS, getThemeInitScript, getThemeToggleCSS, getThemeToggleHTML, getThemeToggleScript } from '../utils/theme';
 
 /**
@@ -8,10 +9,11 @@ export const MUSE_SEARCH_CSP = "default-src 'none'; script-src 'unsafe-inline'; 
 
 /**
  * /muse-search のページ script(2026-11-19)。依存を受け取る関数に分け、museSearch.test.ts で動かす。
- * 上流から来た文字列(会話の一部・チャットID・エラーの理由)は、textContent でしか表示しない。
+ * チャット本文は共有 Markdown パーサーを通す。その他の上流の文字列はテキストとして表示する。
  * このファイルのscriptはTypeScriptのtemplate literalの中にあるので、バックスラッシュ・正規表現・バッククォートを書かない。
  */
 export const MUSE_SEARCH_SCRIPT = `
+    var parseMuseChatMarkdown = (function () { ${getMarkdownParserScript()} return parseMd; })();
     var MUSE_SEARCH_ROLE_LABELS = { user: '質問', assistant: '回答' };
 
     function pad2(n) { return n < 10 ? '0' + n : String(n); }
@@ -241,8 +243,66 @@ export const MUSE_SEARCH_SCRIPT = `
       });
     }
 
-    // 検索結果のチャットIDのリンクを押したときの、最上位のモーダル(2026-11-20、ユーザー指定)。同じチャットIDを持つ質問と回答を、セットで、やりとりの順に出す。
-    // 各投稿は段落ごと。閲覧ユーザーのキーワードの強調区間はサーバーで計算済み(文字は textContent だけで入れる)。
+    function renderMuseChatMarkdown(doc, post) {
+      var body = museSearchEl(doc, 'div', 'muse-chat-markdown');
+      var paragraphs = post.paragraphs;
+      var markdown = post.markdown;
+      if (typeof markdown !== 'string') {
+        markdown = paragraphs.map(function (segments) {
+          return segments.map(function (segment) { return segment.text; }).join('');
+        }).join('\\n\\n');
+      }
+
+      var template = doc.createElement('template');
+      template.innerHTML = parseMuseChatMarkdown(markdown);
+      template.content.querySelectorAll('a[href]').forEach(function (link) {
+        try {
+          var url = new URL(link.getAttribute('href'), doc.baseURI);
+          if (url.protocol === 'http:' || url.protocol === 'https:') return;
+        } catch {
+          // 不正なURLはラベルだけ残す。
+        }
+        link.removeAttribute('href');
+      });
+      // このページの CSP では画像を読み込めない。
+      template.content.querySelectorAll('img').forEach(function (image) {
+        image.replaceWith(doc.createTextNode(image.alt));
+      });
+
+      var hits = new Set();
+      paragraphs.forEach(function (segments) {
+        segments.forEach(function (segment) {
+          if (segment.hit && segment.text) hits.add(segment.text);
+        });
+      });
+      if (hits.size) {
+        var pattern = Array.from(hits).sort(function (a, b) { return b.length - a.length; }).map(function (hit) {
+          return hit.replace(/[.*+?^\\x24{}()|[\\]\\\\]/g, '\\\\$&');
+        }).join('|');
+        var matches = new RegExp(pattern, 'giu');
+        var walker = doc.createTreeWalker(template.content, 4);
+        var textNodes = [];
+        while (walker.nextNode()) textNodes.push(walker.currentNode);
+        textNodes.forEach(function (node) {
+          var text = node.data;
+          var cursor = 0;
+          var highlighted = doc.createDocumentFragment();
+          for (var match of text.matchAll(matches)) {
+            highlighted.appendChild(doc.createTextNode(text.slice(cursor, match.index)));
+            highlighted.appendChild(museSearchEl(doc, 'mark', '', match[0]));
+            cursor = match.index + match[0].length;
+          }
+          if (cursor) {
+            highlighted.appendChild(doc.createTextNode(text.slice(cursor)));
+            node.replaceWith(highlighted);
+          }
+        });
+      }
+      body.appendChild(template.content);
+      return body;
+    }
+
+    // チャットIDのリンクから、選択したペアの質問と回答をモーダルに表示する。
     function openMuseChatModal(doc, fetchFn, opener, chatId, answerId) {
       if (doc.querySelector('[data-overlay="muse-chat"]')) return;
       var overlay = museSearchEl(doc, 'div', 'muse-answer-overlay');
@@ -317,14 +377,7 @@ export const MUSE_SEARCH_SCRIPT = `
           heading.appendChild(meta);
           section.appendChild(heading);
           if (post.role === 'user' || index === latestAnswerIndex) section.setAttribute('open', '');
-          post.paragraphs.forEach(function (segments) {
-            var p = museSearchEl(doc, 'p', 'muse-thread-paragraph');
-            segments.forEach(function (segment) {
-              if (segment.hit) p.appendChild(museSearchEl(doc, 'mark', '', segment.text));
-              else p.appendChild(doc.createTextNode(segment.text));
-            });
-            section.appendChild(p);
-          });
+          section.appendChild(renderMuseChatMarkdown(doc, post));
           if (post.truncated) section.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '長いため、途中までを表示しています。'));
           wrap.appendChild(section);
         });
@@ -1474,6 +1527,11 @@ export function getMuseSearchPage(): string {
     .muse-chat-heading { cursor: pointer; }
     .muse-chat-meta { color: var(--text-secondary); font-size: 13px; }
     .muse-chat-role { font-weight: 700; color: var(--text-primary); }
+    ${getMarkdownPreviewCSS().replaceAll('.preview-area', '.muse-chat-markdown')}
+    .muse-chat-markdown { margin-top: 8px; overflow-wrap: anywhere; overflow-x: auto; }
+    .muse-chat-markdown > :first-child { margin-top: 0; }
+    .muse-chat-markdown > :last-child { margin-bottom: 0; }
+    .muse-chat-markdown mark { background: var(--warning-color); color: var(--text-on-warning, var(--text-primary)); }
     .muse-confirm-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-confirm-dialog { box-sizing: border-box; width: 100%; max-width: 340px; padding: 20px 18px 16px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; }
     .muse-confirm-title { margin: 0 0 8px; font-size: 15px; }

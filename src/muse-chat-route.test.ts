@@ -77,10 +77,17 @@ describe('GET /api/muse-search/chat', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
     expect(await res.json()).toEqual({ chatId: 'c1', posts: [
-      { role: 'user', createdAt: 100, truncated: false, paragraphs: [plain('静的アセットとは?'), plain('詳しく')] },
-      { role: 'assistant', createdAt: 101, truncated: false, paragraphs: [plain('Workers の Static Assets です')] },
+      { role: 'user', createdAt: 100, truncated: false, markdown: chat.posts[0].content, paragraphs: [plain('静的アセットとは?'), plain('詳しく')] },
+      { role: 'assistant', createdAt: 101, truncated: false, markdown: chat.posts[1].content, paragraphs: [plain('Workers の Static Assets です')] },
     ] });
     expect((up.fetch.mock.calls[0] as unknown as [string])[0]).toBe('https://dynamicneko.internal/api/tree-view/muse-chat?chatId=c1');
+  });
+  it('Markdown の空行とインデントを保った本文も返す', async () => {
+    const { upstream, get } = setup();
+    const content = '```txt\na\n\n  b\n```';
+    const posts = [{ ...chat.posts[1], content }];
+    const res = await get('?chatId=c1', { DYNAMICNEKO: upstream(async () => Response.json({ ...chat, posts })) });
+    expect(await res.json()).toMatchObject({ posts: [{ markdown: content }] });
   });
   it('閲覧ユーザー自身のキーだけを、質問にも回答にも強調する。他のユーザーのキーは使わない', async () => {
     const { addKey, upstream, get } = setup();
