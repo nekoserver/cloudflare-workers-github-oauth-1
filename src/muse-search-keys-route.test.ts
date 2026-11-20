@@ -86,9 +86,9 @@ describe('記録に失敗しても、検索の結果は返す(理由を伝える
       const { rows, fetcher, request } = setup({ db: dbOptions as D1Options });
       const res = await request(q('k'), { DYNAMICNEKO: fetcher(ok()) });
       expect(res.status).toBe(200);
-      const body = await res.json() as { count: number; posts: unknown[]; keyLogged: boolean; keyLogError: string };
+      const body = await res.json() as { count: number; pairs: unknown[]; keyLogged: boolean; keyLogError: string };
       expect(body.count).toBe(1);
-      expect(body.posts).toHaveLength(1);
+      expect(body.pairs).toHaveLength(1);
       expect(body.keyLogged).toBe(false);
       expect(body.keyLogError).toMatch(reason);
       expect(rows()).toEqual([]);
