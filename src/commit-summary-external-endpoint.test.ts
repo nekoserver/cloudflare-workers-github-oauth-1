@@ -426,6 +426,41 @@ describe('POST /api/commit-summary-external', () => {
     expect(body.cached).toBe(false);
   });
 
+  it('旧 Llama 設定でも tree-view のコミット要約を Gemma 4 で生成して保存する', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    stubGithubCommitApi();
+    const model = '@cf/google/gemma-4-26b-a4b-it';
+    const summary = 'Gemma 4 が生成したコミット要約';
+    const run = vi.fn().mockResolvedValue({ choices: [{ message: { content: summary } }] });
+    const res = await postSummary(db, 'ok@example.com', 'orphan-sha', REPO_NAME, {
+      GITHUB_TOKEN: 'gh-token',
+      AI_MODEL: '@cf/meta/llama-3.1-8b-instruct-fp8',
+      AI: { run },
+    });
+    expect(run).toHaveBeenNthCalledWith(1, model, {
+      chat_template_kwargs: { enable_thinking: false },
+      messages: [{ role: 'user', content: expect.stringContaining('fix: 何かを直した') }],
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ summary, model, source: 'generated', cached: false });
+    expect(db.prepare('SELECT model FROM ai_summary_log').get()).toEqual({ model });
+  });
+
+  it('明示したモデルで生成に失敗した場合は Gemma 4 にフォールバックする', async () => {
+    const db = setupDb({ 'ok@example.com': 'nekoserver' });
+    stubGithubCommitApi();
+    const primary = '@cf/google/gemma-3-12b-it';
+    const fallback = '@cf/google/gemma-4-26b-a4b-it';
+    const run = vi.fn().mockRejectedValueOnce(new Error('primary unavailable'))
+      .mockResolvedValue({ choices: [{ message: { content: 'フォールバック要約' } }] });
+    const res = await postSummary(db, 'ok@example.com', 'orphan-sha', REPO_NAME, {
+      GITHUB_TOKEN: 'gh-token', AI_MODEL: primary, AI: { run },
+    });
+    expect(run.mock.calls.slice(0, 2).map(([model]) => model)).toEqual([primary, fallback]);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ summary: 'フォールバック要約', model: fallback });
+  });
+
   it('新規生成した要約はai_summary_log/commit_agent_logへ保存され、次回は生成し直さず直接一致で返す', async () => {
     const db = setupDb({ 'ok@example.com': 'nekoserver' });
     stubGithubCommitApi({ message: 'fix: 記録漏れ期間中のコミット' });

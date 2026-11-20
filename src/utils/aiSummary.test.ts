@@ -8,7 +8,7 @@ import {
   classifySummaryResult,
   runSummaryPipeline,
   resolveAiModel,
-  resolvePrSummaryModel,
+  resolveSummaryModel,
   extractDesignDiff,
   sanitizeBoxDrawing,
   detectCommitAgentFromText,
@@ -47,16 +47,16 @@ describe('resolveAiModel', () => {
   });
 });
 
-describe('resolvePrSummaryModel', () => {
+describe('resolveSummaryModel', () => {
   it.each([undefined, '  @cf/meta/llama-3.1-8b-instruct-fp8  '])(
     '未設定または旧 Llama 設定 (%s) で Gemma 4 を使う',
     (configuredModel) => {
-      expect(resolvePrSummaryModel(configuredModel)).toBe('@cf/google/gemma-4-26b-a4b-it');
+      expect(resolveSummaryModel(configuredModel)).toBe('@cf/google/gemma-4-26b-a4b-it');
     },
   );
 
   it('別の明示設定は維持する', () => {
-    expect(resolvePrSummaryModel('@cf/google/gemma-3-12b-it')).toBe('@cf/google/gemma-3-12b-it');
+    expect(resolveSummaryModel('@cf/google/gemma-3-12b-it')).toBe('@cf/google/gemma-3-12b-it');
   });
 });
 
