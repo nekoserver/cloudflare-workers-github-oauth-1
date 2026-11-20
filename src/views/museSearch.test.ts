@@ -299,7 +299,7 @@ describe('🔑ボタンのモーダル', () => {
     });
     it('Tabは、見出しのボタンにも届く(キーボードで並べ替えられる)', async () => {
       await openSorted();
-      const items = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button')].map((el) => el.getAttribute('data-sort-key') ?? el.getAttribute('data-action'));
+      const items = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button:not([hidden])')].map((el) => el.getAttribute('data-sort-key') ?? el.getAttribute('data-action'));
       expect(items).toEqual(['answers', 'recent', 'close', 'searchKey', 'aiChatCount', 'treeViewCount', 'searchCount', 'lastSearchedAt']);
     });
   });
@@ -649,7 +649,7 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
     await open(router({ '/api/muse-search/keys': json({ keys: [] }), '/api/muse-search/answers': json({ chats: [thread()] }) }));
     notesButton()!.click();
     await flush();
-    const items = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button, [role="dialog"] a[href]')];
+    const items = [...document.querySelectorAll<HTMLElement>('[role="dialog"] button:not([hidden]), [role="dialog"] a[href]')];
     expect(items.map((el) => el.getAttribute('data-sort-key') ?? el.getAttribute('data-action') ?? el.getAttribute('data-answer-id'))).toEqual(['answers', 'recent', 'close', 'createdAt', 'occurrences', 'a1']);
     const tab = () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     items[items.length - 1].focus();
@@ -2004,5 +2004,168 @@ describe('スレッド検索の記録', () => {
     type('ta');
     await vi.advanceTimersByTimeAsync(800);
     expect(note()!.textContent).toContain('network down');
+  });
+});
+
+// 🔑モーダルの行の左スワイプ削除(2026-11-20、ユーザー指定): AIチャットの左サイドパネルと同じ、左スワイプで削除エリアが出て、タップするとそのキーを削除し、画面からも消える。
+// 削除は DELETE /api/muse-search/key?key=。成功(deleted: true)を確かめてから消す。失敗は、行を残して理由を出す。
+describe('🔑モーダルの左スワイプ削除', () => {
+  const key = (name: string, over: Record<string, unknown> = {}) => ({ searchKey: name, aiChatCount: 7, treeViewCount: 3, searchCount: 2, firstSearchedAt: '2026-11-19T01:00:00.000Z', lastSearchedAt: '2026-11-19T03:00:00.000Z', ...over });
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const rows = () => [...document.querySelectorAll<HTMLElement>('[role="dialog"] tbody tr')];
+  const names = () => rows().map((tr) => tr.querySelector('td')!.textContent);
+  const area = () => document.querySelector<HTMLButtonElement>('button[data-action="delete-key"]')!;
+  const note = () => document.querySelector<HTMLElement>('.muse-keys-delete-error');
+  const touch = (target: Element, type: string, x: number, y = 0) => {
+    const event = new Event(type, { bubbles: true });
+    Object.assign(event, type === 'touchend' ? { changedTouches: [{ clientX: x, clientY: y }] } : { touches: [{ clientX: x, clientY: y }] });
+    target.dispatchEvent(event);
+  };
+  const swipe = (target: Element, from: number, to: number, dy = 0) => { touch(target, 'touchstart', from, 0); touch(target, 'touchmove', to, dy); touch(target, 'touchend', to, dy); };
+  const open = async (keys: string[], del: () => Promise<Response> | Response = json({ deleted: true, keyRows: 1, answerRows: 0 })) => {
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/muse-search/keys') return json({ keys: keys.map((k) => key(k)) })();
+      if (url.startsWith('/api/muse-search/key?') && init?.method === 'DELETE') return del();
+      throw new Error('想定外のURL: ' + url);
+    }) as unknown as typeof fetch;
+    mount(fetchFn);
+    document.querySelector<HTMLButtonElement>('button[data-action="keys"]')!.click();
+    await flush();
+    return fetchFn;
+  };
+  const deletes = (fetchFn: typeof fetch) => (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => (c[1] as RequestInit | undefined)?.method === 'DELETE').map((c) => c[0] as string);
+
+  it('左に50px以上スワイプすると、その行の削除エリアが出る(行は左へ動く)。初期は出ていない', async () => {
+    await open(['alpha', 'beta']);
+    expect(area().hidden).toBe(true);
+    swipe(rows()[0], 200, 120);
+    expect(rows()[0].classList.contains('swipe-open')).toBe(true);
+    expect(rows()[0].style.getPropertyValue('--swipe-x')).toBe('-72px');
+    expect(area().hidden).toBe(false);
+    expect(area().textContent).toBe('削除');
+    expect(area().getAttribute('aria-label')).toContain('alpha');
+  });
+  it('50px未満の動き・縦の動きが大きいとき(スクロール)・右向きは、開かない', async () => {
+    await open(['alpha']);
+    swipe(rows()[0], 200, 170);
+    expect(rows()[0].classList.contains('swipe-open')).toBe(false);
+    swipe(rows()[0], 200, 120, 200);
+    expect(rows()[0].classList.contains('swipe-open')).toBe(false);
+    swipe(rows()[0], 100, 220);
+    expect(rows()[0].classList.contains('swipe-open')).toBe(false);
+    expect(area().hidden).toBe(true);
+  });
+  it('開いた行を右へスワイプする・行をタップすると閉じる(削除エリアも隠れる)', async () => {
+    await open(['alpha']);
+    swipe(rows()[0], 200, 120);
+    swipe(rows()[0], 100, 200);
+    expect(rows()[0].classList.contains('swipe-open')).toBe(false);
+    expect(area().hidden).toBe(true);
+    swipe(rows()[0], 200, 120);
+    rows()[0].click();
+    expect(rows()[0].classList.contains('swipe-open')).toBe(false);
+  });
+  it('別の行を開くと、先に開いていた行は閉じる(開くのは1行だけ)。削除エリアは、いま開いている行のキーを指す', async () => {
+    const fetchFn = await open(['alpha', 'beta']);
+    swipe(rows()[0], 200, 120);
+    swipe(rows()[1], 200, 120);
+    expect(rows().map((tr) => tr.classList.contains('swipe-open'))).toEqual([false, true]);
+    expect(area().getAttribute('aria-label')).toContain('beta');
+    area().click();
+    await flush();
+    expect(deletes(fetchFn)).toEqual(['/api/muse-search/key?key=beta']);
+  });
+  it('削除エリアをタップすると、そのキーをDELETEで削除し、成功を確かめてから、画面の行を消す。ほかの行は残り、一覧は取り直さない', async () => {
+    const fetchFn = await open(['alpha', 'beta', 'gamma']);
+    swipe(rows()[1], 200, 120);
+    area().click();
+    await flush();
+    expect(deletes(fetchFn)).toEqual(['/api/muse-search/key?key=beta']);
+    expect(names()).toEqual(['alpha', 'gamma']);
+    expect(area().hidden).toBe(true);
+    expect((fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === '/api/muse-search/keys')).toHaveLength(1);
+  });
+  it('削除したキーは、並べ替えで表を作り直しても戻らない。キーの文字はURLエンコードして送る', async () => {
+    const fetchFn = await open(['a b&c', 'zeta']);
+    swipe(rows()[0], 200, 120);
+    area().click();
+    await flush();
+    expect(deletes(fetchFn)).toEqual(['/api/muse-search/key?key=' + encodeURIComponent('a b&c')]);
+    document.querySelector<HTMLButtonElement>('button[data-sort-key="searchKey"]')!.click();
+    expect(names()).toEqual(['zeta']);
+  });
+  it('最後の1件を削除すると、「まだ検索キーが記録されていません。」を出す', async () => {
+    await open(['alpha']);
+    swipe(rows()[0], 200, 120);
+    area().click();
+    await flush();
+    expect(document.querySelector('[role="dialog"]')!.textContent).toContain('まだ検索キーが記録されていません。');
+    expect(rows()).toHaveLength(0);
+  });
+  it('削除に失敗したら(503・通信の失敗・deleted が true でない200)、行は残し、理由を出す。成功の表示にしない。削除エリアは開いたまま、押し直せる', async () => {
+    const fetchFn = await open(['alpha'], json({ deleted: false, errorCode: 'db_error', detail: 'd1 down' }, 503));
+    swipe(rows()[0], 200, 120);
+    area().click();
+    await flush();
+    expect(names()).toEqual(['alpha']);
+    expect(note()!.textContent).toMatch(/503.*d1 down/);
+    expect(area().hidden).toBe(false);
+    expect(area().disabled).toBe(false);
+    expect(deletes(fetchFn)).toHaveLength(1);
+    document.body.innerHTML = '';
+    await open(['alpha'], () => { throw new Error('network down'); });
+    swipe(rows()[0], 200, 120);
+    area().click();
+    await flush();
+    expect(names()).toEqual(['alpha']);
+    expect(note()!.textContent).toContain('network down');
+    document.body.innerHTML = '';
+    await open(['alpha'], json({ ok: true }));
+    swipe(rows()[0], 200, 120);
+    area().click();
+    await flush();
+    expect(names()).toEqual(['alpha']);
+    expect(note()!.textContent).toContain('削除できませんでした');
+  });
+  it('送信中は削除エリアを無効にし、続けて押しても1回しか送らない。成功したら、前の失敗の注記を消す', async () => {
+    let release!: (res: Response) => void;
+    const pending = new Promise<Response>((resolve) => { release = resolve; });
+    const fetchFn = await open(['alpha', 'beta'], () => pending);
+    swipe(rows()[0], 200, 120);
+    area().click();
+    expect(area().disabled).toBe(true);
+    area().click();
+    release(new Response(JSON.stringify({ deleted: true, keyRows: 1, answerRows: 0 }), { status: 200 }));
+    await flush();
+    expect(deletes(fetchFn)).toHaveLength(1);
+    expect(names()).toEqual(['beta']);
+    expect(note()).toBeNull();
+  });
+  it('マウスのドラッグ(PC)でも、左へ50px以上動かすと開く', async () => {
+    await open(['alpha']);
+    rows()[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 200 }));
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 120 }));
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, clientX: 120 }));
+    expect(rows()[0].classList.contains('swipe-open')).toBe(true);
+    expect(area().hidden).toBe(false);
+  });
+  it('並べ替え・🗒️への切り替えのあとは、開いた行を閉じる(削除エリアが残らない)', async () => {
+    await open(['alpha', 'beta']);
+    swipe(rows()[0], 200, 120);
+    document.querySelector<HTMLButtonElement>('button[data-sort-key="searchKey"]')!.click();
+    expect(area().hidden).toBe(true);
+    expect(rows().some((tr) => tr.classList.contains('swipe-open'))).toBe(false);
+  });
+  it('CSS: 削除エリアは危険色の変数(固定色なし)・開いた行は左へ動く・行の動きは変数 --swipe-x', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-keys-delete-area \{[^}]*position: fixed[^}]*background: var\(--danger-color\)/);
+    expect(style).toMatch(/\.muse-keys-table tbody td \{[^}]*transform: translateX\(var\(--swipe-x, 0px\)\)/);
+    // 実機で見つかった不具合: 開いた行のキー名の列まで左へ押し出されて、どのキーを削除するのか見えなかった。開いた行・ドラッグ中の行では、キー名の列を左端に留め、ほかのセルがその下へ滑る。
+    expect(style).toMatch(/\.muse-keys-table tbody tr\.swipe-open td:first-child, \.muse-keys-table tbody tr\.swiping td:first-child \{[^}]*position: sticky; left: 0; z-index: 1; transform: none/);
+    // 実機で見つかった不具合: 幅の広い表では、横スワイプが表の横スクロールに奪われ、開いた直後に閉じた。行のセルは縦スクロールだけをブラウザに任せる(touch-action は table-row には効かないので、td に付ける)。
+    expect(style).toMatch(/\.muse-keys-table tbody td \{[^}]*touch-action: pan-y/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });

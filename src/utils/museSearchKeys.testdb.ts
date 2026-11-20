@@ -54,5 +54,17 @@ export function createD1(sqlite: DatabaseSync, options: D1Options = {}): D1Datab
       },
     };
   };
-  return { prepare: (sql: string) => statement(sql) } as unknown as D1Database;
+  const batch = async (statements: Array<{ run: () => Promise<unknown> }>) => {
+    sqlite.exec('BEGIN');
+    try {
+      const results = [];
+      for (const s of statements) results.push(await s.run());
+      sqlite.exec('COMMIT');
+      return results;
+    } catch (cause) {
+      sqlite.exec('ROLLBACK');
+      throw cause;
+    }
+  };
+  return { prepare: (sql: string) => statement(sql), batch } as unknown as D1Database;
 }

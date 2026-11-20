@@ -95,3 +95,30 @@ export async function recordSearchedKey(db: D1Database | undefined, userId: stri
     return { keyLogged: false, keyLogError: (error instanceof Error ? error.message : String(error)).slice(0, 200), aiChatCount, treeViewCount };
   }
 }
+
+export type DeleteMuseKeyResult =
+  | { ok: true; value: { keyRows: number; answerRows: number } }
+  | { ok: false; errorCode: 'invalid_key' | 'not_found' | 'db_missing' | 'db_error'; detail: string };
+
+/**
+ * 🔑モーダルで左スワイプした行の検索キーの削除(2026-11-20、ユーザー指定)。
+ * そのユーザー本人の、そのキーの記録(muse_search_key_log の全行と、キーごとの回答の記録 muse_search_answer_log)を、1回のバッチでまとめて消す(片方だけ残らない)。
+ * 他のユーザーの同じキー・別のキーには触れない。キーは保存と同じ規則(前後の空白を除いて小文字)で照合する。
+ */
+export async function deleteMuseSearchKey(db: D1Database | undefined, userId: string, rawKey: string): Promise<DeleteMuseKeyResult> {
+  const key = typeof rawKey === 'string' ? rawKey.trim().toLowerCase() : '';
+  if (!key || key.length > 500) return { ok: false, errorCode: 'invalid_key', detail: '検索キーは1〜500文字で指定してください' };
+  if (!db) return { ok: false, errorCode: 'db_missing', detail: 'D1(DB)が未設定のため、検索キーを削除できません' };
+  try {
+    const [keyResult, answerResult] = await db.batch([
+      db.prepare('DELETE FROM muse_search_key_log WHERE user_id = ?1 AND search_key = ?2').bind(userId, key),
+      db.prepare('DELETE FROM muse_search_answer_log WHERE user_id = ?1 AND search_key = ?2').bind(userId, key),
+    ]);
+    const keyRows = Number(keyResult.meta?.changes ?? 0);
+    const answerRows = Number(answerResult.meta?.changes ?? 0);
+    if (keyRows === 0) return { ok: false, errorCode: 'not_found', detail: '削除する検索キーが見つかりません' };
+    return { ok: true, value: { keyRows, answerRows } };
+  } catch (cause) {
+    return { ok: false, errorCode: 'db_error', detail: cause instanceof Error ? cause.message : String(cause) };
+  }
+}
