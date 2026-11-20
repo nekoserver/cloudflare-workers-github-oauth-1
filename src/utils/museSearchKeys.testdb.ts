@@ -15,6 +15,7 @@ export function createMuseSearchKeysSqlite(): DatabaseSync {
   sqlite.exec(readFileSync('migrations/0195_create_muse_search_key_log.sql', 'utf8'));
   sqlite.exec(readFileSync('migrations/0196_create_muse_search_answer_log.sql', 'utf8'));
   sqlite.exec(readFileSync('migrations/0197_create_muse_user_handles.sql', 'utf8'));
+  sqlite.exec(readFileSync('migrations/0199_create_muse_thread_search_log.sql', 'utf8'));
   return sqlite;
 }
 

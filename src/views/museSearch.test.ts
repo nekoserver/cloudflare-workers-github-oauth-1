@@ -1900,3 +1900,109 @@ describe('検索キーを記録できなかったときの表示', () => {
     expect(page.status()).not.toContain('記録できませんでした');
   });
 });
+
+// スレッド検索(スレッド一覧のタイトルの絞り込み)の記録(2026-11-20、ユーザー指定): 検索したキー・ヒット件数・スレッドIDを POST /api/muse-search/thread-search へ送る。
+// 入力のたびには送らない(入力が止まって 800ms 後、または Enter ですぐ)。空の検索は記録しない。件数はサーバーがスレッドIDから数えるので、送るのはキーとスレッドIDだけ。
+describe('スレッド検索の記録', () => {
+  const thread = (id: string, title: string) => ({ threadId: id, title, lastPostAt: 100 });
+  const threeThreads = { threads: [thread('t1', 'Workers の静的アセット'), thread('t2', 'Tailscale DERP の調査'), thread('t3', 'ワーカーのデプロイ')] };
+  const json = (body: unknown, status = 200) => () => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+  const section = () => document.querySelector<HTMLElement>('[data-field="threads"]')!;
+  const filter = () => section().querySelector<HTMLInputElement>('input[data-field="thread-filter"]')!;
+  const type = (value: string) => { filter().value = value; filter().dispatchEvent(new Event('input', { bubbles: true })); };
+  const note = () => section().querySelector<HTMLElement>('.muse-thread-search-log-error');
+  const logs = (fetchFn: typeof fetch) => (fetchFn as unknown as ReturnType<typeof vi.fn>).mock.calls
+    .filter((c) => (c[0] as string) === '/api/muse-search/thread-search')
+    .map((c) => ({ init: c[1] as RequestInit, body: JSON.parse((c[1] as RequestInit).body as string) }));
+  const open = async (record: () => Promise<Response> | Response = json({ recorded: true, hitCount: 0 })) => {
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url === '/api/muse-search/threads') return json(threeThreads)();
+      if (url === '/api/muse-search/thread-search') return record();
+      throw new Error('想定外のURL: ' + url);
+    }) as unknown as typeof fetch;
+    mount(fetchFn);
+    await flush();
+    vi.useFakeTimers();
+    return fetchFn;
+  };
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('入力が止まって 800ms 後に、キー(前後の空白を除く)と、表示中のスレッドのIDだけを、JSONでPOSTする。件数は送らない', async () => {
+    const fetchFn = await open();
+    type('  ワーカー ');
+    await vi.advanceTimersByTimeAsync(799);
+    expect(logs(fetchFn)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(logs(fetchFn)).toHaveLength(1);
+    expect(logs(fetchFn)[0].init.method).toBe('POST');
+    expect((logs(fetchFn)[0].init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+    expect(logs(fetchFn)[0].body).toEqual({ key: 'ワーカー', threadIds: ['t3'] });
+  });
+  it('入力が続く間は送らない(タイマーを延ばす)。最後の入力のキーだけを送る', async () => {
+    const fetchFn = await open();
+    type('t');
+    await vi.advanceTimersByTimeAsync(500);
+    type('ta');
+    await vi.advanceTimersByTimeAsync(500);
+    expect(logs(fetchFn)).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(logs(fetchFn).map((l) => l.body)).toEqual([{ key: 'ta', threadIds: ['t2'] }]);
+  });
+  it('ヒットが0件でも記録する(スレッドIDは空の配列)', async () => {
+    const fetchFn = await open();
+    type('存在しない語');
+    await vi.advanceTimersByTimeAsync(800);
+    expect(logs(fetchFn).map((l) => l.body)).toEqual([{ key: '存在しない語', threadIds: [] }]);
+  });
+  it('Enterを押すと、待たずにすぐ送る。そのあとのタイマーでは、重ねて送らない', async () => {
+    const fetchFn = await open();
+    type('tailscale');
+    filter().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(logs(fetchFn)).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(logs(fetchFn)).toHaveLength(1);
+  });
+  it('空の検索(消した・空白だけ)は記録しない。待っている送信も取りやめる', async () => {
+    const fetchFn = await open();
+    type('ワーカー');
+    type('   ');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(logs(fetchFn)).toHaveLength(0);
+  });
+  it('直前に記録したのと同じキーは、続けて記録しない(別のキーを挟めば、また記録する)', async () => {
+    const fetchFn = await open();
+    type('ta');
+    await vi.advanceTimersByTimeAsync(800);
+    type('ta ');
+    await vi.advanceTimersByTimeAsync(800);
+    expect(logs(fetchFn)).toHaveLength(1);
+    type('wo');
+    await vi.advanceTimersByTimeAsync(800);
+    type('ta');
+    await vi.advanceTimersByTimeAsync(800);
+    expect(logs(fetchFn).map((l) => l.body.key)).toEqual(['ta', 'wo', 'ta']);
+  });
+  it('記録に失敗したら(503・通信の失敗)、絞り込みはそのまま、記録できなかったことと理由を出す。成功したら注記を消す', async () => {
+    let fail = true;
+    const fetchFn = await open(() => (fail ? json({ recorded: false, errorCode: 'db_error', detail: 'd1 down' }, 503)() : json({ recorded: true, hitCount: 1 })()));
+    type('ta');
+    await vi.advanceTimersByTimeAsync(800);
+    expect(note()!.textContent).toContain('スレッド検索を記録できませんでした');
+    expect(note()!.textContent).toContain('d1 down');
+    expect(note()!.hidden).toBe(false);
+    expect([...section().querySelectorAll<HTMLElement>('li.muse-thread-item')].filter((li) => !li.hidden)).toHaveLength(1);
+    fail = false;
+    type('wo');
+    await vi.advanceTimersByTimeAsync(800);
+    expect(note()!.hidden).toBe(true);
+    expect(note()!.textContent).toBe('');
+    expect(logs(fetchFn)).toHaveLength(2);
+  });
+  it('通信そのものが失敗しても、理由つきの注記を出す(握りつぶさない)', async () => {
+    await open(() => { throw new Error('network down'); });
+    type('ta');
+    await vi.advanceTimersByTimeAsync(800);
+    expect(note()!.textContent).toContain('network down');
+  });
+});
