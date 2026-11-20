@@ -132,10 +132,20 @@ describe('GET /api/muse-search/keys(🔑ボタンの一覧)', () => {
     ]);
     expect(body.keys[0]).toMatchObject({ firstSearchedAt: expect.any(String), lastSearchedAt: expect.any(String) });
   });
+  it('表示上限を超えるユーザー本人の一意なキーも総数に含める', async () => {
+    const { sqlite, request } = setup();
+    const insert = sqlite.prepare("INSERT INTO muse_search_key_log (user_id, search_key, ai_chat_count, searched_at) VALUES (?, ?, 1, '2026-11-19T00:00:00Z')");
+    for (let i = 0; i < 201; i++) insert.run(USER, 'key-' + i);
+    insert.run(USER, 'key-0');
+    insert.run('someone-else', 'their-key');
+    const body = await (await request('/api/muse-search/keys')).json() as { keys: unknown[]; totalKeywords: number };
+    expect(body.keys).toHaveLength(200);
+    expect(body.totalKeywords).toBe(201);
+  });
   it('他のユーザーの検索キーは返さない', async () => {
     const { sqlite, request } = setup();
     sqlite.prepare("INSERT INTO muse_search_key_log (user_id, search_key, ai_chat_count, tree_view_count, searched_at) VALUES ('someone-else', 'secret', 99, 99, '2026-11-19T00:00:00Z')").run();
-    expect(await (await request('/api/muse-search/keys')).json()).toEqual({ keys: [] });
+    expect(await (await request('/api/muse-search/keys')).json()).toEqual({ keys: [], totalKeywords: 0 });
   });
   it('D1が未設定なら、空の一覧にせず、理由つきで 503 にする', async () => {
     const { request } = setup({ omitDb: true });

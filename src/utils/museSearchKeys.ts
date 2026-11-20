@@ -45,19 +45,24 @@ export async function recordMuseSearchKey(
 
 /**
  * 🔑モーダルの一覧。キーごとに、最後に検索したときの値・検索回数・最初と最後の検索日時を返す。
+ * 総キーワード数は、一覧の表示上限を適用する前の一意なキー数。
  * 並びは、AIチャットでの出現回数の降順 → tree-viewでの出現回数の降順(NULLは最後) → 最後に検索した新しい順 → キー。
  */
-export async function listMuseSearchKeys(db: D1Database, userId: string, limit = MUSE_SEARCH_KEYS_LIMIT): Promise<MuseSearchKeyItem[]> {
+export async function listMuseSearchKeys(db: D1Database, userId: string, limit = MUSE_SEARCH_KEYS_LIMIT): Promise<{ keys: MuseSearchKeyItem[]; totalKeywords: number }> {
   const result = await db.prepare(
     `SELECT l.search_key AS searchKey, l.ai_chat_count AS aiChatCount, l.tree_view_count AS treeViewCount,
-            c.search_count AS searchCount, c.first_searched_at AS firstSearchedAt, l.searched_at AS lastSearchedAt
+            c.search_count AS searchCount, c.first_searched_at AS firstSearchedAt, l.searched_at AS lastSearchedAt,
+            COUNT(*) OVER () AS totalKeywords
      FROM muse_search_key_log l
      JOIN (SELECT search_key, MAX(id) AS max_id, COUNT(*) AS search_count, MIN(searched_at) AS first_searched_at
            FROM muse_search_key_log WHERE user_id = ?1 GROUP BY search_key) c ON c.max_id = l.id
      ORDER BY l.ai_chat_count DESC, l.tree_view_count DESC, l.searched_at DESC, l.search_key
      LIMIT ?2`,
-  ).bind(userId, Math.min(Math.max(Math.floor(limit) || 1, 1), MUSE_SEARCH_KEYS_LIMIT)).all<MuseSearchKeyItem>();
-  return result.results;
+  ).bind(userId, Math.min(Math.max(Math.floor(limit) || 1, 1), MUSE_SEARCH_KEYS_LIMIT)).all<MuseSearchKeyItem & { totalKeywords: number }>();
+  return {
+    keys: result.results.map(({ totalKeywords: _totalKeywords, ...key }) => key),
+    totalKeywords: result.results[0]?.totalKeywords ?? 0,
+  };
 }
 
 export const MUSE_VIEWER_KEYWORDS_LIMIT = 500;
