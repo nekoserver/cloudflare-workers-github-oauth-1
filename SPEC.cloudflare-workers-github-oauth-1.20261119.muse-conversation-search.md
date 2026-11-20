@@ -462,6 +462,34 @@ dynamicneko は全ルートの前に、オーナーのセッションを要求�
 - 行の上では、横方向のタッチ操作は削除のスワイプに使われ、表の横スクロールには使えない(見出しの行・スクロールバー・マウスのホイールでは横にスクロールできる)。
 - 削除は元に戻せない。🗒️・📅の一覧に出ていた、そのキーの回答の記録も消える。
 
+## 検索結果のチャットIDのリンク(2026-11-20)
+
+**対象**: `/muse-search` の検索結果のチャットID、`GET /api/muse-search/chat?chatId=`、dynamicneko の `GET /api/tree-view/muse-chat?chatId=` — チャットIDをタップすると、同じチャットIDを持つ質問と回答をセットで、最上位レイヤーのモーダルに出す。
+
+### 仕様
+
+| 項目 | 内容 |
+|---|---|
+| リンクの場所 | 検索結果の各投稿の「チャット 〜」のチャットID(文字はチャットIDだけがリンク)。🗒️・📅・スレッド一覧のチャットIDは、今回はリンクにしていない |
+| モーダル | 最上位レイヤー(`getNextZ`)。見出しは「チャット 〜」。✕・Esc・背景のクリックで閉じ、フォーカスはリンクへ戻る |
+| 表示 | チャットIDが同じ投稿(質問と回答)を、やりとりの順(`sequence_no`)に、役割(質問/回答)・時刻・段落つきで出す。回答がまだ無い往復は、質問だけが出る |
+| 強調 | 閲覧ユーザー自身のキーワードだけを `<mark>` にする(他のユーザーのキーは使わない)。キーを読めなくても本文は出し、理由を画面に出す(`highlightError`) |
+| 上流 | dynamicneko の `GET /api/tree-view/muse-chat`(CF-Worker + HMAC。新しいシークレットは足さない)。他のユーザーのチャット・存在しないチャットは404、D1の障害は503。本体は失敗を理由つきで返し、空のチャットにしない |
+| 長い本文 | 投稿ごとに10万文字で切り、その投稿だけ「長いため、途中まで」と出す |
+
+### 修正内容
+
+| ファイル | 内容 |
+|---|---|
+| dynamicneko `src/tree-view-muse-store.ts`・`src/server.ts` | `getMuseChatPosts`、`GET /api/tree-view/muse-chat`(署名の例外はこの1本のGET・完全一致だけ) |
+| `src/utils/museThreads.ts` | `fetchMuseChat`・`isMuseChat` |
+| `src/index.ts` | `GET /api/muse-search/chat` |
+| `src/views/museSearch.ts` | チャットIDのリンク、`openMuseChatModal`、CSS |
+
+### 注意事項
+
+- **反映の順序**: dynamicneko を先にデプロイする。本体を先にすると、リンクを押したときに上流が404になり、「チャットを読み込めませんでした」と理由つきで出る(壊れはしない)。
+
 ## 関連
 
 - dynamicneko の PR(出現回数): [nekoserver/dynamicneko#459](https://github.com/nekoserver/dynamicneko/pull/459)

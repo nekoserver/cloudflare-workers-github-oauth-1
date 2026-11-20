@@ -502,7 +502,7 @@ import { deleteMuseSearchKey, listMuseSearchKeys, listViewerKeywords, recordSear
 import { recordThreadSearch } from './utils/museThreadSearchLog';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
 import { MUSE_HANDLE_MESSAGES, checkHandleAvailability, getHandle, registerHandle } from './utils/museHandles';
-import { MUSE_THREAD_ID_MAX, fetchMuseThreadLast, fetchMuseThreadList, highlightParagraphs, toParagraphs } from './utils/museThreads';
+import { MUSE_THREAD_ID_MAX, fetchMuseChat, fetchMuseThreadLast, fetchMuseThreadList, highlightParagraphs, toParagraphs } from './utils/museThreads';
 import { MUSE_ANSWER_ID_MAX, buildHighlightSegments, fetchMuseAnswer, listAnswerKeys, truncateAnswer } from './utils/museAnswerView';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
@@ -20924,6 +20924,41 @@ app.get('/api/muse-search/answer', authMiddleware, cfDashboardAdminMiddleware, a
   }
   const { content, truncated } = truncateAnswer(result.data.content);
   return c.json({ answerId: result.data.answerId, chatId: result.data.chatId, createdAt: result.data.createdAt, keys, truncated, segments: buildHighlightSegments(content, keys) });
+});
+
+/**
+ * 検索結果のチャットIDのリンクを押したときの、質問と回答のセット(2026-11-20、ユーザー指定)。チャットIDが同じ投稿を、やりとりの順に返す。
+ * 本文は dynamicneko のD1にあり、押すたびに署名付きで取る。各投稿は段落に分け、閲覧ユーザー自身のキーワードを強調する。
+ * キーを読めなくても本文は返し、強調できなかった理由を highlightError で返す。上流の失敗は、空のチャットにせず理由つきで返す。
+ */
+app.get('/api/muse-search/chat', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const chatId = (c.req.query('chatId') ?? '').trim();
+  if (!chatId) return c.json({ error: 'チャットIDが必要です' }, 400);
+  if (chatId.length > MUSE_THREAD_ID_MAX) return c.json({ error: `チャットIDは${MUSE_THREAD_ID_MAX}文字までです` }, 400);
+  const result = await fetchMuseChat(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET, chatId);
+  if (!result.ok) {
+    const notConfigured = result.errorCode === 'binding_missing' || result.errorCode === 'secret_missing';
+    logger.warn('muse-search: チャットの質問と回答を取れませんでした', { errorCode: result.errorCode });
+    return c.json({ errorCode: result.errorCode, detail: result.detail }, notConfigured ? 503 : 502);
+  }
+  let keywords: string[] = [];
+  let highlightError: string | undefined;
+  if (!c.env.DB) {
+    highlightError = 'D1(DB)が未設定のため、キーワードを強調できません';
+  } else {
+    try {
+      keywords = await listViewerKeywords(c.env.DB, c.get('user').sub);
+    } catch (cause) {
+      highlightError = cause instanceof Error ? cause.message : String(cause);
+      logger.error('muse-search: チャットの強調に使うキーワードを読めませんでした', { error: highlightError });
+    }
+  }
+  const posts = result.data.posts.map((post) => {
+    const { content, truncated } = truncateAnswer(post.content);
+    return { role: post.role, createdAt: post.createdAt, truncated, paragraphs: highlightParagraphs(toParagraphs(content), keywords) };
+  });
+  return c.json({ chatId: result.data.chatId, posts, ...(highlightError ? { highlightError } : {}) });
 });
 
 /**
