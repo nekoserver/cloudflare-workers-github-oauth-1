@@ -258,6 +258,36 @@ describe('POST /webhook/github: pushイベントで通知先(cf-auth)へ転送�
     expect(bindings[7]).toBe('https://github.com/nekoserver/rails-root/compare/a...b');
   });
 
+  it.each([
+    { configured: '@cf/meta/llama-3.1-8b-instruct-fp8', retry: false },
+    { configured: '@cf/google/gemma-3-12b-it', retry: true },
+  ])('push 要約を Gemma 4 で生成する (AI_MODEL=$configured)', async ({ configured, retry }) => {
+    const gemma = '@cf/google/gemma-4-26b-a4b-it';
+    const summary = 'プッシュ差分の要約';
+    const { db, inserts } = recordingDb();
+    const run = vi.fn().mockResolvedValue({ choices: [{ message: { content: summary } }] });
+    if (retry) run.mockRejectedValueOnce(new Error('primary unavailable'));
+    const body = JSON.stringify({
+      ref: 'refs/heads/main',
+      repository: { id: 1, name: 'rails-root', full_name: 'nekoserver/rails-root', private: true },
+      commits: [{ id: 'a', message: 'fix: login bug' }],
+    });
+
+    const res = await postPushWebhook(body, {
+      GITHUB_WEBHOOK_SECRET: secret, DB: db, AI_MODEL: configured, AI: { run },
+    });
+
+    expect(res.status).toBe(200);
+    if (retry) expect(run.mock.calls[0][0]).toBe(configured);
+    expect(run).toHaveBeenNthCalledWith(retry ? 2 : 1, gemma, {
+      chat_template_kwargs: { enable_thinking: false },
+      messages: [{ role: 'user', content: expect.stringContaining('fix: login bug') }],
+    });
+    const bindings = inserts.find((i) => i.sql.includes('INSERT INTO ai_summary_log'))!.bindings;
+    expect(bindings.slice(8, 10)).toEqual([gemma, summary]);
+    expect(bindings.slice(13, 15)).toEqual([Number(retry), retry ? configured : gemma]);
+  });
+
   it('AI binding設定時、push要約と同時にキーワードを抽出してai_summary_keywordsへ保存する', async () => {
     vi.stubGlobal('fetch', vi.fn());
     const { db, inserts } = recordingDb();

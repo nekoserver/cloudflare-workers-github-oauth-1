@@ -25,7 +25,7 @@ export function resolveAiModel(envValue: string | undefined): string {
   return envValue?.trim() || DEFAULT_AI_MODEL;
 }
 
-export function resolvePrSummaryModel(envValue: string | undefined): string {
+export function resolveSummaryModel(envValue: string | undefined): string {
   const model = resolveAiModel(envValue);
   return model === FALLBACK_AI_MODEL ? DEFAULT_AI_MODEL : model;
 }

@@ -54,10 +54,18 @@ Altワーカー(`dynamicneko/cf-auth`)の`/wspace`から読み出せるように
   揃えたことで不要になった。**一時的な表示上の特別扱いを入れるときは、根本(データの欠落)を
   後で解消したら特別扱い自体を削除できるよう、どこが特別扱いなのかをコメントで明示しておくこと。**
 
+### 2026-11-20 のモデル更新
+
+push イベントの要約には、PR 要約と共通の [AI_MODEL の選択・再試行ルール](SPEC.cloudflare-workers-github-oauth-1.AI_MODEL.md) を適用する。
+`AI_MODEL` が未設定、空白のみ、または旧 Llama 8B（`@cf/meta/llama-3.1-8b-instruct-fp8`）の場合は
+Gemma 4（`@cf/google/gemma-4-26b-a4b-it`）を使う。別のモデルが明示されている場合は、失敗時に Gemma 4 で1回再試行する。
+生成結果は `ai_summary_log` に `event_type='push_summary'` として保存し、選択したモデル、結果に対応するモデル、再試行の有無を
+それぞれ `primary_model`、`model`、`fallback_used` に記録する。
+
 ### テスト
 
 - `src/utils/notifyDispatch.test.ts`: `message.channel`の優先順位(worker宛では優先、slack宛では無視)
-- `src/webhook-github-push-notify-20261001.test.ts`: push通知のchannel・AI要約記録・diff取得の一連を実リクエストで検証
+- `src/webhook-github-push-notify-20261001.test.ts`: push通知のchannel・Gemma 4 の選択と再試行・AI要約記録・diff取得の一連をWebhookリクエストで検証
 - `src/utils/githubPushNotify.test.ts`: `buildPushSummaryInput`・`buildPushCompareDiffUrl`の単体テスト
 - `src/utils/aiSummary.test.ts`: `formatSummaryPrLink`・`formatSummaryDiffLength`の単体テスト
 - `nekoserver/dynamicneko`の`cf-auth/test/feed.test.ts`: `getChannels`のUNION・`getUnlinkedIngestLogByChannel`の単体テスト

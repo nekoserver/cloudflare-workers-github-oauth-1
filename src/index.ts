@@ -546,7 +546,7 @@ import { postSlackMessage, openSlackModal, respondToInteraction } from './utils/
 import { sendTestEmailResend } from './utils/emailVerify';
 import { buildAuthRedirectHeaders } from './utils/emailConfirm';
 import { runEmailConfirmGate, resolveEmailConfirmToken, renderLoginConfirmErrorPage, isEmailConfirmLoginEnabled } from './utils/emailConfirmGate';
-import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, resolvePrSummaryModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, formatSummaryPrLink, formatSummaryDiffLength, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
+import { fetchPrDiff, runSummaryPipeline, buildSlackMessage, buildSummaryModal, buildSummaryFallbackBlocks, classifySummaryResult, resolveAiModel, resolveSummaryModel, extractDesignDiff, sanitizeBoxDrawing, detectCommitAgentFromText, detectCommitAgentFromPrText, describeModelSwitch, formatSummaryPrLink, formatSummaryDiffLength, WORKER_BASE_URL, DESIGN_SPEC_CHECKLIST, DEFAULT_AI_MODEL, FALLBACK_AI_MODEL, type SummaryModalRow } from './utils/aiSummary';
 import { getSessionDurationSeconds, resolveSessionDuration, resolveHeritageTourCountryFilterEnabled, resolveTreeViewKeywordSearchAutoSave } from './utils/session';
 import { buildCommitAgentLogEntry, classifyCommitAgentFetchError } from './utils/commitAgentLog';
 import { verifySlackSignature } from './utils/slackSignature';
@@ -18476,12 +18476,12 @@ async function generateAndRecordCommitSummary(env: Bindings, db: D1Database, com
   }
 
   const diffResult = await fetchPrDiff({ diffUrl: commitApiUrl, githubToken });
-  const aiModel = resolveAiModel(env.AI_MODEL);
+  const aiModel = resolveSummaryModel(env.AI_MODEL);
   const title = commitMessage.split('\n')[0].slice(0, 200);
   const pipelineResult = await runSummaryPipeline({
     ai: env.AI as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> },
     model: aiModel,
-    fallbackModel: FALLBACK_AI_MODEL,
+    fallbackModel: DEFAULT_AI_MODEL,
     title,
     description: commitMessage,
     trimmedDiff: diffResult.trimmedDiff,
@@ -24531,7 +24531,7 @@ app.post('/webhook/github', async (c) => {
           const now = new Date();
           const eventDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
           const requestId = crypto.randomUUID();
-          const aiModel = resolvePrSummaryModel(c.env.AI_MODEL);
+          const aiModel = resolveSummaryModel(c.env.AI_MODEL);
 
           // 本日の通算番号を取得
           let dailySeq = 1;
@@ -24852,7 +24852,7 @@ app.post('/webhook/github', async (c) => {
         const now = new Date();
         const eventDate = now.toISOString().slice(0, 10);
         const requestId = crypto.randomUUID();
-        const aiModel = resolveAiModel(c.env.AI_MODEL);
+        const aiModel = resolveSummaryModel(c.env.AI_MODEL);
 
         let dailySeq = 1;
         try {
@@ -24895,7 +24895,7 @@ app.post('/webhook/github', async (c) => {
         const pipelineResult = await runSummaryPipeline({
           ai: c.env.AI as { run(model: string, input: { messages: { role: string; content: string }[] }): Promise<unknown> } | null,
           model: aiModel,
-          fallbackModel: FALLBACK_AI_MODEL,
+          fallbackModel: DEFAULT_AI_MODEL,
           title: summaryInput.title,
           description: summaryInput.description,
           trimmedDiff,
