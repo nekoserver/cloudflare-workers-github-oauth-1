@@ -4,6 +4,7 @@
  * スレッドの一覧・最終書き込みは dynamicneko のD1にあり、本体は持たない(本文を本体のD1へ複製しない)。押すたびに署名付きで取る。
  * スレッドにタイトル列は無いので、タイトルは dynamicneko が、根の投稿の最初の空でない行から作る。
  */
+import { buildHighlightSegments, type HighlightSegment } from './museAnswerView';
 import { callSignedWorkerEndpoint, type RemoteCheckResult, type WorkerFetcher } from './repoOnboardingRemoteCheck';
 
 export const MUSE_THREAD_ID_MAX = 200;
@@ -49,4 +50,12 @@ export function fetchMuseThreadLast(fetcher: WorkerFetcher | undefined, secret: 
  */
 export function toParagraphs(content: string): string[] {
   return content.replace(/\r\n?/g, '\n').split(/\n[ \t]*\n/).map((p) => p.trim()).filter((p) => p.length > 0);
+}
+
+/**
+ * 各回答(スレッドの最終書き込み)の段落に、閲覧ユーザーが持つキーワードを強調する(ユーザー指定 2026-11-19)。
+ * 段落ごとに照合する(段落をまたぐキーワードは強調しない)。大文字小文字は区別せず、元の文字のまま。キーワードが無ければ、強調しない。
+ */
+export function highlightParagraphs(paragraphs: string[], keywords: string[]): HighlightSegment[][] {
+  return paragraphs.map((paragraph) => buildHighlightSegments(paragraph, keywords));
 }

@@ -376,6 +376,30 @@ dynamicneko は全ルートの前に、オーナーのセッションを要求�
 - 検索を始めると、一覧を隠していた(`hidden`)処理は、タブの切り替えに置き換えた。
 - 空の検索文のとき、以前は一覧のままだった。メッセージが「検索結果」のタブにあるので、そのタブへ移るようにした。
 
+## キーワードの所有とスレッド一覧の強調(2026-11-19)
+
+**対象**: D1 `muse_search_key_log`・`muse_search_answer_log` の `user_id` 列、`GET /api/muse-search/thread`、`/muse-search` のスレッド一覧の各回答 — 既存のキーワードをすべて `nekoserver` の所有にし、閲覧ユーザーの所有するキーワードだけを回答内で強調する。
+
+### 背景
+
+キーワードは `user_id`(ログインユーザー名)の所有で、読み出しはすべて閲覧ユーザーの `user_id` で絞り込む。既存の記録を `nekoserver` に集約し、スレッド一覧の回答にも所有キーを強調表示する。
+
+### 修正内容
+
+| ファイル | 内容 |
+|---|---|
+| `migrations/0198_assign_muse_keys_to_nekoserver.sql` | 両テーブルの `user_id` を `nekoserver` にするデータ移行(利用者がD1で実行する) |
+| `src/utils/museSearchKeys.ts` | `listViewerKeywords`(閲覧ユーザーのキー、新しい順、最大500) |
+| `src/utils/museThreads.ts` | `highlightParagraphs`(段落ごとの強調区間) |
+| `src/index.ts` | `/api/muse-search/thread` が `paragraphs` を区間(`{text, hit}`)で返す。キー取得に失敗しても200で `highlightError` を付ける |
+| `src/views/museSearch.ts` | `<mark>` で描画(textContentのみ)。`highlightError` があれば注記を出す |
+| `src/muse-keys-isolation.test.ts` | 4経路(🔑・🗒️/📅・回答全文・スレッド強調)で他ユーザーのキーが出ないこと、0198の前後 |
+
+### 注意事項
+
+- `GET /api/muse-search/thread` の `paragraphs` は文字列配列から区間配列に変わった。
+- 0198を流したあと、ほかのユーザーにはキーが見えなくなる(意図どおり)。
+
 ## 関連
 
 - dynamicneko の PR(出現回数): [nekoserver/dynamicneko#459](https://github.com/nekoserver/dynamicneko/pull/459)

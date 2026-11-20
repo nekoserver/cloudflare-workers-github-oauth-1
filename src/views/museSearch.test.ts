@@ -1026,7 +1026,7 @@ describe('📅ボタン(最上位レイヤーに、スレッドを問わず日�
 // リンクを押すと、そのスレッドへの最終書き込みを、リンクの下に、段落に分けて表示する。
 describe('初期画面のスレッド一覧', () => {
   const thread = (over: Record<string, unknown> = {}) => ({ threadId: 't1', title: 'スレッド1の話題', lastPostAt: 1763535000, ...over });
-  const lastPost = (over: Record<string, unknown> = {}) => ({ threadId: 't1', chatId: 'c-A2', role: 'assistant', createdAt: 1763538600, truncated: false, paragraphs: ['一段落目\n二行目', '二段落目'], ...over });
+  const lastPost = (over: Record<string, unknown> = {}) => ({ threadId: 't1', chatId: 'c-A2', role: 'assistant', createdAt: 1763538600, truncated: false, paragraphs: [[{ text: '一段落目\n二行目', hit: false }], [{ text: '二段落目', hit: false }]], ...over });
   const router = (routes: Record<string, () => Promise<Response> | Response>) => vi.fn(async (url: string) => {
     const handler = Object.entries(routes).find(([prefix]) => url.startsWith(prefix))?.[1];
     if (!handler) throw new Error('想定外のURL: ' + url);
@@ -1093,7 +1093,7 @@ describe('初期画面のスレッド一覧', () => {
     expect(calls(fetchFn).filter((u) => u.startsWith('/api/muse-search/thread?'))).toHaveLength(1);
   });
   it('複数のスレッドを、それぞれ開ける(ほかのスレッドを閉じない)。質問(user)の最終書き込みは「質問」と出す', async () => {
-    mount(router(threadsRoutes({ '/api/muse-search/thread?threadId=t2': json(lastPost({ threadId: 't2', role: 'user', paragraphs: ['質問の本文'] })), '/api/muse-search/thread?threadId=t1': json(lastPost()) })));
+    mount(router(threadsRoutes({ '/api/muse-search/thread?threadId=t2': json(lastPost({ threadId: 't2', role: 'user', paragraphs: [[{ text: '質問の本文', hit: false }]] })), '/api/muse-search/thread?threadId=t1': json(lastPost()) })));
     await flush();
     links()[0].click();
     await flush();
@@ -1129,9 +1129,61 @@ describe('初期画面のスレッド一覧', () => {
     await flush();
     expect(panelOf(links()[0])!.textContent).toContain('長いため');
   });
+  // 各回答(最終書き込み)に、閲覧ユーザーが持つキーワードを強調する(2026-11-19、ユーザー指定)。強調の区間はサーバーで計算済み。画面は <mark> で描く。
+  it('最終書き込みの各段落で、強調の区間(hit: true)を <mark> にする。段落の文字は、つなぐと変わらない(改行も残る)', async () => {
+    mount(router(threadsRoutes({ '/api/muse-search/thread?': json(lastPost({ paragraphs: [
+      [{ text: 'Workers の', hit: false }, { text: 'Static', hit: true }, { text: ' を配信\n二行目', hit: false }],
+      [{ text: '二段落目の', hit: false }, { text: 'static', hit: true }, { text: ' と ', hit: false }, { text: 'ASSETS', hit: true }],
+    ] })) })));
+    await flush();
+    links()[0].click();
+    await flush();
+    const paragraphs = [...panelOf(links()[0])!.querySelectorAll('p.muse-thread-paragraph')];
+    expect(paragraphs.map((p) => p.textContent)).toEqual(['Workers のStatic を配信\n二行目', '二段落目のstatic と ASSETS']);
+    expect(paragraphs.map((p) => [...p.querySelectorAll('mark')].map((m) => m.textContent))).toEqual([['Static'], ['static', 'ASSETS']]);
+  });
+  it('強調が無い段落には、<mark> を付けない', async () => {
+    mount(router(threadsRoutes()));
+    await flush();
+    links()[0].click();
+    await flush();
+    expect(panelOf(links()[0])!.querySelectorAll('mark')).toHaveLength(0);
+  });
+  it('強調の中の文字も、HTMLとして解釈せず文字のまま出す', async () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    mount(router(threadsRoutes({ '/api/muse-search/thread?': json(lastPost({ paragraphs: [[{ text: evil, hit: true }]] })) })));
+    await flush();
+    links()[0].click();
+    await flush();
+    expect(panelOf(links()[0])!.querySelectorAll('img')).toHaveLength(0);
+    expect(panelOf(links()[0])!.querySelector('mark')!.textContent).toBe(evil);
+  });
+  it('強調できなかったとき(highlightError)は、本文は出したまま、その理由を、強調なしであることが分かる形で出す。無ければ、何も出さない', async () => {
+    mount(router(threadsRoutes({ '/api/muse-search/thread?': json(lastPost({ highlightError: 'd1 down' })) })));
+    await flush();
+    links()[0].click();
+    await flush();
+    const panel = panelOf(links()[0])!;
+    expect(panel.querySelectorAll('p.muse-thread-paragraph').length).toBeGreaterThan(0);
+    expect(panel.querySelector('.muse-thread-highlight-error')!.textContent).toContain('強調');
+    expect(panel.querySelector('.muse-thread-highlight-error')!.textContent).toContain('d1 down');
+    document.body.innerHTML = '';
+    mount(router(threadsRoutes()));
+    await flush();
+    links()[0].click();
+    await flush();
+    expect(panelOf(links()[0])!.querySelector('.muse-thread-highlight-error')).toBeNull();
+  });
+  it('CSS: 強調(mark)は、検索結果・回答の強調と同じ配色(変数)。固定色なし', () => {
+    const html = getMuseSearchPage();
+    const start = html.indexOf('<style id="muse-search-style">');
+    const style = html.slice(start, html.indexOf('</style>', start));
+    expect(style).toMatch(/\.muse-thread-paragraph mark \{[^}]*var\(--warning-color\)/);
+    expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  });
   it('サーバーから来た文字列(タイトル・本文)は、HTMLとして解釈せず文字のまま出す', async () => {
     const evil = '<img src=x onerror=alert(1)>';
-    mount(router(threadsRoutes({ '/api/muse-search/threads': json({ threads: [thread({ title: evil })] }), '/api/muse-search/thread?': json(lastPost({ paragraphs: [evil] })) })));
+    mount(router(threadsRoutes({ '/api/muse-search/threads': json({ threads: [thread({ title: evil })] }), '/api/muse-search/thread?': json(lastPost({ paragraphs: [[{ text: evil, hit: false }]] })) })));
     await flush();
     links()[0].click();
     await flush();
@@ -1765,7 +1817,7 @@ describe('水平タブ(スレッド一覧・検索結果)', () => {
   });
   it('取り直すと、一覧は作り直される(絞り込みの入力や、開いていたスレッドは、元に戻る)。最新の一覧が出る', async () => {
     let titles = ['古いタイトル'];
-    mount(router(baseRoutes({ '/api/muse-search/threads': () => new Response(JSON.stringify({ threads: titles.map((t, i) => thread({ threadId: 't' + i, title: t })) })), '/api/muse-search/thread?': json({ threadId: 't0', chatId: 'c', role: 'assistant', createdAt: 1, truncated: false, paragraphs: ['本文'] }) })));
+    mount(router(baseRoutes({ '/api/muse-search/threads': () => new Response(JSON.stringify({ threads: titles.map((t, i) => thread({ threadId: 't' + i, title: t })) })), '/api/muse-search/thread?': json({ threadId: 't0', chatId: 'c', role: 'assistant', createdAt: 1, truncated: false, paragraphs: [[{ text: '本文', hit: false }]] }) })));
     await flush();
     document.querySelector<HTMLAnchorElement>('a[data-thread-id]')!.click();
     await flush();

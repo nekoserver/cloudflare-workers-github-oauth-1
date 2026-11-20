@@ -498,10 +498,10 @@ import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } 
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
-import { listMuseSearchKeys, recordSearchedKey } from './utils/museSearchKeys';
+import { listMuseSearchKeys, listViewerKeywords, recordSearchedKey } from './utils/museSearchKeys';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
 import { MUSE_HANDLE_MESSAGES, checkHandleAvailability, getHandle, registerHandle } from './utils/museHandles';
-import { MUSE_THREAD_ID_MAX, fetchMuseThreadLast, fetchMuseThreadList, toParagraphs } from './utils/museThreads';
+import { MUSE_THREAD_ID_MAX, fetchMuseThreadLast, fetchMuseThreadList, highlightParagraphs, toParagraphs } from './utils/museThreads';
 import { MUSE_ANSWER_ID_MAX, buildHighlightSegments, fetchMuseAnswer, listAnswerKeys, truncateAnswer } from './utils/museAnswerView';
 import { getMuseWasmTestPage, MUSE_WASM_TEST_CSP } from './views/museWasmTest';
 import { listBridgeJobs, registerBridgeJob } from './utils/bridgeJobs';
@@ -20926,7 +20926,9 @@ app.get('/api/muse-search/threads', authMiddleware, cfDashboardAdminMiddleware, 
   return c.json({ threads: result.data.threads });
 });
 
-/** スレッドのタイトルのリンクを押したときの、最終書き込み。空行で段落に分けて返す(本文は10万文字で切る)。失敗は理由つき。 */
+/**
+ * スレッドのタイトルのリンクを押したときの、最終書き込み。空行で段落に分け、各段落を、閲覧ユーザーが持つキーワードの強調つきの区間にして返す(本文は10万文字で切る)。失敗は理由つき。
+ */
 app.get('/api/muse-search/thread', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
   c.header('Cache-Control', 'no-store');
   const threadId = (c.req.query('threadId') ?? '').trim();
@@ -20939,7 +20941,25 @@ app.get('/api/muse-search/thread', authMiddleware, cfDashboardAdminMiddleware, a
     return c.json({ errorCode: result.errorCode, detail: result.detail }, notConfigured ? 503 : 502);
   }
   const { content, truncated } = truncateAnswer(result.data.content);
-  return c.json({ threadId: result.data.threadId, chatId: result.data.chatId, role: result.data.role, createdAt: result.data.createdAt, truncated, paragraphs: toParagraphs(content) });
+  // 閲覧ユーザーが持つキーワード(そのユーザー自身の検索キーの記録のキーだけ。他のユーザーのキーは使わない)を、各段落で強調する(ユーザー指定 2026-11-19)。
+  // キーを読めなくても、本文は返す(強調は付加の機能)。ただし、強調できなかったことは、理由つきで返し(highlightError)、ログにも出す。
+  let keywords: string[] = [];
+  let highlightError: string | undefined;
+  if (!c.env.DB) {
+    highlightError = 'D1(DB)が未設定のため、キーワードを強調できません';
+  } else {
+    try {
+      keywords = await listViewerKeywords(c.env.DB, c.get('user').sub);
+    } catch (cause) {
+      highlightError = cause instanceof Error ? cause.message : String(cause);
+      logger.error('muse-search: スレッドの回答の強調に使うキーワードを読めませんでした', { error: highlightError });
+    }
+  }
+  return c.json({
+    threadId: result.data.threadId, chatId: result.data.chatId, role: result.data.role, createdAt: result.data.createdAt, truncated,
+    paragraphs: highlightParagraphs(toParagraphs(content), keywords),
+    ...(highlightError ? { highlightError } : {}),
+  });
 });
 
 /**
