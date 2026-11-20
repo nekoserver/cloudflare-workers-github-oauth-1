@@ -109,7 +109,7 @@ ${authorName ?? ''}
 ${authorEmail ?? ''}`.toLowerCase();
   const rules: Array<{ key: string; label: string }> = [
     { key: 'claude code', label: 'Claude Code' },
-    { key: 'codex', label: 'Codex' },
+    { key: 'codex', label: 'codex' },
     { key: 'cursor', label: 'Cursor' },
     { key: 'windsurf', label: 'Windsurf' },
     { key: 'aider', label: 'Aider' },
@@ -130,7 +130,15 @@ ${authorEmail ?? ''}`.toLowerCase();
   return null;
 }
 
-export function detectCommitAgentFromPrText(prTitle: string, prBody: string | null | undefined): DetectedCommitAgent | null {
+export function detectCommitAgentFromPrText(
+  prTitle: string,
+  prBody: string | null | undefined,
+  prAuthorLogin?: string,
+): DetectedCommitAgent | null {
+  const author = prAuthorLogin?.toLowerCase();
+  if (author === 'codex[bot]' || author === 'chatgpt-codex-connector[bot]' || /^Agent:[ \t]*codex[ \t]*\r?$/im.test(prBody ?? '')) {
+    return { agentName: 'codex', agentVersion: null, signal: 'pr' };
+  }
   const joined = `${prTitle}\n${prBody ?? ''}`;
   const detected = detectCommitAgentFromText(joined);
   if (!detected) return null;

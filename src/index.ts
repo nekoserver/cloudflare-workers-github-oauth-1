@@ -24604,7 +24604,7 @@ app.post('/webhook/github', async (c) => {
             }
           }
           if (!commitAgentName) {
-            const prDetected = detectCommitAgentFromPrText(title, description);
+            const prDetected = detectCommitAgentFromPrText(title, description, pr.user?.login);
             if (prDetected) {
               commitAgentName = prDetected.agentName;
               commitAgentVersion = prDetected.agentVersion;
