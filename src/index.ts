@@ -498,7 +498,7 @@ import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } 
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
-import { listMuseSearchKeys, listViewerKeywords, recordSearchedKey } from './utils/museSearchKeys';
+import { deleteMuseSearchKey, listMuseSearchKeys, listViewerKeywords, recordSearchedKey } from './utils/museSearchKeys';
 import { recordThreadSearch } from './utils/museThreadSearchLog';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
 import { MUSE_HANDLE_MESSAGES, checkHandleAvailability, getHandle, registerHandle } from './utils/museHandles';
@@ -21049,6 +21049,18 @@ app.post('/api/muse-search/thread-search', authMiddleware, cfDashboardAdminMiddl
     return c.json({ recorded: false, errorCode: result.errorCode, detail: result.detail }, 503);
   }
   return c.json({ recorded: false, errorCode: result.errorCode, detail: result.detail }, 400);
+});
+
+// 🔑モーダルで左スワイプした行の検索キーを削除する(2026-11-20、ユーザー指定)。本人のそのキーの記録だけを、まとめて消す。
+app.delete('/api/muse-search/key', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  const result = await deleteMuseSearchKey(c.env.DB, c.get('user').sub, c.req.query('key') ?? '');
+  if (result.ok) return c.json({ deleted: true, keyRows: result.value.keyRows, answerRows: result.value.answerRows });
+  if (result.errorCode === 'db_missing' || result.errorCode === 'db_error') {
+    logger.error('muse-search: 検索キーを削除できませんでした', { error: result.detail });
+    return c.json({ deleted: false, errorCode: result.errorCode, detail: result.detail }, 503);
+  }
+  return c.json({ deleted: false, errorCode: result.errorCode, detail: result.detail }, result.errorCode === 'not_found' ? 404 : 400);
 });
 
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {

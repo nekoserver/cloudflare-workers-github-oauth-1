@@ -103,7 +103,7 @@ export const MUSE_SEARCH_SCRIPT = `
       });
     }
 
-    function renderMuseKeysTable(doc, keys, sort, onSort) {
+    function renderMuseKeysTable(doc, keys, sort, onSort, onRow) {
       var table = museSearchEl(doc, 'table', 'muse-keys-table muse-keys-list');
       var head = doc.createElement('thead');
       var headRow = doc.createElement('tr');
@@ -133,6 +133,7 @@ export const MUSE_SEARCH_SCRIPT = `
         row.appendChild(tree);
         row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num', '検索回数'));
         row.appendChild(museKeysCell(doc, formatMuseSearchTime(Date.parse(item.lastSearchedAt) / 1000), 'muse-keys-time', '最後に検索した日時(日本時間)'));
+        if (onRow) onRow(row, item);
         body.appendChild(row);
       });
       table.appendChild(body);
@@ -449,8 +450,129 @@ export const MUSE_SEARCH_SCRIPT = `
       overlay.appendChild(dialog);
       doc.body.appendChild(overlay);
 
+      // 行の左スワイプ削除(2026-11-20、ユーザー指定。AIチャットの左サイドパネルと同じ操作)。左へ50px以上で、その行の削除エリア(幅72px)が出る。
+      // 開く行は1つだけ。削除エリアは、開いている行の右端に重ねる(1つのボタンを、開いた行へ動かして使う)。
+      var SWIPE_WIDTH = 72;
+      var SWIPE_OPEN_AT = 50;
+      var deleteArea = museSearchEl(doc, 'button', 'muse-keys-delete-area', '削除');
+      deleteArea.type = 'button';
+      deleteArea.hidden = true;
+      deleteArea.setAttribute('data-action', 'delete-key');
+      dialog.appendChild(deleteArea);
+      var swipeRow = null;
+      var swipeItem = null;
+      var deleteNote = null;
+      function clearDeleteNote() {
+        if (deleteNote && deleteNote.parentNode) deleteNote.parentNode.removeChild(deleteNote);
+        deleteNote = null;
+      }
+      function showDeleteError(message) {
+        clearDeleteNote();
+        deleteNote = museSearchEl(doc, 'p', 'muse-search-error muse-keys-delete-error', 'キーを削除できませんでした' + message);
+        dialog.insertBefore(deleteNote, content);
+      }
+      function placeDeleteArea(row) {
+        var rect = row.getBoundingClientRect();
+        var scroller = content.querySelector('.muse-keys-scroll');
+        var right = Math.min(rect.right, scroller ? scroller.getBoundingClientRect().right : rect.right);
+        deleteArea.style.top = rect.top + 'px';
+        deleteArea.style.height = rect.height + 'px';
+        deleteArea.style.left = (right - SWIPE_WIDTH) + 'px';
+      }
+      function closeSwipe() {
+        if (swipeRow) {
+          swipeRow.classList.remove('swipe-open');
+          swipeRow.style.removeProperty('--swipe-x');
+        }
+        swipeRow = null;
+        swipeItem = null;
+        deleteArea.hidden = true;
+        clearDeleteNote();
+      }
+      function openSwipe(row, item) {
+        if (swipeRow && swipeRow !== row) closeSwipe();
+        swipeRow = row;
+        swipeItem = item;
+        row.classList.add('swipe-open');
+        row.style.setProperty('--swipe-x', '-' + SWIPE_WIDTH + 'px');
+        deleteArea.setAttribute('aria-label', '「' + item.searchKey + '」を削除');
+        placeDeleteArea(row);
+        deleteArea.hidden = false;
+      }
+      var drag = null;
+      var suppressClick = false;
+      function dragStart(row, item, x, y) { drag = { row: row, item: item, x: x, y: y, decided: false, horizontal: false }; }
+      function dragMove(x, y) {
+        if (!drag) return;
+        var dx = x - drag.x;
+        var dy = y - drag.y;
+        if (!drag.decided) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) < 4) return;
+          drag.decided = true;
+          drag.horizontal = Math.abs(dx) > Math.abs(dy);
+        }
+        if (!drag.horizontal) return;
+        var base = swipeRow === drag.row ? -SWIPE_WIDTH : 0;
+        drag.row.classList.add('swiping');
+        drag.row.style.setProperty('--swipe-x', Math.max(-SWIPE_WIDTH, Math.min(0, base + dx)) + 'px');
+      }
+      // 戻り値: 横にドラッグした(クリックとは別の操作だった)かどうか。
+      function dragEnd(x) {
+        if (!drag) return false;
+        var current = drag;
+        drag = null;
+        current.row.classList.remove('swiping');
+        if (!current.horizontal) return false;
+        var dx = x - current.x;
+        if (swipeRow === current.row) {
+          if (dx > SWIPE_WIDTH / 2) closeSwipe();
+          else current.row.style.setProperty('--swipe-x', '-' + SWIPE_WIDTH + 'px');
+        } else if (-dx >= SWIPE_OPEN_AT) openSwipe(current.row, current.item);
+        else current.row.style.removeProperty('--swipe-x');
+        return true;
+      }
+      function onMouseMove(event) { dragMove(event.clientX, event.clientY); }
+      function onMouseUp(event) {
+        if (!drag) return;
+        if (dragEnd(event.clientX)) { suppressClick = true; setTimeout(function () { suppressClick = false; }, 0); }
+      }
+      doc.addEventListener('mousemove', onMouseMove);
+      doc.addEventListener('mouseup', onMouseUp);
+      function attachSwipe(row, item) {
+        row.addEventListener('touchstart', function (event) { dragStart(row, item, event.touches[0].clientX, event.touches[0].clientY); }, { passive: true });
+        row.addEventListener('touchmove', function (event) { dragMove(event.touches[0].clientX, event.touches[0].clientY); }, { passive: true });
+        row.addEventListener('touchend', function (event) { dragEnd(event.changedTouches[0].clientX); });
+        row.addEventListener('mousedown', function (event) { if (event.button === 0) dragStart(row, item, event.clientX, event.clientY); });
+        row.addEventListener('click', function () { if (!suppressClick && swipeRow === row) closeSwipe(); });
+      }
+      // 削除エリアのタップ: DELETE を送り、成功(deleted: true)を確かめてから、データと画面から消す。失敗は、行を残して理由を出す(成功に見せない)。
+      deleteArea.addEventListener('click', function () {
+        if (!swipeItem || deleteArea.disabled) return;
+        var item = swipeItem;
+        deleteArea.disabled = true;
+        clearDeleteNote();
+        fetchFn('/api/muse-search/key?key=' + encodeURIComponent(item.searchKey), { method: 'DELETE' }).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+        }).then(function (r) {
+          deleteArea.disabled = false;
+          if (r.ok && r.data && r.data.deleted === true) {
+            keysData = keysData.filter(function (entry) { return entry !== item; });
+            if (view === 'keys') showKeysData();
+            else closeSwipe();
+            return;
+          }
+          var detail = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
+          showDeleteError('(HTTP ' + r.status + ')' + (detail ? ': ' + detail : ''));
+        }).catch(function (error) {
+          deleteArea.disabled = false;
+          showDeleteError(': ' + (error && error.message ? error.message : String(error)));
+        });
+      });
+
       function closeModal() {
         doc.removeEventListener('keydown', onKeydown);
+        doc.removeEventListener('mousemove', onMouseMove);
+        doc.removeEventListener('mouseup', onMouseUp);
         if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
         if (opener && opener.focus) opener.focus();
       }
@@ -461,7 +583,7 @@ export const MUSE_SEARCH_SCRIPT = `
         // Tabでフォーカスがモーダルの外へ出ないようにする(モーダルの中のボタンとリンクの間を行き来する)。
         else if (event.key === 'Tab') {
           event.preventDefault();
-          var items = dialog.querySelectorAll('button, a[href]');
+          var items = Array.prototype.filter.call(dialog.querySelectorAll('button, a[href]'), function (el) { return !el.hidden; });
           var at = Array.prototype.indexOf.call(items, doc.activeElement);
           var next = event.shiftKey ? (at <= 0 ? items.length - 1 : at - 1) : (at < 0 || at === items.length - 1 ? 0 : at + 1);
           items[next].focus();
@@ -473,6 +595,7 @@ export const MUSE_SEARCH_SCRIPT = `
       close.focus();
 
       function show(node) {
+        closeSwipe();
         while (content.firstChild) content.removeChild(content.firstChild);
         content.appendChild(node);
       }
@@ -490,7 +613,8 @@ export const MUSE_SEARCH_SCRIPT = `
       }
       function buildKeys() {
         var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
-        scroll.appendChild(renderMuseKeysTable(doc, keysData, keysSort, onSortKeys));
+        scroll.appendChild(renderMuseKeysTable(doc, keysData, keysSort, onSortKeys, attachSwipe));
+        scroll.addEventListener('scroll', closeSwipe);
         return scroll;
       }
       // 見出しを押すたびに、その列の降順/昇順をトグルして、表を作り直す。別の列は降順から始める。押した見出しにフォーカスを残す。
@@ -545,11 +669,15 @@ export const MUSE_SEARCH_SCRIPT = `
         markView('keys');
         title.textContent = keysTitle();
         load('/api/muse-search/keys', '検索キーの一覧を読み込めませんでした', function (data) {
-          if (data.keys.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。');
           keysData = data.keys;
-          return buildKeys();
+          return keysNode();
         });
       }
+      function keysNode() {
+        if (keysData.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。');
+        return buildKeys();
+      }
+      function showKeysData() { show(keysNode()); }
       function showAnswers() {
         markView('answers');
         title.textContent = answersTitle();
@@ -1151,6 +1279,12 @@ export function getMuseSearchPage(): string {
     .muse-keys-close { min-width: 36px; min-height: 36px; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; }
     .muse-keys-body { padding: 12px 16px; overflow: auto; min-height: 0; }
     .muse-keys-scroll { overflow: auto; }
+    .muse-keys-table tbody td { transform: translateX(var(--swipe-x, 0px)); transition: transform 0.2s ease; background: var(--card-bg); touch-action: pan-y; }
+    .muse-keys-table tbody tr.swiping td { transition: none; }
+    .muse-keys-table tbody tr.swipe-open td:first-child, .muse-keys-table tbody tr.swiping td:first-child { position: sticky; left: 0; z-index: 1; transform: none; }
+    .muse-keys-delete-area { position: fixed; width: 72px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; font-size: 12px; font-weight: 700; background: var(--danger-color); color: var(--bg-primary); }
+    .muse-keys-delete-area[hidden] { display: none; }
+    .muse-keys-delete-area:disabled { opacity: 0.6; cursor: default; }
     .muse-keys-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .muse-keys-table th, .muse-keys-table td { padding: 6px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
     .muse-keys-table thead th { position: sticky; top: 0; background: var(--card-bg); color: var(--text-secondary); font-weight: 600; }
