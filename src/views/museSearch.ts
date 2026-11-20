@@ -319,8 +319,31 @@ export const MUSE_SEARCH_SCRIPT = `
       close.type = 'button';
       close.setAttribute('data-action', 'close');
       close.setAttribute('aria-label', '閉じる');
+      var highlightLabel = museSearchEl(doc, 'label', 'muse-chat-highlight');
+      var highlight = museSearchEl(doc, 'input', '');
+      highlight.type = 'checkbox';
+      highlight.checked = true;
+      var highlightStorageKey = 'muse-chat-highlight';
+      try {
+        highlight.checked = doc.defaultView.localStorage.getItem(highlightStorageKey) !== '0';
+      } catch {
+        // 保存先が使えないときも、このモーダルで切り替えられる。
+      }
+      overlay.classList.toggle('muse-chat-highlight-off', !highlight.checked);
+      highlight.addEventListener('change', function () {
+        overlay.classList.toggle('muse-chat-highlight-off', !highlight.checked);
+        try {
+          if (highlight.checked) doc.defaultView.localStorage.removeItem(highlightStorageKey);
+          else doc.defaultView.localStorage.setItem(highlightStorageKey, '0');
+        } catch {
+          // 保存できなくても、開いているモーダルでの表示は更新する。
+        }
+      });
+      highlightLabel.appendChild(highlight);
+      highlightLabel.appendChild(doc.createTextNode('ハイライト'));
       head.appendChild(title);
       head.appendChild(close);
+      head.appendChild(highlightLabel);
       var content = museSearchEl(doc, 'div', 'muse-keys-body', '読み込んでいます…');
       dialog.appendChild(head);
       dialog.appendChild(content);
@@ -336,7 +359,11 @@ export const MUSE_SEARCH_SCRIPT = `
       }
       function onKeydown(event) {
         if (event.key === 'Escape') closeModal();
-        else if (event.key === 'Tab') { event.preventDefault(); close.focus(); }
+        else if (event.key === 'Tab') {
+          event.preventDefault();
+          if (doc.activeElement === close) highlight.focus();
+          else close.focus();
+        }
       }
       close.addEventListener('click', closeModal);
       overlay.addEventListener('click', function (event) { if (event.target === overlay) closeModal(); });
@@ -1532,6 +1559,10 @@ export function getMuseSearchPage(): string {
     .muse-chat-markdown > :first-child { margin-top: 0; }
     .muse-chat-markdown > :last-child { margin-bottom: 0; }
     .muse-chat-markdown mark { background: var(--warning-color); color: var(--text-on-warning, var(--text-primary)); }
+    #muse-chat-title { min-width: 0; overflow-wrap: anywhere; }
+    .muse-chat-highlight { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; white-space: nowrap; cursor: pointer; font-size: 13px; }
+    .muse-chat-highlight input { margin: 0; accent-color: var(--accent-color); }
+    .muse-chat-highlight-off .muse-chat-markdown mark { background: transparent; color: inherit; }
     .muse-confirm-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-confirm-dialog { box-sizing: border-box; width: 100%; max-width: 340px; padding: 20px 18px 16px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; }
     .muse-confirm-title { margin: 0 0 8px; font-size: 15px; }

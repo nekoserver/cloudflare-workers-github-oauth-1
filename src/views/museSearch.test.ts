@@ -2384,6 +2384,53 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect([...posts[1].querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Static']);
     expect(posts[0].querySelectorAll('mark')).toHaveLength(0);
   });
+  it('タイトルバー右端のハイライトを切り替え、ページを開き直しても設定を復元する', async () => {
+    const storageKey = 'muse-chat-highlight';
+    const checkbox = () => modal()!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const mark = () => modal()!.querySelector('mark')!;
+    localStorage.removeItem(storageKey);
+    try {
+      const first = await open();
+      link().click();
+      await flush();
+      const toggle = checkbox();
+      expect(toggle).not.toBeNull();
+      const label = toggle.closest('label')!;
+      expect(label.textContent?.trim()).toBe('ハイライト');
+      expect(label.parentElement).toBe(modal()!.querySelector('.muse-keys-head'));
+      expect(label.parentElement!.lastElementChild).toBe(label);
+      expect(toggle.checked).toBe(true);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(toggle);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(modal()!.querySelector('button[data-action="close"]'));
+      const originalMark = mark();
+      expect(originalMark.textContent).toBe('Static');
+      expect(modal()!.classList.contains('muse-chat-highlight-off')).toBe(false);
+
+      toggle.click();
+      expect(toggle.checked).toBe(false);
+      expect(modal()!.classList.contains('muse-chat-highlight-off')).toBe(true);
+      expect(mark()).toBe(originalMark);
+      expect(chatCalls(first.fetchFn)).toHaveLength(1);
+      expect(localStorage.getItem(storageKey)).toBe('0');
+
+      modal()!.querySelector<HTMLButtonElement>('button[data-action="close"]')!.click();
+      await open();
+      link().click();
+      expect(checkbox().checked).toBe(false);
+      await flush();
+      expect(modal()!.classList.contains('muse-chat-highlight-off')).toBe(true);
+
+      checkbox().click();
+      expect(checkbox().checked).toBe(true);
+      expect(modal()!.classList.contains('muse-chat-highlight-off')).toBe(false);
+      expect(localStorage.getItem(storageKey)).toBeNull();
+    } finally {
+      localStorage.removeItem(storageKey);
+    }
+  });
+
   it('質問と回答の Markdown を描画し、キーワードを装飾の中でも強調する', async () => {
     const question = { role: 'user', createdAt: 100, truncated: false, markdown: '## 質問の見出し', paragraphs: [[seg('## 質問の見出し')]] };
     const markdown = '**Static** Assets\n\n- 例\n\n```txt\na\n\n  b\n```\n\n[資料](https://example.com) [危険](javascript:alert) [不正](https://[) <img src=x>';
@@ -2517,6 +2564,7 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     const style = html.slice(start, html.indexOf('</style>', start));
     expect(style).toMatch(/\.muse-chat-link \{[^}]*var\(--/);
     expect(style).toMatch(/\.muse-chat-link \{[^}]*text-decoration: none/);
+    expect(style).toMatch(/\.muse-chat-highlight-off \.muse-chat-markdown mark \{[^}]*background: transparent; color: inherit/);
     // 実ブラウザ(スマホ幅)で見つけた表示: タップしたリンクのハイライトが、開いたモーダルの上に、青い四角として透けて見えた。
     expect(style).toMatch(/\.muse-chat-link \{[^}]*-webkit-tap-highlight-color: transparent/);
     expect(style).toMatch(/\.muse-chat-post \{[^}]*\bborder: 1px solid var\(--/);
