@@ -283,30 +283,24 @@ export const MUSE_SEARCH_SCRIPT = `
         var wrap = museSearchEl(doc, 'div', 'muse-chat');
         if (r.data.highlightError) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta muse-thread-highlight-error', 'キーワードの強調は、できませんでした: ' + r.data.highlightError));
         var posts = r.data.posts;
-        var answerCount = 0;
         var latestAnswerIndex = -1;
         posts.forEach(function (post, index) {
           if (post.role !== 'assistant') return;
-          answerCount++;
           if (latestAnswerIndex === -1 || post.createdAt >= posts[latestAnswerIndex].createdAt) {
             latestAnswerIndex = index;
           }
         });
         posts.forEach(function (post, index) {
-          var collapsible = post.role === 'assistant' && answerCount > 1;
-          var section = museSearchEl(doc, collapsible ? 'details' : 'section', 'muse-chat-post');
+          var section = museSearchEl(doc, 'details', 'muse-chat-post');
           section.setAttribute('data-role', post.role);
+          var heading = museSearchEl(doc, 'summary', 'muse-chat-heading');
           var meta = museSearchEl(doc, 'span', 'muse-chat-meta');
           meta.appendChild(museSearchEl(doc, 'span', 'muse-chat-role', post.role === 'user' ? '質問' : '回答'));
+          meta.appendChild(doc.createTextNode(' '));
           meta.appendChild(museSearchEl(doc, 'span', 'muse-chat-time', formatMuseSearchTime(post.createdAt)));
-          if (collapsible) {
-            var heading = museSearchEl(doc, 'summary', 'muse-chat-answer-heading');
-            heading.appendChild(meta);
-            section.appendChild(heading);
-            if (index === latestAnswerIndex) section.setAttribute('open', '');
-          } else {
-            section.appendChild(meta);
-          }
+          heading.appendChild(meta);
+          section.appendChild(heading);
+          if (post.role === 'user' || index === latestAnswerIndex) section.setAttribute('open', '');
           post.paragraphs.forEach(function (segments) {
             var p = museSearchEl(doc, 'p', 'muse-thread-paragraph');
             segments.forEach(function (segment) {
@@ -1457,8 +1451,8 @@ export function getMuseSearchPage(): string {
     .muse-chat-link { color: var(--accent-color, var(--text-primary)); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .muse-chat-post { padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 8px; }
     .muse-chat-post + .muse-chat-post { margin-top: 8px; }
-    .muse-chat-answer-heading { cursor: pointer; }
-    .muse-chat-meta { display: inline-flex; gap: 10px; align-items: baseline; margin-bottom: 4px; color: var(--text-secondary); font-size: 13px; }
+    .muse-chat-heading { cursor: pointer; }
+    .muse-chat-meta { color: var(--text-secondary); font-size: 13px; }
     .muse-chat-role { font-weight: 700; color: var(--text-primary); }
     .muse-confirm-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-confirm-dialog { box-sizing: border-box; width: 100%; max-width: 340px; padding: 20px 18px 16px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; }
