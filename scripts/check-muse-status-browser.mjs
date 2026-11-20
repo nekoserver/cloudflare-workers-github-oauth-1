@@ -1,6 +1,7 @@
 // /muse-statusの実ブラウザ確認。本体コンテナが停止中の応答を返し、「Tailscaleへ接続」で公式のTailscale WASMが
 // ページのCSPの下で読み込まれ、ログインの手前まで進むことを確かめる。外部への通信は遮断するので、実tailnetへの参加は確かめない。
 // 実行: node scripts/check-muse-status-browser.mjs  (Chromeの場所はCHROME_PATH、既定は/usr/bin/google-chrome)
+import { TAILSCALE_WASM_ROOT } from '../public/tailscale-wasm-client.mjs';
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -11,7 +12,7 @@ const result = await build({ entryPoints: ['src/views/museStatus.ts'], bundle: t
 const { getMuseStatusPage, MUSE_STATUS_CSP } = await import('data:text/javascript;base64,' + Buffer.from(result.outputFiles[0].text).toString('base64'));
 const stopped = { containerRunning: false, backendState: null, error: 'container_not_running', checkedAt: new Date().toISOString(), nodes: ['muse', 'muse-vm'].map((name) => ({ name, found: false })) };
 const json = (res, body) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)); };
-const assets = ['/tailscale-wasm-client.mjs', '/tailscale-connect/1.102.3-3/pkg.js', '/tailscale-connect/1.102.3-3/main.wasm.gz'];
+const assets = ['/tailscale-wasm-client.mjs', `${TAILSCALE_WASM_ROOT}/pkg.js`, `${TAILSCALE_WASM_ROOT}/main.wasm.gz`];
 const server = createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://x').pathname;

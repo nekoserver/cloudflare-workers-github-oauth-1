@@ -10,6 +10,7 @@
 //   - プロキシがTLSを中継する環境では、そのCAをChromeの証明書ストア(~/.pki/nssdb)に入れておく。証明書の検証は無効にしない。
 // 終了コード: 0=すべて200、1=届かない宛先があった、2=参加できなかった。
 // 確かめるのは到達性だけで、Museへの推論は送らない(WASMのfetchはGETだけでヘッダーを付けられない)。
+import { TAILSCALE_WASM_ROOT } from '../public/tailscale-wasm-client.mjs';
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -17,7 +18,7 @@ import { readFile } from 'node:fs/promises';
 const WAIT_MS = Number(process.env.WAIT_MINUTES || 25) * 60_000;
 const KEEP_MS = Number(process.env.KEEP_SECONDS || 0) * 1000;
 const INTERVAL_MS = Number(process.env.INTERVAL_SECONDS || 30) * 1000;
-const ASSETS = ['/tailscale-wasm-client.mjs', '/tailscale-connect/1.102.3-3/pkg.js', '/tailscale-connect/1.102.3-3/main.wasm.gz'];
+const ASSETS = ['/tailscale-wasm-client.mjs', `${TAILSCALE_WASM_ROOT}/pkg.js`, `${TAILSCALE_WASM_ROOT}/main.wasm.gz`];
 const log = (message) => console.log(`${new Date().toISOString()} ${message}`);
 
 const PAGE = `<!doctype html><meta charset="utf-8"><body><script type="module">

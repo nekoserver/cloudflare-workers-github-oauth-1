@@ -1,3 +1,4 @@
+import { TAILSCALE_WASM_ROOT } from '../public/tailscale-wasm-client.mjs';
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -10,7 +11,7 @@ const server = createServer(async (req, res) => {
   if (req.url === '/') { res.setHeader('Content-Type', 'text/html'); res.end(getContainerMonitorPage()); return; }
   if (req.url === '/api/container-monitor/providers') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ defaultProvider: 'tailscale-wasm', providers: [{ id: 'tailscale-wasm', label: 'Tailscale WASM', execution: 'browser', scope: 'visible peers' }] })); return; }
   if (req.url === '/favicon.ico') { res.statusCode = 204; res.end(); return; }
-  const paths = ['/container-monitor.mjs', '/tailscale-wasm-client.mjs', '/tailscale-connect/1.102.3-3/pkg.js', '/tailscale-connect/1.102.3-3/main.wasm.gz'];
+  const paths = ['/container-monitor.mjs', '/tailscale-wasm-client.mjs', `${TAILSCALE_WASM_ROOT}/pkg.js`, `${TAILSCALE_WASM_ROOT}/main.wasm.gz`];
   if (!paths.includes(req.url)) { res.statusCode = 404; res.end(); return; }
   res.setHeader('Content-Type', req.url.endsWith('.gz') ? 'application/gzip' : 'text/javascript');
   res.end(await readFile('public' + req.url));
@@ -28,7 +29,7 @@ try {
  assert.equal(await page.locator('#monitor-wasm-controls').isVisible(), true);
  const initialized = await page.evaluate(async () => {
   const { loadTailscaleClient } = await import('/container-monitor.mjs');
-  const client = await loadTailscaleClient({ authKey: '', wasmURL: '/tailscale-connect/1.102.3-3/main.wasm.gz', panicHandler: () => {} });
+  const client = await loadTailscaleClient({ authKey: '', panicHandler: () => {} });
   return { run: typeof client.run, login: typeof client.login, fetch: typeof client.fetch };
  });
  assert.deepEqual(initialized, { run: 'function', login: 'function', fetch: 'function' });

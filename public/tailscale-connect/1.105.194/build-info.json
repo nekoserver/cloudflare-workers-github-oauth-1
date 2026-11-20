@@ -1,0 +1,11 @@
+{
+  "package": "@tailscale/connect@1.105.194-ta967b7d81-ged5f6de49",
+  "upstream": "https://github.com/tailscale/tailscale/tree/a967b7d811b7ead64e4fa5c030284ed0769abc88/cmd/tsconnect",
+  "integrity": "sha512-4xYjvu5W9x+W9f9bEGWmFlobYN9WnHYt6PAxfLBSbyRi4wMI9TaV7i79ZLbXa/bTV/dpwz5NCXNwZgmJCnRm1g==",
+  "preOptimizationWasmSha256": "b4b2cfaea1e813c75fd2161672d301e7c0362e01d3275208f534e03d1e50d8e9",
+  "wasmSha256": "f9263a277076de2cf5c22dfb8c758cd300b1cf322bd386c7557427ca35bafd44",
+  "files": {
+    "pkg.js": "8b7a604f122a3b87ce66ca77b2b57e193f77ca9561b7d64d72e433591190da12",
+    "main.wasm.gz": "3172aaff956839e09c529e685220d51427616e42d7f9c5b5dc9ff37b9b83561c"
+  }
+}
