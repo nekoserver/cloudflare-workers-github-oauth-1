@@ -7,7 +7,7 @@
 //   4. 一致箇所は、元の文字(大文字小文字そのまま)のまま前後を切り出す。小文字にして長さが変わる文字でも、ずれた位置を切らない。
 import { describe, expect, it, vi } from 'vitest';
 import {
-  MUSE_SEARCH_MAX_QUERY, isMuseSearchData, makeMuseSnippet, parseMuseSearchQuery, searchMuseConversations,
+  MUSE_SEARCH_MAX_QUERY, groupMuseSearchPairs, isMuseSearchData, makeMuseSnippet, parseMuseSearchQuery, searchMuseConversations,
 } from './museConversationSearch';
 import { buildWorkerSignatureMessage, MAIN_WORKER_NAME } from './workerRequestSignature';
 
@@ -109,5 +109,45 @@ describe('searchMuseConversations', () => {
   it('形式の違う応答は invalid_response にする', async () => {
     const fetcher = { fetch: vi.fn(async () => Response.json({ posts: 'x' })) };
     expect(await searchMuseConversations(fetcher, SECRET, 'x')).toMatchObject({ ok: false, errorCode: 'invalid_response' });
+  });
+});
+
+// 検索結果を「質問と回答のペア」にまとめる(2026-11-20、ユーザー指定「ちゃんと質問/回答のペアになるものを検索結果に表示」)。
+// 用語: ペア = 1往復 = 回答ID(answerId)。チャットIDは、複数のペアを入れる会話の容れ物(1つのチャットに質問が2つ以上ある)。
+// 仮説: 一致した投稿を、回答IDでまとめる(質問と回答の両方に当たっても1組)。同じチャットの別のペアは別の組。一致した側にだけ snippet がある(一致していない側は hit: false)。
+//   回答IDが無い上流の応答でも、投稿ID(回答ID:役割)から回答IDを取れる。新しい順(上流の順)を保つ。
+describe('groupMuseSearchPairs', () => {
+  const post = (over: Record<string, unknown>) => ({ postId: 'a1:user', answerId: 'a1', chatId: 'c1', role: 'user', content: '静的アセットの質問', createdAt: 100, threadMark: false, ...over }) as never;
+  it('質問と回答の両方に当たった投稿は、1組にまとまり、両側に snippet がある', () => {
+    const pairs = groupMuseSearchPairs([post({ postId: 'a1:assistant', role: 'assistant', content: '静的アセットの回答', createdAt: 101 }), post({})], '静的アセット');
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toEqual({
+      answerId: 'a1', chatId: 'c1', createdAt: 100,
+      question: { hit: true, postId: 'a1:user', threadMark: false, snippet: { before: '', match: '静的アセット', after: 'の質問' } },
+      answer: { hit: true, postId: 'a1:assistant', threadMark: false, snippet: { before: '', match: '静的アセット', after: 'の回答' } },
+    });
+  });
+  it('質問だけ・回答だけに当たったときは、当たらなかった側が hit: false(中身は持たない)', () => {
+    const q = groupMuseSearchPairs([post({})], '静的アセット')[0];
+    expect(q.answer).toEqual({ hit: false });
+    expect(q.question).toMatchObject({ hit: true });
+    const a = groupMuseSearchPairs([post({ postId: 'a1:assistant', role: 'assistant' })], '静的アセット')[0];
+    expect(a.question).toEqual({ hit: false });
+    expect(a.answer).toMatchObject({ hit: true });
+  });
+  it('同じチャットの別のペアは、別の組(チャットIDでまとめない)。順は上流の順', () => {
+    const pairs = groupMuseSearchPairs([post({ postId: 'a2:user', answerId: 'a2', createdAt: 300 }), post({ postId: 'a1:user', answerId: 'a1', createdAt: 100 })], '静的アセット');
+    expect(pairs.map((p) => [p.answerId, p.chatId])).toEqual([['a2', 'c1'], ['a1', 'c1']]);
+  });
+  it('回答IDが無くても、投稿ID(回答ID:役割)から取れる', () => {
+    const noAnswerId = (over: Record<string, unknown>) => { const p = post(over) as Record<string, unknown>; delete p.answerId; return p as never; };
+    const pairs = groupMuseSearchPairs([noAnswerId({ postId: 'x9:assistant', role: 'assistant' }), noAnswerId({ postId: 'x9:user' })], '静的アセット');
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].answerId).toBe('x9');
+  });
+  it('スレッド化済みかは、側ごとに持つ。空の入力は空', () => {
+    const pairs = groupMuseSearchPairs([post({ threadMark: true })], '静的アセット');
+    expect(pairs[0].question).toMatchObject({ threadMark: true });
+    expect(groupMuseSearchPairs([], 'x')).toEqual([]);
   });
 });

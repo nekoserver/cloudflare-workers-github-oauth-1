@@ -497,7 +497,7 @@ import { checkMuseHealth, museDirectDep } from './utils/museDirectAsk';
 import { fetchMuseNixPackages, fetchMuseNodes, isMuseNodeName, sendMuseSignal } from './utils/museNodeStatus';
 import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
-import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
+import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, groupMuseSearchPairs } from './utils/museConversationSearch';
 import { deleteMuseSearchKey, listMuseSearchKeys, listViewerKeywords, recordSearchedKey } from './utils/museSearchKeys';
 import { recordThreadSearch } from './utils/museThreadSearchLog';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
@@ -20865,7 +20865,9 @@ app.get('/api/muse-search', authMiddleware, cfDashboardAdminMiddleware, async (c
   // 回答ごとの出現回数(🗒️モーダル用、muse_search_answer_log)も記録する。検索キーの記録とは独立で、失敗しても検索の結果と検索キーの記録は残し、理由を応答(answersLogError)とログで伝える。
   const answerLog = await recordSearchedAnswers(c.env.DB, c.get('user').sub, parsed.query, result.data.answers);
   if (!answerLog.answersLogged) logger.error('muse-search: 回答ごとの出現回数を記録できませんでした', { error: answerLog.answersLogError });
-  return c.json({ count: result.data.posts.length, posts: toMuseSearchResultItems(result.data.posts, parsed.query), ...keyLog, ...answerLog });
+  // 検索結果は、質問と回答のペア(回答ID単位)で返す(2026-11-20、ユーザー指定)。件数も、ペアの数。
+  const pairs = groupMuseSearchPairs(result.data.posts, parsed.query);
+  return c.json({ count: pairs.length, pairs, ...keyLog, ...answerLog });
 });
 
 /** 🔑ボタンの一覧。検索キーごとの最新の値を、AIチャットでの出現回数の多い順に返す。読めなかったときは、空の一覧にせず理由つきで失敗にする。 */
@@ -20936,6 +20938,9 @@ app.get('/api/muse-search/chat', authMiddleware, cfDashboardAdminMiddleware, asy
   const chatId = (c.req.query('chatId') ?? '').trim();
   if (!chatId) return c.json({ error: 'チャットIDが必要です' }, 400);
   if (chatId.length > MUSE_THREAD_ID_MAX) return c.json({ error: `チャットIDは${MUSE_THREAD_ID_MAX}文字までです` }, 400);
+  // answerId を付けると、そのペア(質問と回答)だけを返す。付けなければ、チャットの全部。
+  const answerId = (c.req.query('answerId') ?? '').trim();
+  if (answerId.length > MUSE_ANSWER_ID_MAX) return c.json({ error: `回答IDは${MUSE_ANSWER_ID_MAX}文字までです` }, 400);
   const result = await fetchMuseChat(c.env.DYNAMICNEKO, c.env.DYNAMICNEKO_WORKER_HMAC_SECRET, chatId);
   if (!result.ok) {
     const notConfigured = result.errorCode === 'binding_missing' || result.errorCode === 'secret_missing';
@@ -20954,7 +20959,9 @@ app.get('/api/muse-search/chat', authMiddleware, cfDashboardAdminMiddleware, asy
       logger.error('muse-search: チャットの強調に使うキーワードを読めませんでした', { error: highlightError });
     }
   }
-  const posts = result.data.posts.map((post) => {
+  const chosen = answerId ? result.data.posts.filter((post) => post.answerId === answerId) : result.data.posts;
+  if (chosen.length === 0) return c.json({ error: 'このチャットに、指定の質問と回答のペアが見つかりません' }, 404);
+  const posts = chosen.map((post) => {
     const { content, truncated } = truncateAnswer(post.content);
     return { role: post.role, createdAt: post.createdAt, truncated, paragraphs: highlightParagraphs(toParagraphs(content), keywords) };
   });

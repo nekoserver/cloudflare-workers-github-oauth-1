@@ -7,7 +7,7 @@ import { createJWT } from './utils/jwt';
 
 const JWT_SECRET = 'muse-search-test';
 const ADMIN_ID = 85157166;
-const post = { postId: 'a:user', chatId: 'c-00001', role: 'user', content: '前置き。静的アセットの質問です。後ろの文', createdAt: 100, threadMark: false };
+const post = { postId: 'a:user', answerId: 'a', chatId: 'c-00001', role: 'user', content: '前置き。静的アセットの質問です。後ろの文', createdAt: 100, threadMark: false };
 const DB = { prepare: (sql: string) => ({ first: async () => null, all: async () => ({ results: [] }), bind: () => ({ first: async () => sql.includes('user_sessions') ? { revoked_at: null } : null, run: async () => ({ success: true }) }) }) };
 
 async function request(path: string, options: { githubId?: number | null; env?: Record<string, unknown> } = {}) {
@@ -54,13 +54,15 @@ describe('GET /api/muse-search', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
     const text = await res.text();
     expect(text).not.toContain('pair-secret-value');
-    const body = JSON.parse(text) as { count: number; posts: Array<Record<string, unknown>> };
+    const body = JSON.parse(text) as { count: number; pairs: Array<Record<string, unknown>>; posts?: unknown };
     expect(body.count).toBe(1);
-    expect(body.posts[0]).toEqual({
-      postId: 'a:user', chatId: 'c-00001', role: 'user', createdAt: 100, threadMark: false,
-      snippet: { before: '前置き。', match: '静的アセット', after: 'の質問です。後ろの文' },
+    expect(body.pairs[0]).toEqual({
+      answerId: 'a', chatId: 'c-00001', createdAt: 100,
+      question: { hit: true, postId: 'a:user', threadMark: false, snippet: { before: '前置き。', match: '静的アセット', after: 'の質問です。後ろの文' } },
+      answer: { hit: false },
     });
-    expect(body.posts[0]).not.toHaveProperty('content');
+    expect(JSON.stringify(body.pairs)).not.toContain('content');
+    expect(body.posts).toBeUndefined();
     expect(fetcher.fetch).toHaveBeenCalledTimes(1);
     expect(String((fetcher.fetch.mock.calls[0] as unknown[])[0])).toBe('https://dynamicneko.internal/api/tree-view/muse-search?q=' + encodeURIComponent('静的アセット'));
   });
@@ -72,7 +74,7 @@ describe('GET /api/muse-search', () => {
   it('一致が無いときは、空の一覧を 200 で返す(失敗と区別する)', async () => {
     const res = await request(q('無い'), { env: upstream(dynamicneko(async () => Response.json({ posts: [] }))) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ count: 0, posts: [] });
+    expect(await res.json()).toMatchObject({ count: 0, pairs: [] });
   });
   it('バインディング・シークレットが未設定なら 503 で、理由を返す', async () => {
     const noBinding = await request(q('x'), { env: { DYNAMICNEKO_WORKER_HMAC_SECRET: 's' } });

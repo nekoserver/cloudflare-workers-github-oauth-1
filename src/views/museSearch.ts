@@ -29,27 +29,43 @@ export const MUSE_SEARCH_SCRIPT = `
       return el;
     }
 
-    function renderMuseSearchItem(doc, post, onChat) {
+    // 検索結果の1組 = 質問と回答のペア(回答ID単位、2026-11-20、ユーザー指定)。チャットIDは、複数のペアを入れる会話の容れ物なので、組の単位にしない。
+    // 一致した側には、強調つきの抜粋を出す。一致していない側は「一致なし」(本文はここでは持たない。チャットIDを押すと、このペアの全文を出す)。
+    function renderMuseSearchSide(doc, role, side) {
+      var row = museSearchEl(doc, 'div', 'muse-search-side');
+      row.setAttribute('data-side', role);
+      var label = museSearchEl(doc, 'span', 'muse-search-role muse-search-role-' + role, MUSE_SEARCH_ROLE_LABELS[role] || role);
+      label.setAttribute('data-field', 'role');
+      row.appendChild(label);
+      if (!side.hit) {
+        row.appendChild(museSearchEl(doc, 'span', 'muse-search-nohit', '(一致なし)'));
+        return row;
+      }
+      var body = museSearchEl(doc, 'p', 'muse-search-snippet');
+      body.appendChild(doc.createTextNode(side.snippet.before));
+      if (side.snippet.match) body.appendChild(museSearchEl(doc, 'mark', '', side.snippet.match));
+      body.appendChild(doc.createTextNode(side.snippet.after));
+      row.appendChild(body);
+      return row;
+    }
+
+    function renderMuseSearchItem(doc, pair, onChat) {
       var item = museSearchEl(doc, 'li', 'muse-search-item');
+      item.setAttribute('data-answer-id', pair.answerId);
       var head = museSearchEl(doc, 'div', 'muse-search-head');
-      head.appendChild(museSearchEl(doc, 'span', 'muse-search-role muse-search-role-' + post.role, MUSE_SEARCH_ROLE_LABELS[post.role] || post.role));
-      head.getElementsByTagName('span')[0].setAttribute('data-field', 'role');
-      head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', formatMuseSearchTime(post.createdAt)));
-      // チャットIDはリンク。押すと、同じチャットIDを持つ質問と回答を、セットで、最上位のモーダルに出す(2026-11-20、ユーザー指定)。
+      head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', formatMuseSearchTime(pair.createdAt)));
+      // チャットIDはリンク。押すと、このペア(質問と回答)の全文を、最上位のモーダルに出す(2026-11-20、ユーザー指定)。
       var chatMeta = museSearchEl(doc, 'span', 'muse-search-meta', 'チャット ');
-      var chatLink = museSearchEl(doc, 'a', 'muse-chat-link', post.chatId);
+      var chatLink = museSearchEl(doc, 'a', 'muse-chat-link', pair.chatId);
       chatLink.setAttribute('href', '#');
-      chatLink.setAttribute('data-chat-id', post.chatId);
-      chatLink.addEventListener('click', function (event) { event.preventDefault(); if (onChat) onChat(chatLink, post.chatId); });
+      chatLink.setAttribute('data-chat-id', pair.chatId);
+      chatLink.addEventListener('click', function (event) { event.preventDefault(); if (onChat) onChat(chatLink, pair.chatId, pair.answerId); });
       chatMeta.appendChild(chatLink);
       head.appendChild(chatMeta);
-      if (post.threadMark) head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', 'スレッド化済み'));
+      if ((pair.question.hit && pair.question.threadMark) || (pair.answer.hit && pair.answer.threadMark)) head.appendChild(museSearchEl(doc, 'span', 'muse-search-meta', 'スレッド化済み'));
       item.appendChild(head);
-      var body = museSearchEl(doc, 'p', 'muse-search-snippet');
-      body.appendChild(doc.createTextNode(post.snippet.before));
-      if (post.snippet.match) body.appendChild(museSearchEl(doc, 'mark', '', post.snippet.match));
-      body.appendChild(doc.createTextNode(post.snippet.after));
-      item.appendChild(body);
+      item.appendChild(renderMuseSearchSide(doc, 'user', pair.question));
+      item.appendChild(renderMuseSearchSide(doc, 'assistant', pair.answer));
       return item;
     }
 
@@ -227,7 +243,7 @@ export const MUSE_SEARCH_SCRIPT = `
 
     // 検索結果のチャットIDのリンクを押したときの、最上位のモーダル(2026-11-20、ユーザー指定)。同じチャットIDを持つ質問と回答を、セットで、やりとりの順に出す。
     // 各投稿は段落ごと。閲覧ユーザーのキーワードの強調区間はサーバーで計算済み(文字は textContent だけで入れる)。
-    function openMuseChatModal(doc, fetchFn, opener, chatId) {
+    function openMuseChatModal(doc, fetchFn, opener, chatId, answerId) {
       if (doc.querySelector('[data-overlay="muse-chat"]')) return;
       var overlay = museSearchEl(doc, 'div', 'muse-answer-overlay');
       overlay.setAttribute('data-overlay', 'muse-chat');
@@ -271,7 +287,7 @@ export const MUSE_SEARCH_SCRIPT = `
         while (content.firstChild) content.removeChild(content.firstChild);
         content.appendChild(node);
       }
-      fetchFn('/api/muse-search/chat?chatId=' + encodeURIComponent(chatId)).then(function (res) {
+      fetchFn('/api/muse-search/chat?chatId=' + encodeURIComponent(chatId) + (answerId ? '&answerId=' + encodeURIComponent(answerId) : '')).then(function (res) {
         return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
       }).then(function (r) {
         if (closed) return;
@@ -1348,12 +1364,12 @@ export const MUSE_SEARCH_SCRIPT = `
             status.textContent = '「' + query + '」を含む会話は見つかりませんでした。';
             return;
           }
-          status.textContent = r.data.count + '件見つかりました。';
+          status.textContent = r.data.count + '組見つかりました(質問と回答のペア)。';
           if (r.data.keyLogged === false) {
             status.textContent += '(検索キーを記録できませんでした' + (r.data.keyLogError ? ': ' + r.data.keyLogError : '') + ')';
             status.className = 'muse-search-status muse-search-error';
           }
-          r.data.posts.forEach(function (post) { list.appendChild(renderMuseSearchItem(doc, post, function (link, chatId) { openMuseChatModal(doc, fetchFn, link, chatId); })); });
+          r.data.pairs.forEach(function (pair) { list.appendChild(renderMuseSearchItem(doc, pair, function (link, chatId, answerId) { openMuseChatModal(doc, fetchFn, link, chatId, answerId); })); });
         }).catch(function (error) {
           fail('検索できませんでした: ' + (error && error.message ? error.message : String(error)));
         }).then(function () {
@@ -1448,6 +1464,10 @@ export function getMuseSearchPage(): string {
     .muse-keys-table tbody td { transform: translateX(var(--swipe-x, 0px)); transition: transform 0.2s ease; background: var(--card-bg); touch-action: pan-y; }
     .muse-keys-table tbody tr.swiping td { transition: none; }
     .muse-keys-table tbody tr.swipe-open td:first-child, .muse-keys-table tbody tr.swiping td:first-child { position: sticky; left: 0; z-index: 1; transform: none; }
+    .muse-search-side { display: flex; gap: 8px; align-items: baseline; margin-top: 4px; }
+    .muse-search-side .muse-search-snippet { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .muse-search-side .muse-search-role { flex-shrink: 0; white-space: nowrap; }
+    .muse-search-nohit { color: var(--text-muted); font-size: 13px; }
     .muse-chat-link { color: var(--accent-color, var(--text-primary)); text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .muse-chat-post { padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 8px; }
     .muse-chat-post + .muse-chat-post { margin-top: 8px; }
