@@ -107,7 +107,7 @@ describe('listMuseSearchKeys(🔑モーダルの一覧)', () => {
     await rec(db, 'k', 1, 2, '2026-11-19T01:00:00.000Z');
     await rec(db, 'K', 5, 4, '2026-11-19T02:00:00.000Z');
     await rec(db, ' k ', 3, 9, '2026-11-19T03:00:00.000Z');
-    expect(await listMuseSearchKeys(db, 'u1')).toEqual([{
+    expect((await listMuseSearchKeys(db, 'u1')).keys).toEqual([{
       searchKey: 'k', aiChatCount: 3, treeViewCount: 9, searchCount: 3,
       firstSearchedAt: '2026-11-19T01:00:00.000Z', lastSearchedAt: '2026-11-19T03:00:00.000Z',
     }]);
@@ -121,21 +121,21 @@ describe('listMuseSearchKeys(🔑モーダルの一覧)', () => {
     await rec(db, 'd', 0, 100, '2026-11-19T01:00:00.000Z');
     await rec(db, 'e', 10, null, '2026-11-19T01:00:00.000Z');
     await rec(db, 'f', 10, 1, '2026-11-19T09:00:00.000Z');
-    expect((await listMuseSearchKeys(db, 'u1')).map((k) => k.searchKey)).toEqual(['c', 'b', 'f', 'a', 'e', 'd']);
+    expect((await listMuseSearchKeys(db, 'u1')).keys.map((k) => k.searchKey)).toEqual(['c', 'b', 'f', 'a', 'e', 'd']);
   });
   it('tree-viewでの出現回数が未取得(NULL)のキーは、nullのまま返す(0にしない)', async () => {
     const { db } = setup();
     await rec(db, 'k', 1, null, '2026-11-19T01:00:00.000Z');
-    expect((await listMuseSearchKeys(db, 'u1'))[0].treeViewCount).toBeNull();
+    expect((await listMuseSearchKeys(db, 'u1')).keys[0].treeViewCount).toBeNull();
   });
   it('他のユーザーのキーは返さない。件数の上限を守る', async () => {
     const { db } = setup();
     await rec(db, 'mine', 1, 1, '2026-11-19T01:00:00.000Z');
     await rec(db, 'theirs', 9, 9, '2026-11-19T01:00:00.000Z', 'u2');
     for (let i = 0; i < 5; i++) await rec(db, 'key' + i, i, i, '2026-11-19T01:00:00.000Z');
-    expect((await listMuseSearchKeys(db, 'u1')).map((k) => k.searchKey)).not.toContain('theirs');
-    expect(await listMuseSearchKeys(db, 'u1', 3)).toHaveLength(3);
-    expect(await listMuseSearchKeys(db, 'nobody')).toEqual([]);
+    expect((await listMuseSearchKeys(db, 'u1')).keys.map((k) => k.searchKey)).not.toContain('theirs');
+    expect((await listMuseSearchKeys(db, 'u1', 3)).keys).toHaveLength(3);
+    expect(await listMuseSearchKeys(db, 'nobody')).toEqual({ keys: [], totalKeywords: 0 });
   });
 });
 

@@ -163,7 +163,7 @@ describe('🔑ボタンのモーダル', () => {
     const table = document.querySelector('[role="dialog"] table')!;
     expect(table.classList.contains('muse-keys-list')).toBe(true);
     const cells = [...table.querySelectorAll('tbody tr:first-child td')];
-    expect(cells.map((td) => td.getAttribute('data-label'))).toEqual([null, 'AIチャットでの出現回数', 'tree-viewでの出現回数', '検索回数', '最後に検索した日時(日本時間)']);
+    expect(cells.map((td) => td.getAttribute('data-label'))).toEqual([null, 'AIチャット', 'tree-view', '検索回数', '最後に検索した日時(日本時間)']);
     expect(cells.slice(0, 4).map((td) => td.textContent)).toEqual(['alpha', '30', '—', '5']);
   });
   it('CSS: 縦並び(項目名: 値)は、設定がON(.muse-stacked)で、幅560px以下のときだけ。設定がOFFのときの既定の表には、縦並びの指定を入れない。固定色は使わない', () => {
@@ -193,12 +193,18 @@ describe('🔑ボタンのモーダル', () => {
     expect(dialog()!.getAttribute('aria-modal')).toBe('true');
     expect(dialog()!.getAttribute('aria-labelledby')).toBeTruthy();
     const headers = [...document.querySelectorAll('[role="dialog"] thead th')].map(th => { const c = th.cloneNode(true) as Element; c.querySelectorAll('.muse-sort-indicator').forEach(el => el.remove()); return c.textContent; });
-    expect(headers.indexOf('AIチャットでの出現回数')).toBeGreaterThanOrEqual(0);
-    expect(headers.indexOf('tree-viewでの出現回数')).toBeGreaterThan(headers.indexOf('AIチャットでの出現回数'));
+    expect(headers.indexOf('AIチャット')).toBeGreaterThanOrEqual(0);
+    expect(headers.indexOf('tree-view')).toBeGreaterThan(headers.indexOf('AIチャット'));
     const rows = rowsText();
     expect(rows.map(r => r[0])).toEqual(['alpha', 'beta']);
     expect(rows[0]).toEqual(['alpha', '30', '4', '5', '2026/11/19 12:00:00']);
     expect(rows[1].slice(0, 4)).toEqual(['beta', '2', '90', '1']);
+  });
+  it('タイトルには表示上限を含めた API の総キーワード数を出す', async () => {
+    mount(router({ '/api/muse-search/keys': json({ keys: [key()], totalKeywords: 201 }) }));
+    keysButton().click();
+    await flush();
+    expect(dialog()!.querySelector('h2')!.textContent).toBe('🔑検索キーの出現回数 総キーワード数 : 201');
   });
   // 見出しで並べ替え(2026-11-19、ユーザー指定): 各thを押すと、その要素の降順/昇順がトグルし、押すたびに表が書き換わる。
   describe('見出しを押して並べ替える(検索キーの表)', () => {
@@ -219,14 +225,14 @@ describe('🔑ボタンのモーダル', () => {
     const title = () => document.querySelector('#muse-keys-title')!.textContent;
     const press = (k: string) => sortBtn(k).click();
 
-    it('5つの見出しすべてが押せるボタン。最初は、AIチャットでの出現回数の降順(▼)で、タイトルも今までのまま', async () => {
+    it('5つの見出しすべてが押せるボタン。最初は、AIチャットでの出現回数の降順(▼)で、タイトルには総キーワード数を出す', async () => {
       await openSorted();
       expect([...document.querySelectorAll('[role="dialog"] thead th')].map((th) => th.querySelector('button')?.getAttribute('data-sort-key'))).toEqual(['searchKey', 'aiChatCount', 'treeViewCount', 'searchCount', 'lastSearchedAt']);
       expect(order()).toEqual(['alpha', 'delta', 'gamma', 'beta']);
       expect(ariaSort('aiChatCount')).toBe('descending');
       expect(sortBtn('aiChatCount').textContent).toContain('▼');
       for (const k of ['searchKey', 'treeViewCount', 'searchCount', 'lastSearchedAt']) expect(ariaSort(k)).toBe('none');
-      expect(title()).toBe('検索キー(AIチャットでの出現回数の多い順)');
+      expect(title()).toBe('🔑検索キーの出現回数 総キーワード数 : 4');
     });
     it('検索キー: 押すたびに 降順 → 昇順', async () => {
       await openSorted();
@@ -277,7 +283,7 @@ describe('🔑ボタンのモーダル', () => {
       expect(rowsText().find((r) => r[0] === 'alpha')).toEqual(['alpha', '30', '4', '5', script.formatMuseSearchTime(Date.parse('2026-11-19T03:00:00.000Z') / 1000)]);
       expect(rowsText().find((r) => r[0] === 'gamma')![2]).toBe('—');
     });
-    it('別の列を押すと、その列の降順から始まる。印(aria-sort・矢印)は押した列だけ。押した見出しにフォーカスが残る。タイトルは基準を示す', async () => {
+    it('別の列を押すと、その列の降順から始まる。印(aria-sort・矢印)は押した列だけ。押した見出しにフォーカスが残る。タイトルの総キーワード数は変わらない', async () => {
       await openSorted();
       press('searchCount');
       expect(ariaSort('searchCount')).toBe('descending');
@@ -285,13 +291,13 @@ describe('🔑ボタンのモーダル', () => {
       expect(sortBtn('searchCount').textContent).toContain('▼');
       expect(sortBtn('aiChatCount').textContent).not.toMatch(/[▲▼]/);
       expect(document.activeElement).toBe(sortBtn('searchCount'));
-      expect(title()).toBe('検索キー(検索回数の降順)');
+      expect(title()).toBe('🔑検索キーの出現回数 総キーワード数 : 4');
       press('searchCount');
-      expect(title()).toBe('検索キー(検索回数の昇順)');
+      expect(title()).toBe('🔑検索キーの出現回数 総キーワード数 : 4');
       press('aiChatCount');
-      expect(title()).toBe('検索キー(AIチャットでの出現回数の多い順)');
+      expect(title()).toBe('🔑検索キーの出現回数 総キーワード数 : 4');
       press('aiChatCount');
-      expect(title()).toBe('検索キー(AIチャットでの出現回数の昇順)');
+      expect(title()).toBe('🔑検索キーの出現回数 総キーワード数 : 4');
     });
     it('🗒️へ切り替えて戻っても、選んだ基準を覚えている。モーダルを閉じて開き直したら最初に戻る', async () => {
       await openSorted();
@@ -551,7 +557,7 @@ describe('🗒️ボタン(チャットごとの回答の一覧)', () => {
       expect(ids(1)).toEqual(['b-1', 'b-2']);
       expect(ariaSort('createdAt', 1)).toBe('descending');
     });
-    it('並べ替えても、リンクは押せる(回答のモーダルが開く)。押した見出しにフォーカスが残る。タイトルは基準を示す', async () => {
+    it('並べ替えても、リンクは押せる(回答のモーダルが開く)。押した見出しにフォーカスが残る。タイトルの総キーワード数は変わらない', async () => {
       await open2();
       sortButton('occurrences').click();
       expect(document.activeElement).toBe(sortButton('occurrences'));
@@ -2153,6 +2159,7 @@ describe('🔑モーダルの左スワイプ削除', () => {
     deleteWithConfirm();
     await flush();
     expect(document.querySelector('[role="dialog"]')!.textContent).toContain('まだ検索キーが記録されていません。');
+    expect(document.querySelector('#muse-keys-title')!.textContent).toBe('🔑検索キーの出現回数 総キーワード数 : 0');
     expect(rows()).toHaveLength(0);
   });
   it('削除に失敗したら(503・通信の失敗・deleted が true でない200)、行は残し、理由を出す。成功の表示にしない。削除エリアは開いたまま、押し直せる', async () => {

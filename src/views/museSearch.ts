@@ -139,7 +139,7 @@ export const MUSE_SEARCH_SCRIPT = `
       var table = museSearchEl(doc, 'table', 'muse-keys-table muse-keys-list');
       var head = doc.createElement('thead');
       var headRow = doc.createElement('tr');
-      [['検索キー', 'searchKey'], ['AIチャットでの出現回数', 'aiChatCount'], ['tree-viewでの出現回数', 'treeViewCount'], ['検索回数', 'searchCount'], ['最後に検索した日時(日本時間)', 'lastSearchedAt']].forEach(function (column, index) {
+      [['検索キー', 'searchKey'], ['AIチャット', 'aiChatCount'], ['tree-view', 'treeViewCount'], ['検索回数', 'searchCount'], ['最後に検索した日時(日本時間)', 'lastSearchedAt']].forEach(function (column, index) {
         var th = museSearchEl(doc, 'th', index > 0 && index < 4 ? 'muse-keys-num' : '');
         th.setAttribute('scope', 'col');
         var active = sort.key === column[1];
@@ -159,8 +159,8 @@ export const MUSE_SEARCH_SCRIPT = `
       sortMuseKeys(keys, sort).forEach(function (item) {
         var row = doc.createElement('tr');
         row.appendChild(museKeysCell(doc, item.searchKey, 'muse-keys-key'));
-        row.appendChild(museKeysCell(doc, String(item.aiChatCount), 'muse-keys-num', 'AIチャットでの出現回数'));
-        var tree = museKeysCell(doc, item.treeViewCount === null ? '—' : String(item.treeViewCount), 'muse-keys-num', 'tree-viewでの出現回数');
+        row.appendChild(museKeysCell(doc, String(item.aiChatCount), 'muse-keys-num', 'AIチャット'));
+        var tree = museKeysCell(doc, item.treeViewCount === null ? '—' : String(item.treeViewCount), 'muse-keys-num', 'tree-view');
         if (item.treeViewCount === null) tree.title = 'tree-viewでの出現回数を取得できませんでした';
         row.appendChild(tree);
         row.appendChild(museKeysCell(doc, String(item.searchCount), 'muse-keys-num', '検索回数'));
@@ -626,7 +626,7 @@ export const MUSE_SEARCH_SCRIPT = `
       dialog.setAttribute('aria-modal', 'true');
       dialog.setAttribute('aria-labelledby', 'muse-keys-title');
       var head = museSearchEl(doc, 'div', 'muse-keys-head');
-      var title = museSearchEl(doc, 'h2', 'muse-keys-title', '検索キー(AIチャットでの出現回数の多い順)');
+      var title = museSearchEl(doc, 'h2', 'muse-keys-title', '🔑検索キーの出現回数');
       title.id = 'muse-keys-title';
       var close = museSearchEl(doc, 'button', 'muse-keys-close', '✕');
       close.type = 'button';
@@ -779,6 +779,7 @@ export const MUSE_SEARCH_SCRIPT = `
           closeDeleteConfirm(false);
           if (r.ok && r.data && r.data.deleted === true) {
             keysData = keysData.filter(function (entry) { return entry !== item; });
+            totalKeywords = Math.max(0, totalKeywords - 1);
             if (view === 'keys') showKeysData();
             else closeSwipe();
             return;
@@ -871,14 +872,13 @@ export const MUSE_SEARCH_SCRIPT = `
       // 表示の切り替え。遅れて届いた応答が、いま見ている画面を上書きしないよう、番号で最新の要求だけを反映する。
       var view = 'keys';
       var requestNumber = 0;
-      var KEYS_TITLE = '検索キー(AIチャットでの出現回数の多い順)';
-      var KEYS_SORT_LABELS = { searchKey: '検索キー', aiChatCount: 'AIチャットでの出現回数', treeViewCount: 'tree-viewでの出現回数', searchCount: '検索回数', lastSearchedAt: '最後に検索した日時' };
-      // 検索キーの並べ替えの基準。最初は、AIチャットでの出現回数の降順(これまでと同じ)。🗒️へ切り替えて戻っても覚えている(モーダルを閉じたら最初に戻る)。
+      var KEYS_TITLE = '🔑検索キーの出現回数';
+      // 検索キーは初期状態で AI チャットの出現回数の降順。回答一覧から戻っても並べ替えを保持する。
       var keysSort = { key: 'aiChatCount', dir: 'desc' };
       var keysData = null;
+      var totalKeywords = null;
       function keysTitle() {
-        if (keysSort.key === 'aiChatCount' && keysSort.dir === 'desc') return KEYS_TITLE;
-        return '検索キー(' + KEYS_SORT_LABELS[keysSort.key] + 'の' + (keysSort.dir === 'asc' ? '昇順' : '降順') + ')';
+        return totalKeywords === null ? KEYS_TITLE : KEYS_TITLE + ' 総キーワード数 : ' + totalKeywords;
       }
       function buildKeys() {
         var scroll = museSearchEl(doc, 'div', 'muse-keys-scroll');
@@ -891,7 +891,6 @@ export const MUSE_SEARCH_SCRIPT = `
         if (keysSort.key === key) keysSort.dir = keysSort.dir === 'asc' ? 'desc' : 'asc';
         else { keysSort.key = key; keysSort.dir = 'desc'; }
         show(buildKeys());
-        title.textContent = keysTitle();
         var again = content.querySelector('button[data-sort-key="' + key + '"]');
         if (again) again.focus();
       }
@@ -936,9 +935,12 @@ export const MUSE_SEARCH_SCRIPT = `
       }
       function showKeys() {
         markView('keys');
+        totalKeywords = null;
         title.textContent = keysTitle();
         load('/api/muse-search/keys', '検索キーの一覧を読み込めませんでした', function (data) {
           keysData = data.keys;
+          totalKeywords = data.totalKeywords ?? keysData.length;
+          title.textContent = keysTitle();
           return keysNode();
         });
       }
@@ -946,7 +948,10 @@ export const MUSE_SEARCH_SCRIPT = `
         if (keysData.length === 0) return museSearchEl(doc, 'p', 'muse-search-status', 'まだ検索キーが記録されていません。');
         return buildKeys();
       }
-      function showKeysData() { show(keysNode()); }
+      function showKeysData() {
+        title.textContent = keysTitle();
+        show(keysNode());
+      }
       function showAnswers() {
         markView('answers');
         title.textContent = answersTitle();

@@ -20876,7 +20876,7 @@ app.get('/api/muse-search/keys', authMiddleware, cfDashboardAdminMiddleware, asy
   const error = '検索キーの一覧を読めませんでした';
   if (!c.env.DB) return c.json({ error, detail: 'D1(DB)が未設定です' }, 503);
   try {
-    return c.json({ keys: await listMuseSearchKeys(c.env.DB, c.get('user').sub) });
+    return c.json(await listMuseSearchKeys(c.env.DB, c.get('user').sub));
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     logger.error('muse-search: 検索キーの一覧を読めませんでした', { error: detail });
