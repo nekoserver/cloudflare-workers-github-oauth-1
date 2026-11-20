@@ -400,6 +400,38 @@ dynamicneko は全ルートの前に、オーナーのセッションを要求�
 - `GET /api/muse-search/thread` の `paragraphs` は文字列配列から区間配列に変わった。
 - 0198を流したあと、ほかのユーザーにはキーが見えなくなる(意図どおり)。
 
+## スレッド検索の記録(2026-11-20)
+
+**対象**: D1 `muse_thread_search_log`(マイグレーション0199)、`POST /api/muse-search/thread-search`、`/muse-search` のスレッド一覧の検索窓 — スレッド検索(タイトルの絞り込み)で、検索したキー・ヒット件数・ヒットしたスレッドIDを記録する。
+
+### 背景
+
+スレッド一覧の検索窓はブラウザ側だけで絞り込み、記録が残らなかった。通常の検索キーの記録(`muse_search_key_log`)とは別の表に、スレッド検索だけの記録を残す。
+
+### 仕様
+
+| 項目 | 内容 |
+|---|---|
+| 記録する値 | 検索キー(前後の空白を除き小文字)・ヒット件数・スレッドID(JSON配列)・検索日時・ログインユーザー |
+| 件数 | サーバーが重複を除いたスレッドIDの数から作る(クライアントの値は受け取らない) |
+| 送るタイミング | 入力が止まって800ms後、またはEnterですぐ。空の検索と、直前に記録したのと同じキーは送らない |
+| ヒット0件 | 記録する(件数0・スレッドIDは空の配列) |
+| 失敗 | 400(不正な入力)・503(D1の障害・未設定)で理由を返す。画面は絞り込みを止めず、理由つきで注記する |
+
+### 修正内容
+
+| ファイル | 内容 |
+|---|---|
+| `migrations/0199_create_muse_thread_search_log.sql` | 新テーブル(利用者がD1で実行する) |
+| `src/utils/museThreadSearchLog.ts` | `recordThreadSearch`(ok/errorCodeの型で結果を返す) |
+| `src/index.ts` | ルート追加。5つのレジストリ(STATUS_TABLE_DEFINITIONS・STATUS_MIGRATION_SQL・TABLE_COLUMN_KEYS・TABLE_GROUP_MAP・COLUMN_FK_TARGETS)に登録 |
+| `src/views/museSearch.ts` | 検索窓の入力・Enterで記録を送り、失敗を注記する |
+
+### 注意事項
+
+- 🔑モーダルなど、記録を読んで見せる画面は、今回は作っていない。
+- 0199をD1で実行するまで、記録は503(`no such table`)になり、画面に理由が出る。
+
 ## 関連
 
 - dynamicneko の PR(出現回数): [nekoserver/dynamicneko#459](https://github.com/nekoserver/dynamicneko/pull/459)

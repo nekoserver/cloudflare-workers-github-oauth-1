@@ -748,6 +748,8 @@ export const MUSE_SEARCH_SCRIPT = `
       if (data.truncated) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '本文が長いため、途中までを表示しています。'));
       return wrap;
     }
+    // スレッド検索の記録を送るまでの待ち(入力が止まってから)。
+    var MUSE_THREAD_SEARCH_LOG_DELAY_MS = 800;
     // 同時に取りにいく数の上限。「全開」で多数のスレッドを開いても、一度に何十本も送らない。
     function createMuseSemaphore(limit) {
       var active = 0;
@@ -865,6 +867,37 @@ export const MUSE_SEARCH_SCRIPT = `
           var allOpen = visible.length > 0 && visible.every(function (entry) { return isMuseThreadOpen(entry.link); });
           toggleAll.textContent = allOpen ? '全閉' : '全開';
         }
+        // スレッド検索の記録(2026-11-20、ユーザー指定): 検索したキーと、ヒットしたスレッドIDをサーバーへ送る(件数はサーバーが数える)。
+        // 入力のたびには送らない。入力が止まって MUSE_THREAD_SEARCH_LOG_DELAY_MS 後、またはEnterですぐ。空の検索と、直前に記録したのと同じキーは送らない。
+        // 失敗は、絞り込みを止めずに、理由つきで画面に出す(握りつぶさない)。
+        var logNote = museSearchEl(doc, 'p', 'muse-thread-meta muse-thread-search-log-error');
+        logNote.hidden = true;
+        tools.appendChild(logNote);
+        var logTimer = null;
+        var lastLoggedKey = '';
+        function showLogError(message) {
+          logNote.textContent = 'スレッド検索を記録できませんでした: ' + message;
+          logNote.hidden = false;
+        }
+        function recordThreadSearchNow() {
+          if (logTimer !== null) { clearTimeout(logTimer); logTimer = null; }
+          var key = filter.value.trim();
+          if (key === '' || key.toLowerCase() === lastLoggedKey) return;
+          lastLoggedKey = key.toLowerCase();
+          var threadIds = visibleItems().map(function (entry) { return entry.link.getAttribute('data-thread-id'); });
+          Promise.resolve().then(function () {
+            return fetchFn('/api/muse-search/thread-search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: key, threadIds: threadIds }) });
+          }).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (body) { return { ok: res.ok, status: res.status, body: body }; });
+          }).then(function (r) {
+            if (r.ok && r.body && r.body.recorded === true) { logNote.hidden = true; logNote.textContent = ''; return; }
+            lastLoggedKey = '';
+            showLogError((r.body && (r.body.detail || r.body.error)) ? (r.status + ' ' + (r.body.detail || r.body.error)) : String(r.status));
+          }).catch(function (error) {
+            lastLoggedKey = '';
+            showLogError(error && error.message ? error.message : String(error));
+          });
+        }
         filter.addEventListener('input', function () {
           var query = filter.value.trim().toLowerCase();
           items.forEach(function (entry) {
@@ -872,6 +905,11 @@ export const MUSE_SEARCH_SCRIPT = `
           });
           noMatch.hidden = query === '' || visibleItems().length > 0;
           updateToggleAll();
+          if (logTimer !== null) { clearTimeout(logTimer); logTimer = null; }
+          if (query !== '') logTimer = setTimeout(recordThreadSearchNow, MUSE_THREAD_SEARCH_LOG_DELAY_MS);
+        });
+        filter.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') { event.preventDefault(); recordThreadSearchNow(); }
         });
         toggleAll.addEventListener('click', function () {
           var visible = visibleItems();

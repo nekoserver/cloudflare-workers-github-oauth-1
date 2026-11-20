@@ -499,6 +499,7 @@ import { getMuseStatusPage, MUSE_STATUS_CSP } from './views/museStatus';
 import { MUSE_SEARCH_CSP, getMuseSearchPage } from './views/museSearch';
 import { MUSE_SEARCH_MAX_QUERY, parseMuseSearchQuery, searchMuseConversations, toMuseSearchResultItems } from './utils/museConversationSearch';
 import { listMuseSearchKeys, listViewerKeywords, recordSearchedKey } from './utils/museSearchKeys';
+import { recordThreadSearch } from './utils/museThreadSearchLog';
 import { listMuseAnswersByChat, recordSearchedAnswers } from './utils/museSearchAnswers';
 import { MUSE_HANDLE_MESSAGES, checkHandleAvailability, getHandle, registerHandle } from './utils/museHandles';
 import { MUSE_THREAD_ID_MAX, fetchMuseThreadLast, fetchMuseThreadList, highlightParagraphs, toParagraphs } from './utils/museThreads';
@@ -721,6 +722,7 @@ export const STATUS_TABLE_DEFINITIONS: StatusTableDefinition[] = [
   { name: 'muse_search_key_log', migration: '0195', description: '/muse-searchの検索キーの記録(追記のみ)。検索キー・AIチャットの応答ログでの出現回数・tree-viewの会話ログでの出現回数・検索日時。🔑ボタンの一覧はここから作る', syncPolicy: 'auto' },
   { name: 'muse_search_answer_log', migration: '0196', description: '/muse-searchの回答ごとの出現回数の記録(追記のみ)。検索キー・回答ID・チャットID・スレッドID・回答内での出現回数・一致箇所の前後・検索日時。🗒️ボタンのスレッドごとの一覧はここから作る', syncPolicy: 'auto' },
   { name: 'muse_user_handles', migration: '0197', description: '/muse-searchのハンドルネーム(1人1つ)。ユーザーID・ユーザー名(このアプリへのログインユーザー)・ハンドルネーム・照合用のキー(大文字小文字・全角半角を無視。UNIQUE)。👤ボタンで登録・変更する', syncPolicy: 'auto' },
+  { name: 'muse_thread_search_log', migration: '0199', description: '/muse-searchのスレッド検索(スレッド一覧のタイトルの絞り込み)の記録(追記のみ)。検索キー・ヒット件数・ヒットしたスレッドID(JSON配列)・検索日時', syncPolicy: 'auto' },
   { name: 'conversation_stream_hosts', migration: '0194', description: '会話ストリームの接続先の上書き。台帳(conversation-stream-routes.json)が既定で、同じIDの上書き・追加・無効化だけを持つ', syncPolicy: 'auto' },
   { name: 'cf_container_session_targets', migration: '0187', description: '任意の対象物と稼働セッションの関連', syncPolicy: 'auto' },
   { name: 'cf_container_runtime_notes', migration: '0187', description: 'セッション内の複数作業・目的・分類・使用ツールと追記型改訂履歴', syncPolicy: 'auto' },
@@ -3260,6 +3262,16 @@ CREATE INDEX IF NOT EXISTS idx_muse_search_key_log_user_key
 CREATE INDEX IF NOT EXISTS idx_muse_search_answer_log_user_answer_key
   ON muse_search_answer_log(user_id, answer_id, search_key, id DESC);`,
   '0197': `CREATE TABLE IF NOT EXISTS muse_user_handles (user_id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(user_id)) > 0), user_name TEXT NOT NULL CHECK (length(trim(user_name)) > 0), handle_name TEXT NOT NULL CHECK (length(trim(handle_name)) > 0 AND length(handle_name) <= 40), handle_key TEXT NOT NULL UNIQUE CHECK (length(handle_key) > 0), created_at TEXT NOT NULL, updated_at TEXT NOT NULL);`,
+  '0199': `CREATE TABLE IF NOT EXISTS muse_thread_search_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  search_key TEXT NOT NULL CHECK (length(trim(search_key)) > 0 AND length(search_key) <= 500),
+  hit_count INTEGER NOT NULL CHECK (typeof(hit_count) = 'integer' AND hit_count >= 0),
+  thread_ids TEXT NOT NULL,
+  searched_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_muse_thread_search_log_user_id
+  ON muse_thread_search_log(user_id, id DESC);`,
   '0194': `CREATE TABLE IF NOT EXISTS conversation_stream_hosts (
   id TEXT PRIMARY KEY NOT NULL,
   label TEXT NOT NULL,
@@ -3728,6 +3740,7 @@ export const TABLE_COLUMN_KEYS: Record<string, ColumnKeyInfo> = {
   muse_search_key_log: { id: 'pk', user_id: 'fk+idx', search_key: 'idx' },
   muse_search_answer_log: { id: 'pk', user_id: 'fk+idx', search_key: 'idx', answer_id: 'idx' },
   muse_user_handles: { user_id: 'pk+fk', handle_key: 'uk' },
+  muse_thread_search_log: { id: 'pk', user_id: 'fk+idx' },
   cf_container_session_targets: { session_id: 'pk+fk', target_id: 'pk+fk' },
   cf_container_runtime_notes: { note_id: 'pk', session_id: 'uk+fk', entry_key: 'uk', revision: 'uk' },
   cf_container_cost_observations: { cost_record_id: 'pk', session_id: 'uk+fk', cost_key: 'uk', revision: 'uk', source: 'uk', source_ref: 'uk' },
@@ -3974,6 +3987,7 @@ export const TABLE_GROUP_MAP: Record<string, string> = {
   muse_search_key_log: 'ai',
   muse_search_answer_log: 'ai',
   muse_user_handles: 'config',
+  muse_thread_search_log: 'ai',
   cf_container_session_targets: 'system',
   cf_container_runtime_notes: 'system',
   cf_container_cost_observations: 'system',
@@ -4301,6 +4315,7 @@ export const COLUMN_FK_TARGETS: Record<string, Record<string, string>> = {
   muse_search_key_log: { user_id: 'user_sessions' },
   muse_search_answer_log: { user_id: 'user_sessions' },
   muse_user_handles: { user_id: 'user_sessions' },
+  muse_thread_search_log: { user_id: 'user_sessions' },
   aichat_search_log: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_history: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
   aichat_search_impressions: { user_id: 'user_sessions', share_id: 'ai_chat_shares' },
@@ -21017,6 +21032,23 @@ app.post('/api/muse-search/handle', authMiddleware, cfDashboardAdminMiddleware, 
   if (result.errorCode === 'taken' || result.errorCode === 'same') return c.json({ status: result.errorCode, error: MUSE_HANDLE_MESSAGES[result.errorCode] }, 409);
   if (result.errorCode === 'user_name_missing') return c.json({ status: result.errorCode, error: 'ユーザー名を取得できませんでした' }, 400);
   return c.json({ status: result.errorCode, error: MUSE_HANDLE_MESSAGES[result.errorCode] }, 400);
+});
+
+// スレッド検索(スレッド一覧のタイトルの絞り込み)の記録(2026-11-20、ユーザー指定)。検索キー・ヒット件数・スレッドIDを、ログインユーザー本人の行として追記する。
+app.post('/api/muse-search/thread-search', authMiddleware, cfDashboardAdminMiddleware, async (c) => {
+  c.header('Cache-Control', 'no-store');
+  if (!(c.req.header('Content-Type') ?? '').toLowerCase().startsWith('application/json')) return c.json({ error: 'JSONで送ってください' }, 415);
+  let body: unknown;
+  try { body = await c.req.json(); } catch { return c.json({ error: '本文が壊れています' }, 400); }
+  const input = body && typeof body === 'object' && !Array.isArray(body) ? body as { key?: unknown; threadIds?: unknown } : {};
+  if (typeof input.key !== 'string' || !Array.isArray(input.threadIds)) return c.json({ error: 'key(文字)とthreadIds(配列)が必要です' }, 400);
+  const result = await recordThreadSearch(c.env.DB, { userId: c.get('user').sub, key: input.key, threadIds: input.threadIds as string[] });
+  if (result.ok) return c.json({ recorded: true, hitCount: result.value.hitCount });
+  if (result.errorCode === 'db_missing' || result.errorCode === 'db_error') {
+    logger.error('muse-search: スレッド検索を記録できませんでした', { error: result.detail });
+    return c.json({ recorded: false, errorCode: result.errorCode, detail: result.detail }, 503);
+  }
+  return c.json({ recorded: false, errorCode: result.errorCode, detail: result.detail }, 400);
 });
 
 app.get('/muse-status', authMiddleware, cfDashboardAdminMiddleware, (c) => {
