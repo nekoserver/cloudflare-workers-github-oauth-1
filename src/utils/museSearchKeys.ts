@@ -60,6 +60,21 @@ export async function listMuseSearchKeys(db: D1Database, userId: string, limit =
   return result.results;
 }
 
+export const MUSE_VIEWER_KEYWORDS_LIMIT = 500;
+
+/**
+ * スレッド一覧の回答に、強調する、閲覧ユーザーが持つキーワード(2026-11-19、ユーザー指定)。
+ * そのユーザーの検索キーの記録(muse_search_key_log)のキーだけを、重複なく、最後に検索した新しい順に返す。**他のユーザーのキーは使わない**(user_id で絞る)。
+ * 読めなかったときは例外にする(空にしない。呼び出し側が、理由つきで扱う)。
+ */
+export async function listViewerKeywords(db: D1Database, userId: string, limit = MUSE_VIEWER_KEYWORDS_LIMIT): Promise<string[]> {
+  const max = Math.min(Math.max(Math.floor(limit) || 1, 1), MUSE_VIEWER_KEYWORDS_LIMIT);
+  const result = await db.prepare(
+    'SELECT search_key AS searchKey FROM muse_search_key_log WHERE user_id = ?1 GROUP BY search_key ORDER BY MAX(id) DESC LIMIT ?2',
+  ).bind(userId, max).all<{ searchKey: string }>();
+  return result.results.map((row) => row.searchKey);
+}
+
 export type MuseSearchKeyLogResult =
   | { keyLogged: true; aiChatCount: number; treeViewCount: number | null }
   | { keyLogged: false; keyLogError: string; aiChatCount: number | null; treeViewCount: number | null };

@@ -5,7 +5,7 @@
 //   2. 上流から来た一覧・最終書き込みの形が違えば通さない。
 //   3. 署名付きで、スレッドIDをエンコードしたパスを呼ぶ。未設定・上流の失敗・形式違いは、理由つきの失敗(空の一覧にしない)。
 import { describe, expect, it, vi } from 'vitest';
-import { fetchMuseThreadLast, fetchMuseThreadList, isMuseThreadLast, isMuseThreadList, toParagraphs } from './museThreads';
+import { fetchMuseThreadLast, fetchMuseThreadList, highlightParagraphs, isMuseThreadLast, isMuseThreadList, toParagraphs } from './museThreads';
 
 describe('toParagraphs', () => {
   it('空行で段落に分ける。段落の中の改行は残す', () => {
@@ -64,5 +64,27 @@ describe('fetchMuseThreadList / fetchMuseThreadLast', () => {
     expect(down).toMatchObject({ ok: false, errorCode: 'http_error', detail: expect.stringContaining('503') });
     expect(await fetchMuseThreadList({ fetch: vi.fn(async () => Response.json({ threads: 'x' })) }, 's')).toMatchObject({ ok: false, errorCode: 'invalid_response' });
     expect(await fetchMuseThreadLast({ fetch: vi.fn(async () => Response.json({ error: 'x' }, { status: 404 })) }, 's', 'a')).toMatchObject({ ok: false, errorCode: 'http_error' });
+  });
+});
+
+// 各回答(スレッドの最終書き込み)に、閲覧ユーザーが持つキーワードを強調する(2026-11-19、ユーザー指定)。
+describe('highlightParagraphs', () => {
+  const hits = (segments: Array<{ text: string; hit: boolean }>) => segments.filter((x) => x.hit).map((x) => x.text);
+  it('段落ごとに、キーワードに一致した箇所だけを強調した区間にする(大文字小文字を区別せず、元の文字のまま)。つなぐと元の段落に戻る', () => {
+    const result = highlightParagraphs(['Workers の Static Assets', '二段落目に static と ASSETS'], ['static', 'assets']);
+    expect(result).toHaveLength(2);
+    expect(hits(result[0])).toEqual(['Static', 'Assets']);
+    expect(hits(result[1])).toEqual(['static', 'ASSETS']);
+    expect(result[0].map((x) => x.text).join('')).toBe('Workers の Static Assets');
+    expect(result[1].map((x) => x.text).join('')).toBe('二段落目に static と ASSETS');
+  });
+  it('キーワードが無ければ、強調せず、段落ごとに1つの区間のまま。段落が無ければ空', () => {
+    expect(highlightParagraphs(['一段落', '二段落'], [])).toEqual([[{ text: '一段落', hit: false }], [{ text: '二段落', hit: false }]]);
+    expect(highlightParagraphs([], ['x'])).toEqual([]);
+  });
+  it('段落の中の改行は残る。段落をまたぐキーワードは、強調しない(段落ごとに照合する)', () => {
+    const result = highlightParagraphs(['行1\n行2', 'ねこ'], ['行1\n行2', '1\n2', 'こね']);
+    expect(hits(result[0])).toEqual(['行1\n行2']);
+    expect(hits(result[1])).toEqual([]);
   });
 });

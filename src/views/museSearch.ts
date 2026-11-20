@@ -734,9 +734,17 @@ export const MUSE_SEARCH_SCRIPT = `
     function renderMuseThreadLast(doc, data) {
       var wrap = museSearchEl(doc, 'div', 'muse-thread-body');
       wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '最終書き込み: ' + formatMuseSearchTime(data.createdAt) + '・' + (MUSE_THREAD_ROLE_LABELS[data.role] || data.role) + '・チャット ' + data.chatId));
-      data.paragraphs.forEach(function (paragraph) {
-        wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-paragraph', paragraph));
+      // 各段落は、強調の区間(サーバーが、閲覧ユーザーが持つキーワードで計算済み)の並び。強調(hit)は <mark>、それ以外は文字。文字は textContent だけで入れる。
+      data.paragraphs.forEach(function (segments) {
+        var paragraph = museSearchEl(doc, 'p', 'muse-thread-paragraph');
+        segments.forEach(function (segment) {
+          if (segment.hit) paragraph.appendChild(museSearchEl(doc, 'mark', '', segment.text));
+          else paragraph.appendChild(doc.createTextNode(segment.text));
+        });
+        wrap.appendChild(paragraph);
       });
+      // 強調に使うキーワードを読めなかったときは、本文は出したまま、強調なしであることと、その理由を伝える(強調なしを「正常」に見せない)。
+      if (data.highlightError) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta muse-thread-highlight-error', 'キーワードの強調は、できませんでした: ' + data.highlightError));
       if (data.truncated) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '本文が長いため、途中までを表示しています。'));
       return wrap;
     }
@@ -1069,6 +1077,7 @@ export function getMuseSearchPage(): string {
     .muse-thread-link { color: var(--accent-color); text-decoration: none; overflow-wrap: anywhere; }
     .muse-thread-last { margin: 6px 0 4px 4px; padding: 6px 0 2px 12px; border-left: 2px solid var(--border-color); color: var(--text-primary); }
     .muse-thread-meta { margin: 0 0 8px; font-size: 12px; color: var(--text-secondary); }
+    .muse-thread-paragraph mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
     .muse-thread-paragraph { margin: 0 0 10px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
     .muse-search-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
     .muse-search-item { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; min-width: 0; }

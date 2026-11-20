@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createD1, createMuseSearchKeysSqlite } from './museSearchKeys.testdb';
-import { countAiChatOccurrences, listMuseSearchKeys, recordMuseSearchKey } from './museSearchKeys';
+import { countAiChatOccurrences, listMuseSearchKeys, listViewerKeywords, recordMuseSearchKey } from './museSearchKeys';
 
 function setup() {
   const sqlite = createMuseSearchKeysSqlite();
@@ -136,5 +136,35 @@ describe('listMuseSearchKeys(🔑モーダルの一覧)', () => {
     expect((await listMuseSearchKeys(db, 'u1')).map((k) => k.searchKey)).not.toContain('theirs');
     expect(await listMuseSearchKeys(db, 'u1', 3)).toHaveLength(3);
     expect(await listMuseSearchKeys(db, 'nobody')).toEqual([]);
+  });
+});
+
+// スレッド一覧の回答に、閲覧ユーザーが持つキーワードを強調する(2026-11-19、ユーザー指定)。
+// 「そのユーザーが持つキーワード」は、そのユーザーの検索キーの記録(muse_search_key_log)のキー。他のユーザーのキーは使わない。
+describe('listViewerKeywords(強調に使う、閲覧ユーザーのキーワード)', () => {
+  const record = (db: D1Database, userId: string, key: string, at: string) => recordMuseSearchKey(db, { userId, key, aiChatCount: 1, treeViewCount: null, searchedAt: at });
+  it('そのユーザーのキーだけを、重複なく、最後に検索した新しい順に返す。他のユーザーのキーは入れない', async () => {
+    const { db } = setup();
+    await record(db, 'u1', 'alpha', '2026-11-19T01:00:00Z');
+    await record(db, 'u1', 'beta', '2026-11-19T02:00:00Z');
+    await record(db, 'u1', 'alpha', '2026-11-19T03:00:00Z');
+    await record(db, 'u2', 'secret', '2026-11-19T04:00:00Z');
+    await record(db, 'u2', 'beta', '2026-11-19T05:00:00Z');
+    expect(await listViewerKeywords(db, 'u1')).toEqual(['alpha', 'beta']);
+    expect(await listViewerKeywords(db, 'u2')).toEqual(['beta', 'secret']);
+    expect(await listViewerKeywords(db, 'nobody')).toEqual([]);
+  });
+  it('上限を超えない(新しいキーを優先して残す)。0以下・小数・大きすぎる上限は、範囲に丸める', async () => {
+    const { db } = setup();
+    for (let i = 0; i < 5; i++) await record(db, 'u1', 'k' + i, `2026-11-19T0${i}:00:00Z`);
+    expect(await listViewerKeywords(db, 'u1', 2)).toEqual(['k4', 'k3']);
+    expect(await listViewerKeywords(db, 'u1', 0)).toEqual(['k4']);
+    expect(await listViewerKeywords(db, 'u1', 1.9)).toEqual(['k4']);
+    expect((await listViewerKeywords(db, 'u1', 100000)).length).toBe(5);
+  });
+  it('読めなかったときは、空にせず例外にする(呼び出し側が、理由つきで扱う)', async () => {
+    const sqlite = createMuseSearchKeysSqlite();
+    const db = createD1(sqlite, { failOn: /FROM muse_search_key_log/ });
+    await expect(listViewerKeywords(db, 'u1')).rejects.toThrow('d1 down');
   });
 });
