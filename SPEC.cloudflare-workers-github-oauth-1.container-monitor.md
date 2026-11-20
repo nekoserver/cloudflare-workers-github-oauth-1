@@ -20,7 +20,7 @@ Cloudflare一覧は `/containers/applications` と各 `/instances-v2` のペー�
 
 ## WASM成果物
 
-公式 `@tailscale/connect@1.102.3-3-tb31d8a75a-g5e651e16f` を利用。npm配布物のSHA512 integrityを照合し、圧縮WASMとJSを `public/tailscale-connect/1.102.3-3/` に配置した。独自のTailscaleソースビルドやDockerビルドは行っていない。build-info.jsonに出典とチェックサムを記録し、ライセンスを同梱。
+公式 `@tailscale/connect@1.105.194-ta967b7d81-ged5f6de49` を利用する。npm 配布物の SHA-512 integrity を照合し、配布済みの最適化 WASM を Cloudflare 静的アセットのサイズ上限に収まるよう gzip 圧縮する。圧縮 WASM と JS は `public/tailscale-connect/1.105.194/` に配置し、出典と SHA-256 を `build-info.json` に記録する。上流の `raw_wasm_sha256` は最適化前の値として記録する。ライセンスを同梱する。
 
 `node scripts/sync-tailscale-connect.mjs` で同じ公式配布物を取得・照合・復元できる。`public/_headers` で圧縮ファイルをapplication/gzipとして配信する。読み込み側はHTTPの転送圧縮とファイル自体のgzipを区別し、必要時にDecompressionStreamで展開してWASMヘッダを確認した後、application/wasmのBlobからSDKを初期化する。HTTPの自動展開済みデータにも対応する。バイナリはWorkerの実行モジュールではなく静的アセットであり、ページから必要時に読み込む。ページのCSPでWASMとTailscaleのHTTPS/WebSocket接続を許可する。
 

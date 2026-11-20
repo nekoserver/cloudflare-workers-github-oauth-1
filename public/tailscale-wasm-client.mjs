@@ -1,6 +1,6 @@
 // 公式@tailscale/connectのブラウザ用WASMを読み込む共通処理。/container-monitorと/muse-statusが使う。
 // 配布物はpublic/tailscale-connect/<版>/に置き、出典とsha256はbuild-info.jsonにある。
-export const TAILSCALE_WASM_ROOT = '/tailscale-connect/1.102.3-3';
+export const TAILSCALE_WASM_ROOT = '/tailscale-connect/1.105.194';
 
 /** ファイル自体のgzipとHTTPの転送圧縮を区別して展開し、WASMのヘッダを確かめる。 */
 export async function decodeTailscaleWasm(input) {
