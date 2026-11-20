@@ -2366,6 +2366,26 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect([...posts[1].querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Static']);
     expect(posts[0].querySelectorAll('mark')).toHaveLength(0);
   });
+  it('複数回答では最新の本文だけを開き、以前の回答は見出しから開ける', async () => {
+    const [question, latest] = chatBody().posts;
+    const older = { ...latest, createdAt: 120, paragraphs: [[seg('以前の回答')]] };
+    await open(json(chatBody({ posts: [question, latest, older] })));
+    link().click();
+    await flush();
+
+    const questionBox = modal()!.querySelector('.muse-chat-post[data-role="user"]')!;
+    expect(questionBox.querySelector('p.muse-thread-paragraph')?.textContent).toBe('静的アセットとは?');
+    const answers = [...modal()!.querySelectorAll<HTMLDetailsElement>('details.muse-chat-post[data-role="assistant"]')];
+    expect(answers.map((answer) => answer.open)).toEqual([true, false]);
+    const heading = answers[1].querySelector('summary')!;
+    expect(heading.textContent).toContain('回答');
+    expect(heading.textContent).toContain(script.formatMuseSearchTime(120));
+    expect(heading.textContent).not.toContain('以前の回答');
+    heading.click();
+    expect(answers[1].open).toBe(true);
+    expect(answers[1].querySelector('p.muse-thread-paragraph')?.textContent).toBe('以前の回答');
+  });
+
   it('読み込み中の表示を出す。サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す(強調の中も)', async () => {
     const evil = '<img src=x onerror="window.__xss=1">';
     let release!: (res: Response) => void;
@@ -2432,9 +2452,10 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     const start = html.indexOf('<style id="muse-search-style">');
     const style = html.slice(start, html.indexOf('</style>', start));
     expect(style).toMatch(/\.muse-chat-link \{[^}]*var\(--/);
+    expect(style).toMatch(/\.muse-chat-link \{[^}]*text-decoration: none/);
     // 実ブラウザ(スマホ幅)で見つけた表示: タップしたリンクのハイライトが、開いたモーダルの上に、青い四角として透けて見えた。
     expect(style).toMatch(/\.muse-chat-link \{[^}]*-webkit-tap-highlight-color: transparent/);
-    expect(style).toMatch(/\.muse-chat-post \{[^}]*border[^}]*var\(--/);
+    expect(style).toMatch(/\.muse-chat-post \{[^}]*\bborder: 1px solid var\(--/);
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 });
