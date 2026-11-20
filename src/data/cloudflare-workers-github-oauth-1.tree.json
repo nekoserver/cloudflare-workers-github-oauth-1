@@ -3,6 +3,10 @@
   "type": "dir",
   "children": [
     {
+      "name": "AGENT.md",
+      "type": "file"
+    },
+    {
       "name": "AGENTS.md",
       "type": "file"
     },
@@ -43,6 +47,14 @@
       "type": "file"
     },
     {
+      "name": "DEPLOYMENT-STATE.md",
+      "type": "file"
+    },
+    {
+      "name": "DOCKER_DASHBOARD.md",
+      "type": "file"
+    },
+    {
       "name": "DRAFT.SPEC.cloudflare-workers-github-oauth-1.adminmode.md",
       "type": "file"
     },
@@ -51,7 +63,15 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260313.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.20260316.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260316.opus-5.5.20261119.md",
       "type": "file"
     },
     {
@@ -59,11 +79,55 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260904.public-keys.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260913.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.20260914.md",
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260914.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20260924.auto-explore.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.20261011.judgment-models-current-state.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20261011.judgment-models-overview.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20261114.apache-websocket-proxy.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20261114.apache-websocket-proxy.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20261114.fixed-domain-ingress-worker-assets.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.20261114.fixed-domain-ingress-worker-assets.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.COMMITDB.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.Dockerfile.20261018.md",
       "type": "file"
     },
     {
@@ -79,6 +143,10 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.ai-jev.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.aichat-page.20260924.md",
       "type": "file"
     },
@@ -87,7 +155,15 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.askgk-settings-alias.20261003.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.askgk-slack-support.20261003.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260911.opus-5.5.20261119.md",
       "type": "file"
     },
     {
@@ -99,11 +175,47 @@
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.container-image-explicit-build.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.container-image-explicit-build.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.cursor-agent.md",
       "type": "file"
     },
     {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.cursor-agent.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.jev-recursive-drilldown.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.lib-proxy-identity.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.lib-proxy-identity.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.port-route-registry.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.port-route-registry.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
       "name": "EVAL.cloudflare-workers-github-oauth-1.public-keys.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.security.20261104.md",
       "type": "file"
     },
     {
@@ -112,6 +224,18 @@
     },
     {
       "name": "EVAL.cloudflare-workers-github-oauth-1.table-catalog-jev.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.table-catalog-jev.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cloudflare-workers-github-oauth-1.table-catalog.opus-5.5.20261119.md",
+      "type": "file"
+    },
+    {
+      "name": "EVAL.cursor-agent.opus-5.5.20261119.md",
       "type": "file"
     },
     {
@@ -131,11 +255,19 @@
       "type": "file"
     },
     {
+      "name": "ISSUE.CONNECTION-TARGET-RESOLUTION.md",
+      "type": "file"
+    },
+    {
       "name": "ISSUE.cloudflare-workers-github-oauth-1.295.md",
       "type": "file"
     },
     {
       "name": "ISSUES.cloudflare-workers-github-oauth-1.20260525.md",
+      "type": "file"
+    },
+    {
+      "name": "NETWORK-STREAM-SETUP.md",
       "type": "file"
     },
     {
@@ -275,7 +407,111 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261017.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261019.npm12.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261031.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261104.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261106.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261107.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261110.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261111.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261112.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261113.tree-view-worker-stream.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261114.apache-proxy-wstunnel.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261114.hook-test-limits.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261115.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.claude-native-sha.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.codex-gh-bump.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.dockerfile-version-assertions.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.explicit-container-build.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.installed-baseline-refresh.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.kw-midcat-toggle.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.premise-check-lock.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.restart-log-blink.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.tunnels-envcheck.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261118.version-refresh.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261119.entrypoint-envvars-nounset.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.20261119.tailnet-flag-clobber.md",
+      "type": "file"
+    },
+    {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.COMMITDB.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.DOMAIN-ASSIGNMENTS.20261024.md",
       "type": "file"
     },
     {
@@ -299,6 +535,10 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.agent-inquiries.20261107.md",
+      "type": "file"
+    },
+    {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.aichat.20260808.md",
       "type": "file"
     },
@@ -315,7 +555,15 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.database-extensions-20261022.md",
+      "type": "file"
+    },
+    {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.github-webhook-slack.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.hono.md",
       "type": "file"
     },
     {
@@ -328,6 +576,14 @@
     },
     {
       "name": "NOTICE.cloudflare-workers-github-oauth-1.mtest.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.muse-agent.20261107.md",
+      "type": "file"
+    },
+    {
+      "name": "NOTICE.cloudflare-workers-github-oauth-1.muse-status-wasm.20261107.md",
       "type": "file"
     },
     {
@@ -367,6 +623,10 @@
       "type": "file"
     },
     {
+      "name": "NOTICE.openssh-update.20261106.md",
+      "type": "file"
+    },
+    {
       "name": "PLAN.cloudflare-workers-github-oauth-1.20260313.md",
       "type": "file"
     },
@@ -380,6 +640,26 @@
     },
     {
       "name": "PLAN.cloudflare-workers-github-oauth-1.20261011.judgment-models.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20261020.container-repository-split.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20261114.apache-websocket-proxy.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20261114.fixed-domain-ingress-worker-assets.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.20261120.muse-roles.md",
+      "type": "file"
+    },
+    {
+      "name": "PLAN.cloudflare-workers-github-oauth-1.CONTAINER-UPDATE-REFLECTION.20261105.md",
       "type": "file"
     },
     {
@@ -399,6 +679,14 @@
       "type": "file"
     },
     {
+      "name": "POLICY.cloudflare-workers-github-oauth-1.security-ssh.20261106.md",
+      "type": "file"
+    },
+    {
+      "name": "POLICY.cloudflare-workers-github-oauth-1.security-tailscale.20261106.md",
+      "type": "file"
+    },
+    {
       "name": "QA.cloudflare-workers-github-oauth-1.md",
       "type": "file"
     },
@@ -411,11 +699,115 @@
       "type": "file"
     },
     {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.ASKGK-MAIN.20261104.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.CHAT-RETEST.20261109.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.CODEX-CF-CLI.20261113.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.COMMITS.20261118.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.CONSOLE-STREAM.20261104.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.CONTAINER-POST-INSTALL.20261105.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.CONTAINER-SECURITY-UPDATES.20261018.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.CONTAINER-TOOLS.20261105.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.CONTAINER-TOOLS.20261111.md",
+      "type": "file"
+    },
+    {
       "name": "REPORT.cloudflare-workers-github-oauth-1.D1QUERYCATALOG.20260906.md",
       "type": "file"
     },
     {
       "name": "REPORT.cloudflare-workers-github-oauth-1.FK-VERIFY.20260928.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.FX-WASM.20261105.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.HOOKS-STARTUP.20261115.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.MOONBIT-BUILDLOG.20261023.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.MUSE-CONNECTIVITY.20261107.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.MUSE-INJECTION-INQUIRY.20261109.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.MUSE-STATUS-BRIDGE.20261107.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.MUSE-TUNNELS-FALLBACK.20261107.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK-CURRENT.20261108.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK-CURRENT.20261113.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK-MUSE.20261114.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261023.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261024.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261104.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261105.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.NETWORK.20261113.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.PR-PREPARATION.20261105.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.REDMINE-R9.20261024.md",
       "type": "file"
     },
     {
@@ -427,7 +819,63 @@
       "type": "file"
     },
     {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.RUST-1.100.20261113.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.RUST-ALLOCATOR-SAMPLE.20261113.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.RUST-NEVER-SAMPLE.20261113.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.STREAM-IDLE.20261104.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.T3-EMBED-STORAGE-ACCESS.20261029.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.T3-POWER.20261028.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.T3-PWA-D1.20261029.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.T3-PWA-NATIVE.20261029.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.TAILSCALE-WASM-PAGE-TEST.20261108.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.TREE-VIEW-MUSE.20261108.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.UI-PUBLISH.20261109.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.WASM-BRIDGE-POST.20261108.md",
+      "type": "file"
+    },
+    {
+      "name": "REPORT.cloudflare-workers-github-oauth-1.WASM-TAILSCALE.20261108.md",
+      "type": "file"
+    },
+    {
       "name": "RULES.cloudflare-workers-github-oauth-N.md",
+      "type": "file"
+    },
+    {
+      "name": "SETTING.cloudflare-workers-github-oauth-1.T3-PWA-D1.20261029.md",
       "type": "file"
     },
     {
@@ -539,6 +987,142 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261015.commit-activity-dashboard.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261017.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261017.stream-panel-hmac-form.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261019.cf-container-pricing.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261019.cf-container-token-renewal.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261019.node26-libatomic.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261020.container-t3.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261021.cfc-endpoints.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261021.firewall-statistics.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261021.hostnames.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261021.restore-host-selection.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261023.moonbit-buildlog.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261031.docker-build-preconditions.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261107.bridge-job-queue.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261107.muse-inquiry-recording.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261107.muse-vm-dashboard.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261108.case-resolution-criteria.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261108.contribution-evaluation.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261108.proposal-rule.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261108.trial-redmine.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261111.container-api-migration.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261111.container-auto-build.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261112.muse-request-routes.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261113.lib-access-control.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261113.muse-tab-message-tree.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261114.apache-websocket-proxy.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261114.fixed-domain-ingress-worker-assets.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261114.muse-consultation-workflow.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261115.cfc-apache-module-help.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261115.domain-cookies-access-control.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261115.lib-access-via-worker.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261115.scissors-embeddinggemma2.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261119.muse-conversation-search.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.20261119.spec-eval-refresh.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.ADDTABLE.md",
       "type": "file"
     },
@@ -567,6 +1151,10 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.CONTAINER-UPDATE-REFLECTION.20261105.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.Cursor-VM-Ruby.md",
       "type": "file"
     },
@@ -591,6 +1179,14 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.T3-PWA-AUTH-HANDOFF.20261029.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.T3-PWA.20261031.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.VECTORIZE.md",
       "type": "file"
     },
@@ -603,7 +1199,19 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.aichat-muse.20261106.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.aichat-stream.20261102.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.answer-graph.20260808.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.askgk-routes.20261026.md",
       "type": "file"
     },
     {
@@ -611,7 +1219,15 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.askmuse-direct.20261106.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.cf-auth-deadline-countdown.20260911.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.cf-containers-status-banner.md",
       "type": "file"
     },
     {
@@ -619,7 +1235,23 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.codex-reset-countdown.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.commit-summary-merge-sha.20260919.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.container-cli-apache-modules-status.20261114.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.container-image-explicit-build.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.container-monitor.md",
       "type": "file"
     },
     {
@@ -627,7 +1259,15 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.cross-container.20261102.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.cursor-agent.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.database-schema-extensions-20261022.md",
       "type": "file"
     },
     {
@@ -655,7 +1295,23 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.lib-proxy-identity.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.multi-container-statistics.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.muse-status.20261106.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.new-repo-onboarding.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.port-route-registry.md",
       "type": "file"
     },
     {
@@ -675,11 +1331,19 @@
       "type": "file"
     },
     {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.tree-view-t3-power.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cloudflare-workers-github-oauth-1.tsubuyaki-slack-notify-fix.20261002.md",
       "type": "file"
     },
     {
       "name": "SPEC.cloudflare-workers-github-oauth-1.tvcron-countdown.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.cloudflare-workers-github-oauth-1.wasm-muse-bridge.20261108.md",
       "type": "file"
     },
     {
@@ -691,7 +1355,15 @@
       "type": "file"
     },
     {
+      "name": "SPEC.conversation-stream-test-cfc.md",
+      "type": "file"
+    },
+    {
       "name": "SPEC.cursor-agent.md",
+      "type": "file"
+    },
+    {
+      "name": "SPEC.lib.tailnet-health.shtml.md",
       "type": "file"
     },
     {
@@ -711,6 +1383,10 @@
       "type": "file"
     },
     {
+      "name": "SUGGEST.cloudflare-workers-github-oauth-1.20261104.md",
+      "type": "file"
+    },
+    {
       "name": "TESTPLAN.md",
       "type": "file"
     },
@@ -721,6 +1397,1154 @@
     {
       "name": "ZANZIBAR.cloudflare-workers-github-oauth-1.md",
       "type": "file"
+    },
+    {
+      "name": "artifacts",
+      "type": "dir",
+      "children": [
+        {
+          "name": "container-tools-20261105",
+          "type": "dir",
+          "children": [
+            {
+              "name": "01-tests-before.log",
+              "type": "file"
+            },
+            {
+              "name": "02-contracts-before.log",
+              "type": "file"
+            },
+            {
+              "name": "03-tests-after.log",
+              "type": "file"
+            },
+            {
+              "name": "04-native-contracts.log",
+              "type": "file"
+            },
+            {
+              "name": "05-all-container-tests.log",
+              "type": "file"
+            },
+            {
+              "name": "06-retained-package.log",
+              "type": "file"
+            },
+            {
+              "name": "07-retained-package-verified.log",
+              "type": "file"
+            },
+            {
+              "name": "08-test-dependencies.log",
+              "type": "file"
+            },
+            {
+              "name": "09-container-tests-final.log",
+              "type": "file"
+            },
+            {
+              "name": "10-apt-version-candidate.log",
+              "type": "file"
+            },
+            {
+              "name": "11-container-tests-verified.log",
+              "type": "file"
+            },
+            {
+              "name": "12-latest-version-typecheck.log",
+              "type": "file"
+            },
+            {
+              "name": "13-latest-version-typecheck-verified.log",
+              "type": "file"
+            },
+            {
+              "name": "14-docker-shell-syntax.log",
+              "type": "file"
+            },
+            {
+              "name": "15-wrapper-argv-final.log",
+              "type": "file"
+            },
+            {
+              "name": "16-t3-before.log",
+              "type": "file"
+            },
+            {
+              "name": "17-all-with-t3.log",
+              "type": "file"
+            },
+            {
+              "name": "18-typecheck-final.log",
+              "type": "file"
+            },
+            {
+              "name": "19-spec-check.log",
+              "type": "file"
+            },
+            {
+              "name": "20-plan-check.log",
+              "type": "file"
+            },
+            {
+              "name": "chrome-packages.txt",
+              "type": "file"
+            },
+            {
+              "name": "claude-native-npm-metadata.json",
+              "type": "file"
+            },
+            {
+              "name": "claude_npm-metadata.json",
+              "type": "file"
+            },
+            {
+              "name": "claude_release-metadata.json",
+              "type": "file"
+            },
+            {
+              "name": "cloudflared-metadata.json",
+              "type": "file"
+            },
+            {
+              "name": "download-validation.json",
+              "type": "file"
+            },
+            {
+              "name": "firewall-manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "firewall.log",
+              "type": "file"
+            },
+            {
+              "name": "jj-metadata.json",
+              "type": "file"
+            },
+            {
+              "name": "nft-ruleset.txt",
+              "type": "file"
+            },
+            {
+              "name": "preprint-metadata.json",
+              "type": "file"
+            },
+            {
+              "name": "preprint-published.json",
+              "type": "file"
+            },
+            {
+              "name": "results.json",
+              "type": "file"
+            },
+            {
+              "name": "t3-published.json",
+              "type": "file"
+            },
+            {
+              "name": "tailscale-metadata.json",
+              "type": "file"
+            },
+            {
+              "name": "validated-artifacts.json",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "muse-connectivity-20261106",
+          "type": "dir",
+          "children": [
+            {
+              "name": "final.log",
+              "type": "file"
+            },
+            {
+              "name": "muse-border-before.log",
+              "type": "file"
+            },
+            {
+              "name": "muse-diagnostics-before.log",
+              "type": "file"
+            },
+            {
+              "name": "muse-preflight-before.log",
+              "type": "file"
+            },
+            {
+              "name": "pr-validation.log",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "muse-status-20261107",
+          "type": "dir",
+          "children": [
+            {
+              "name": "after.log",
+              "type": "file"
+            },
+            {
+              "name": "before.log",
+              "type": "file"
+            },
+            {
+              "name": "final.log",
+              "type": "file"
+            },
+            {
+              "name": "firewall-manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "firewall.log",
+              "type": "file"
+            },
+            {
+              "name": "live-muse-vm-health.json",
+              "type": "file"
+            },
+            {
+              "name": "live-relay-health.json",
+              "type": "file"
+            },
+            {
+              "name": "nft-ruleset.txt",
+              "type": "file"
+            },
+            {
+              "name": "server-syntax.log",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "muse-tunnels-fallback-20261107",
+          "type": "dir",
+          "children": [
+            {
+              "name": "after.log",
+              "type": "file"
+            },
+            {
+              "name": "before.log",
+              "type": "file"
+            },
+            {
+              "name": "final.log",
+              "type": "file"
+            },
+            {
+              "name": "pr-validation.log",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "network-20261104",
+          "type": "dir",
+          "children": [
+            {
+              "name": "firewall.log",
+              "type": "file"
+            },
+            {
+              "name": "manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "nft-ruleset.txt",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "network-20261105",
+          "type": "dir",
+          "children": [
+            {
+              "name": "01-ssi-before.log",
+              "type": "file"
+            },
+            {
+              "name": "02-ssi-after.log",
+              "type": "file"
+            },
+            {
+              "name": "03-runtime-before.log",
+              "type": "file"
+            },
+            {
+              "name": "04-apache-modules.log",
+              "type": "file"
+            },
+            {
+              "name": "05-source.log",
+              "type": "file"
+            },
+            {
+              "name": "06-network-settings.log",
+              "type": "file"
+            },
+            {
+              "name": "07-runtime-after.log",
+              "type": "file"
+            },
+            {
+              "name": "08-chat-python.log",
+              "type": "file"
+            },
+            {
+              "name": "09-llm-worker.log",
+              "type": "file"
+            },
+            {
+              "name": "10-prompt-ruby.log",
+              "type": "file"
+            },
+            {
+              "name": "11-apt-update.log",
+              "type": "file"
+            },
+            {
+              "name": "12-upgrade-candidates.log",
+              "type": "file"
+            },
+            {
+              "name": "13-tunnel-refresh.log",
+              "type": "file"
+            },
+            {
+              "name": "14-public-streams.log",
+              "type": "file"
+            },
+            {
+              "name": "15-public-prompt.log",
+              "type": "file"
+            },
+            {
+              "name": "16-public-console.log",
+              "type": "file"
+            },
+            {
+              "name": "17-console-form.log",
+              "type": "file"
+            },
+            {
+              "name": "18-console-form-after.log",
+              "type": "file"
+            },
+            {
+              "name": "19-restart-idempotence.log",
+              "type": "file"
+            },
+            {
+              "name": "20-runtime-final.log",
+              "type": "file"
+            },
+            {
+              "name": "21-chat-node.log",
+              "type": "file"
+            },
+            {
+              "name": "22-claude-live.log",
+              "type": "file"
+            },
+            {
+              "name": "23-other-hosts.log",
+              "type": "file"
+            },
+            {
+              "name": "24-network-diagnostics.log",
+              "type": "file"
+            },
+            {
+              "name": "25-security-policy.log",
+              "type": "file"
+            },
+            {
+              "name": "26-claude-binary.log",
+              "type": "file"
+            },
+            {
+              "name": "27-claude-live-after.log",
+              "type": "file"
+            },
+            {
+              "name": "28-console-form-final.log",
+              "type": "file"
+            },
+            {
+              "name": "29-public-assets.log",
+              "type": "file"
+            },
+            {
+              "name": "30-queue-before.log",
+              "type": "file"
+            },
+            {
+              "name": "31-queue-after.log",
+              "type": "file"
+            },
+            {
+              "name": "32-chat-python-final.log",
+              "type": "file"
+            },
+            {
+              "name": "33-chat-node-final.log",
+              "type": "file"
+            },
+            {
+              "name": "34-runtime-single-thread.log",
+              "type": "file"
+            },
+            {
+              "name": "35-public-streams-final.log",
+              "type": "file"
+            },
+            {
+              "name": "36-single-thread-post.log",
+              "type": "file"
+            },
+            {
+              "name": "37-codex-queue-contract.json",
+              "type": "file"
+            },
+            {
+              "name": "38-ssi-final.log",
+              "type": "file"
+            },
+            {
+              "name": "39-final-delivery-assets.log",
+              "type": "file"
+            },
+            {
+              "name": "40-public-assets-final.log",
+              "type": "file"
+            },
+            {
+              "name": "41-single-thread-delivery.log",
+              "type": "file"
+            },
+            {
+              "name": "before-delivery-firewall-manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "before-delivery-firewall.log",
+              "type": "file"
+            },
+            {
+              "name": "before-delivery-nft-ruleset.txt",
+              "type": "file"
+            },
+            {
+              "name": "firewall-manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "firewall.log",
+              "type": "file"
+            },
+            {
+              "name": "nft-ruleset.txt",
+              "type": "file"
+            },
+            {
+              "name": "test-results.json",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "network-20261113",
+          "type": "dir",
+          "children": [
+            {
+              "name": "activate.log",
+              "type": "file"
+            },
+            {
+              "name": "apt-update.log",
+              "type": "file"
+            },
+            {
+              "name": "apt-upgrade-simulation.log",
+              "type": "file"
+            },
+            {
+              "name": "askgk-access-after.log",
+              "type": "file"
+            },
+            {
+              "name": "askgk-access-before.log",
+              "type": "file"
+            },
+            {
+              "name": "askgk-access-final.log",
+              "type": "file"
+            },
+            {
+              "name": "askgk-all-tests.log",
+              "type": "file"
+            },
+            {
+              "name": "askgk-public-check.py",
+              "type": "file"
+            },
+            {
+              "name": "askgk-public-fixed.log",
+              "type": "file"
+            },
+            {
+              "name": "askgk-public.log",
+              "type": "file"
+            },
+            {
+              "name": "browser-dependency.log",
+              "type": "file"
+            },
+            {
+              "name": "browser-post-check.py",
+              "type": "file"
+            },
+            {
+              "name": "browser-post-fixed.log",
+              "type": "file"
+            },
+            {
+              "name": "browser-post.log",
+              "type": "file"
+            },
+            {
+              "name": "dependencies.log",
+              "type": "file"
+            },
+            {
+              "name": "final-contracts-fixed.log",
+              "type": "file"
+            },
+            {
+              "name": "final-contracts.log",
+              "type": "file"
+            },
+            {
+              "name": "firewall-collector.log",
+              "type": "file"
+            },
+            {
+              "name": "firewall-manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "firewall.log",
+              "type": "file"
+            },
+            {
+              "name": "ingress.log",
+              "type": "file"
+            },
+            {
+              "name": "internal-proxy-after.log",
+              "type": "file"
+            },
+            {
+              "name": "internal-proxy-before.log",
+              "type": "file"
+            },
+            {
+              "name": "lib-network.cron.disabled",
+              "type": "file"
+            },
+            {
+              "name": "live-env.log",
+              "type": "file"
+            },
+            {
+              "name": "live-final.log",
+              "type": "file"
+            },
+            {
+              "name": "live.log",
+              "type": "file"
+            },
+            {
+              "name": "nft-ruleset.txt",
+              "type": "file"
+            },
+            {
+              "name": "nftables.log",
+              "type": "file"
+            },
+            {
+              "name": "panel-final-status.json",
+              "type": "file"
+            },
+            {
+              "name": "panel-received-status.json",
+              "type": "file"
+            },
+            {
+              "name": "prompt-parser.log",
+              "type": "file"
+            },
+            {
+              "name": "prompt.log",
+              "type": "file"
+            },
+            {
+              "name": "public-boundaries.json",
+              "type": "file"
+            },
+            {
+              "name": "quoted-prompt-check.py",
+              "type": "file"
+            },
+            {
+              "name": "quoted-prompts.log",
+              "type": "file"
+            },
+            {
+              "name": "recovery.log",
+              "type": "file"
+            },
+            {
+              "name": "refresh.log",
+              "type": "file"
+            },
+            {
+              "name": "runtime.log",
+              "type": "file"
+            },
+            {
+              "name": "settings.log",
+              "type": "file"
+            },
+            {
+              "name": "sshd.log",
+              "type": "file"
+            },
+            {
+              "name": "ssi-contract.log",
+              "type": "file"
+            },
+            {
+              "name": "tailscale.json",
+              "type": "file"
+            },
+            {
+              "name": "worker-variants.log",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "network-bootstrap-20261105",
+          "type": "dir",
+          "children": [
+            {
+              "name": "01-post-install-before.log",
+              "type": "file"
+            },
+            {
+              "name": "02-post-install-after.log",
+              "type": "file"
+            },
+            {
+              "name": "03-separation-before.log",
+              "type": "file"
+            },
+            {
+              "name": "04-separation-after.log",
+              "type": "file"
+            },
+            {
+              "name": "05-image-prepare-before.log",
+              "type": "file"
+            },
+            {
+              "name": "06-image-prepare-after.log",
+              "type": "file"
+            },
+            {
+              "name": "07-central-runner.log",
+              "type": "file"
+            },
+            {
+              "name": "08-readiness-before.log",
+              "type": "file"
+            },
+            {
+              "name": "09-readiness-after.log",
+              "type": "file"
+            },
+            {
+              "name": "10-container-regressions.log",
+              "type": "file"
+            },
+            {
+              "name": "11-shared-configurator-before.log",
+              "type": "file"
+            },
+            {
+              "name": "12-shared-configurator-after.log",
+              "type": "file"
+            },
+            {
+              "name": "13-final-suites.log",
+              "type": "file"
+            },
+            {
+              "name": "14-real-lib-staging.log",
+              "type": "file"
+            },
+            {
+              "name": "final",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "apache-ssi.log",
+                  "type": "file"
+                },
+                {
+                  "name": "container-post-install.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-chat-python.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-llm-worker.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-prompt-ruby.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-stream-node.log",
+                  "type": "file"
+                },
+                {
+                  "name": "network-env-cache.log",
+                  "type": "file"
+                },
+                {
+                  "name": "results.json",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "firewall-manifest.json",
+              "type": "file"
+            },
+            {
+              "name": "firewall.log",
+              "type": "file"
+            },
+            {
+              "name": "nft-ruleset.txt",
+              "type": "file"
+            },
+            {
+              "name": "results.json",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "pr-container-20261105",
+          "type": "dir",
+          "children": [
+            {
+              "name": "01-dependencies.log",
+              "type": "file"
+            },
+            {
+              "name": "02-full-vitest.log",
+              "type": "file"
+            },
+            {
+              "name": "03-container-suites.log",
+              "type": "file"
+            },
+            {
+              "name": "04-sensitive-values-check.log",
+              "type": "file"
+            },
+            {
+              "name": "05-timeout-recheck.log",
+              "type": "file"
+            },
+            {
+              "name": "06-related-vitest.log",
+              "type": "file"
+            },
+            {
+              "name": "container-suites",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "apache-ssi.log",
+                  "type": "file"
+                },
+                {
+                  "name": "container-post-install.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-chat-python.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-llm-worker.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-prompt-ruby.log",
+                  "type": "file"
+                },
+                {
+                  "name": "lib-stream-node.log",
+                  "type": "file"
+                },
+                {
+                  "name": "network-env-cache.log",
+                  "type": "file"
+                },
+                {
+                  "name": "results.json",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "preview-width-20261113",
+          "type": "dir",
+          "children": [
+            {
+              "name": "after.log",
+              "type": "file"
+            },
+            {
+              "name": "before.log",
+              "type": "file"
+            },
+            {
+              "name": "check.py",
+              "type": "file"
+            },
+            {
+              "name": "page.html",
+              "type": "file"
+            },
+            {
+              "name": "script-check.log",
+              "type": "file"
+            },
+            {
+              "name": "unit-after.log",
+              "type": "file"
+            },
+            {
+              "name": "unit-before-fixed.log",
+              "type": "file"
+            },
+            {
+              "name": "unit-before.log",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "rust-1.100-20261113",
+          "type": "dir",
+          "children": [
+            {
+              "name": "bindgen-downloads.json",
+              "type": "file"
+            },
+            {
+              "name": "bindgen-generate.log",
+              "type": "file"
+            },
+            {
+              "name": "bindgen-install.log",
+              "type": "file"
+            },
+            {
+              "name": "bindgen-results.json",
+              "type": "file"
+            },
+            {
+              "name": "browser-wasm-smoke.log",
+              "type": "file"
+            },
+            {
+              "name": "build-contract-after.log",
+              "type": "file"
+            },
+            {
+              "name": "build-contract-before.log",
+              "type": "file"
+            },
+            {
+              "name": "build-contract-final.log",
+              "type": "file"
+            },
+            {
+              "name": "cargo-version.log",
+              "type": "file"
+            },
+            {
+              "name": "check-browser-wasm-20261113.py",
+              "type": "file"
+            },
+            {
+              "name": "check-rust-compat-20261113.py",
+              "type": "file"
+            },
+            {
+              "name": "check-rust-worker-runtime-20261113.py",
+              "type": "file"
+            },
+            {
+              "name": "compile-results.json",
+              "type": "file"
+            },
+            {
+              "name": "compiler-dependencies.log",
+              "type": "file"
+            },
+            {
+              "name": "current-public-wasm.json",
+              "type": "file"
+            },
+            {
+              "name": "dig-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "dig-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "factor-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "factor-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "gh-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "gh-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "jev-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "jev-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "ls-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "ls-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "msb-bindgen-mismatch.log",
+              "type": "file"
+            },
+            {
+              "name": "msb-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "msb-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "node-wasm-smoke-fixed.log",
+              "type": "file"
+            },
+            {
+              "name": "node-wasm-smoke.log",
+              "type": "file"
+            },
+            {
+              "name": "prepare-wasm-smoke-20261113.py",
+              "type": "file"
+            },
+            {
+              "name": "prepare-workerd-smoke-20261113.cjs",
+              "type": "file"
+            },
+            {
+              "name": "public-assets-unchanged.log",
+              "type": "file"
+            },
+            {
+              "name": "rust-wasm-smoke-cases-20261113.mjs",
+              "type": "file"
+            },
+            {
+              "name": "rust-worker-ping-schema128.log",
+              "type": "file"
+            },
+            {
+              "name": "rust-worker-ping.log",
+              "type": "file"
+            },
+            {
+              "name": "rust-worker-runtime.log",
+              "type": "file"
+            },
+            {
+              "name": "rust-worker-sqlx-d1-test.log",
+              "type": "file"
+            },
+            {
+              "name": "rust-worker-sqlx-d1-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "rustc-version.log",
+              "type": "file"
+            },
+            {
+              "name": "scratch-cache-cleanup.log",
+              "type": "file"
+            },
+            {
+              "name": "sha256-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "sha256-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "sqlx-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "sqlx-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "toolchain-install.log",
+              "type": "file"
+            },
+            {
+              "name": "tree-wasm-test.log",
+              "type": "file"
+            },
+            {
+              "name": "tree-wasm-wasm-release.log",
+              "type": "file"
+            },
+            {
+              "name": "wasm-smoke-20261113.mjs",
+              "type": "file"
+            },
+            {
+              "name": "worker-bindgen-compat.json",
+              "type": "file"
+            },
+            {
+              "name": "worker-bindgen-mismatch.log",
+              "type": "file"
+            },
+            {
+              "name": "worker-contract-after.log",
+              "type": "file"
+            },
+            {
+              "name": "worker-contract-before.log",
+              "type": "file"
+            },
+            {
+              "name": "worker-contract-final.log",
+              "type": "file"
+            },
+            {
+              "name": "worker-contract-schema-final.log",
+              "type": "file"
+            },
+            {
+              "name": "workerd-result.json",
+              "type": "file"
+            },
+            {
+              "name": "workerd.log",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "rust-never-sample-20261113",
+          "type": "dir",
+          "children": [
+            {
+              "name": "browser-1440.png",
+              "type": "file"
+            },
+            {
+              "name": "browser-390.png",
+              "type": "file"
+            },
+            {
+              "name": "browser-check.py",
+              "type": "file"
+            },
+            {
+              "name": "browser-result.json",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "wasm-tailscale-20261108",
+          "type": "dir",
+          "children": [
+            {
+              "name": "aichat-live-e2e-result.jsonl",
+              "type": "file"
+            },
+            {
+              "name": "native-muse-post-live.json",
+              "type": "file"
+            },
+            {
+              "name": "worker-do-live.jsonl",
+              "type": "file"
+            },
+            {
+              "name": "worker-muse-post-live.log",
+              "type": "file"
+            },
+            {
+              "name": "worker-muse-post-success.jsonl",
+              "type": "file"
+            }
+          ]
+        }
+      ]
     },
     {
       "name": "auth-flow.html",
@@ -737,6 +2561,310 @@
     {
       "name": "chess-tsume-17te.md",
       "type": "file"
+    },
+    {
+      "name": "containers",
+      "type": "dir",
+      "children": [
+        {
+          "name": "demo",
+          "type": "dir",
+          "children": [
+            {
+              "name": "BUNDLE-OPTIONS.md",
+              "type": "file"
+            },
+            {
+              "name": "DEPENDENCY-SECURITY.md",
+              "type": "file"
+            },
+            {
+              "name": "Dockerfile",
+              "type": "file"
+            },
+            {
+              "name": "Dockerfile.redmine",
+              "type": "file"
+            },
+            {
+              "name": "NETWORK-RUNBOOK.md",
+              "type": "file"
+            },
+            {
+              "name": "PREPRINT.md",
+              "type": "file"
+            },
+            {
+              "name": "apache-demo.conf",
+              "type": "file"
+            },
+            {
+              "name": "apache-lib.conf",
+              "type": "file"
+            },
+            {
+              "name": "apache-redmine.conf",
+              "type": "file"
+            },
+            {
+              "name": "cf-api",
+              "type": "file"
+            },
+            {
+              "name": "cloudflared-ingress.yml.template",
+              "type": "file"
+            },
+            {
+              "name": "codex-harness",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "README.md",
+                  "type": "file"
+                },
+                {
+                  "name": "hooks.json",
+                  "type": "file"
+                },
+                {
+                  "name": "japanese.py",
+                  "type": "file"
+                },
+                {
+                  "name": "pr-state.py",
+                  "type": "file"
+                },
+                {
+                  "name": "restore.py",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "container_setup.py",
+              "type": "file"
+            },
+            {
+              "name": "entrypoint.sh",
+              "type": "file"
+            },
+            {
+              "name": "firewall-log.py",
+              "type": "file"
+            },
+            {
+              "name": "firewall-stats.py",
+              "type": "file"
+            },
+            {
+              "name": "image.lock.json",
+              "type": "file"
+            },
+            {
+              "name": "lib-network",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "README.md",
+                  "type": "file"
+                },
+                {
+                  "name": "network",
+                  "type": "dir",
+                  "children": [
+                    {
+                      "name": "apache-lib-private.conf",
+                      "type": "file"
+                    },
+                    {
+                      "name": "llm-worker-command",
+                      "type": "file"
+                    },
+                    {
+                      "name": "refresh-lib-tunnels",
+                      "type": "file"
+                    },
+                    {
+                      "name": "start-lib-chat-app-server",
+                      "type": "file"
+                    },
+                    {
+                      "name": "start-lib-chat-observer",
+                      "type": "file"
+                    },
+                    {
+                      "name": "start-lib-chat-streams",
+                      "type": "file"
+                    },
+                    {
+                      "name": "start-lib-llm-worker",
+                      "type": "file"
+                    },
+                    {
+                      "name": "start-lib-network",
+                      "type": "file"
+                    },
+                    {
+                      "name": "tunnels.cgi",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "post_install.py",
+                  "type": "file"
+                },
+                {
+                  "name": "refresh-tunnels.py",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "lib-restore-wait.sh",
+              "type": "file"
+            },
+            {
+              "name": "packages",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "README.md",
+                  "type": "file"
+                },
+                {
+                  "name": "SHA256SUMS",
+                  "type": "file"
+                },
+                {
+                  "name": "apache-2.4.71-linux-x64-ubuntu26.04.tar.xz",
+                  "type": "file"
+                },
+                {
+                  "name": "git-2.56.1-linux-x64-ubuntu26.04.tar.xz",
+                  "type": "file"
+                },
+                {
+                  "name": "git-2.56.1.tar.xz",
+                  "type": "file"
+                },
+                {
+                  "name": "httpd-2.4.71.tar.gz",
+                  "type": "file"
+                },
+                {
+                  "name": "httpd-2.4.71.tar.gz.asc",
+                  "type": "file"
+                },
+                {
+                  "name": "jj-v0.47.1-x86_64-unknown-linux-musl.tar.gz",
+                  "type": "file"
+                },
+                {
+                  "name": "openssh-10.6p2-linux-x64-ubuntu26.04.tar.xz",
+                  "type": "file"
+                },
+                {
+                  "name": "openssh-10.6p2.tar.gz",
+                  "type": "file"
+                },
+                {
+                  "name": "openssh-10.6p2.tar.gz.asc",
+                  "type": "file"
+                }
+              ]
+            },
+            {
+              "name": "preprint-cli",
+              "type": "file"
+            },
+            {
+              "name": "redmine-dump",
+              "type": "file"
+            },
+            {
+              "name": "server.js",
+              "type": "file"
+            },
+            {
+              "name": "sshd-hardening.conf",
+              "type": "file"
+            },
+            {
+              "name": "t3-embed-proxy.cjs",
+              "type": "file"
+            },
+            {
+              "name": "t3-pwa-auth.cjs",
+              "type": "file"
+            },
+            {
+              "name": "t3-pwa-client.css",
+              "type": "file"
+            },
+            {
+              "name": "t3-pwa-client.js",
+              "type": "file"
+            },
+            {
+              "name": "t3-stale-session.cjs",
+              "type": "file"
+            },
+            {
+              "name": "tailscale-up.sh",
+              "type": "file"
+            },
+            {
+              "name": "test_firewall_log.py",
+              "type": "file"
+            },
+            {
+              "name": "test_firewall_stats.py",
+              "type": "file"
+            },
+            {
+              "name": "tests",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "network",
+                  "type": "dir",
+                  "children": [
+                    {
+                      "name": "network_live_test.py",
+                      "type": "file"
+                    },
+                    {
+                      "name": "network_runtime_test.py",
+                      "type": "file"
+                    },
+                    {
+                      "name": "network_settings_test.py",
+                      "type": "file"
+                    },
+                    {
+                      "name": "network_single_thread_post.py",
+                      "type": "file"
+                    },
+                    {
+                      "name": "network_ssi_test.py",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "post_install_test.py",
+                  "type": "file"
+                },
+                {
+                  "name": "run.py",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     },
     {
       "name": "deploy",
@@ -775,6 +2903,16 @@
               "type": "file"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "docs",
+      "type": "dir",
+      "children": [
+        {
+          "name": "CONVERSATION-STREAM-HOSTS.md",
+          "type": "file"
         }
       ]
     },
@@ -1455,6 +3593,202 @@
         {
           "name": "0171_create_clef_evaluations.sql",
           "type": "file"
+        },
+        {
+          "name": "0172_update_tree_view_depth_to_seven.sql",
+          "type": "file"
+        },
+        {
+          "name": "0173_create_commit_summary_topics.sql",
+          "type": "file"
+        },
+        {
+          "name": "0174_create_commit_file_changes.sql",
+          "type": "file"
+        },
+        {
+          "name": "0175_add_repo_commit_index_committed_at.sql",
+          "type": "file"
+        },
+        {
+          "name": "0176_create_tree_view_keyword_search_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0177_add_tree_view_keyword_search_auto_save_to_user_sessions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0178_create_cf_container_operation_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0179_create_cf_container_snapshots.sql",
+          "type": "file"
+        },
+        {
+          "name": "0180_create_firewall_snapshots.sql",
+          "type": "file"
+        },
+        {
+          "name": "0181_add_countdown_events_deleted_at.sql",
+          "type": "file"
+        },
+        {
+          "name": "0182_add_countdown_events_deletion_actor.sql",
+          "type": "file"
+        },
+        {
+          "name": "0183_stop_tree_view_cron_countdowns.sql",
+          "type": "file"
+        },
+        {
+          "name": "0184_create_container_build_timings.sql",
+          "type": "file"
+        },
+        {
+          "name": "0185_create_container_image_records.sql",
+          "type": "file"
+        },
+        {
+          "name": "0186_create_container_session_notes.sql",
+          "type": "file"
+        },
+        {
+          "name": "0187_create_multi_container_statistics.sql",
+          "type": "file"
+        },
+        {
+          "name": "0188_create_cf_container_package_release_status.sql",
+          "type": "file"
+        },
+        {
+          "name": "0189_create_askgk_timeout_settings.sql",
+          "type": "file"
+        },
+        {
+          "name": "0190_create_t3_pwa_handoffs.sql",
+          "type": "file"
+        },
+        {
+          "name": "0191_create_cf_container_build_cache_effects.sql",
+          "type": "file"
+        },
+        {
+          "name": "0192_create_aichat_answer_keyword_extractions.sql",
+          "type": "file"
+        },
+        {
+          "name": "0193_create_tailscale_wasm_boot_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0194_create_conversation_stream_hosts.sql",
+          "type": "file"
+        },
+        {
+          "name": "0195_create_muse_search_key_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0196_create_muse_search_answer_log.sql",
+          "type": "file"
+        },
+        {
+          "name": "0197_create_muse_user_handles.sql",
+          "type": "file"
+        },
+        {
+          "name": "0198_assign_muse_keys_to_nekoserver.sql",
+          "type": "file"
+        },
+        {
+          "name": "0199_create_muse_thread_search_log.sql",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "migrations-agent-inquiries",
+      "type": "dir",
+      "children": [
+        {
+          "name": "0001_create_inquiry_tables.sql",
+          "type": "file"
+        },
+        {
+          "name": "0002_add_key_cost_and_knowledge.sql",
+          "type": "file"
+        },
+        {
+          "name": "0003_add_agent_domains_and_knowledge_effect.sql",
+          "type": "file"
+        },
+        {
+          "name": "0004_add_agent_assets_and_hunches.sql",
+          "type": "file"
+        },
+        {
+          "name": "0005_exclude_withdrawn_from_stats.sql",
+          "type": "file"
+        },
+        {
+          "name": "0006_create_inquiry_proposals.sql",
+          "type": "file"
+        },
+        {
+          "name": "0007_create_case_review_view.sql",
+          "type": "file"
+        },
+        {
+          "name": "0008_add_case_stage.sql",
+          "type": "file"
+        },
+        {
+          "name": "0009_create_bridge_jobs.sql",
+          "type": "file"
+        },
+        {
+          "name": "0010_add_case_steps.sql",
+          "type": "file"
+        },
+        {
+          "name": "0011_create_contribution_records.sql",
+          "type": "file"
+        },
+        {
+          "name": "0012_create_rule_checks.sql",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "moonbit",
+      "type": "dir",
+      "children": [
+        {
+          "name": "buildlog",
+          "type": "dir",
+          "children": [
+            {
+              "name": "buildlog.mbt",
+              "type": "file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ops",
+      "type": "dir",
+      "children": [
+        {
+          "name": "muse_gadget_relay.py",
+          "type": "file"
+        },
+        {
+          "name": "test_muse_gadget_relay.py",
+          "type": "file"
         }
       ]
     },
@@ -1499,7 +3833,929 @@
       "type": "dir",
       "children": [
         {
+          "name": "E991-C707-4446-B6F5-16FF159F4C42.html",
+          "type": "file"
+        },
+        {
+          "name": "_headers",
+          "type": "file"
+        },
+        {
+          "name": "apache-manual",
+          "type": "dir",
+          "children": [
+            {
+              "name": "2.4.71",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "LICENSE",
+                  "type": "file"
+                },
+                {
+                  "name": "NOTICE",
+                  "type": "file"
+                },
+                {
+                  "name": "images",
+                  "type": "dir",
+                  "children": [
+                    {
+                      "name": "down.gif",
+                      "type": "file"
+                    },
+                    {
+                      "name": "favicon.png",
+                      "type": "file"
+                    },
+                    {
+                      "name": "feather.png",
+                      "type": "file"
+                    },
+                    {
+                      "name": "left.gif",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_filter_new.gif",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_filter_old.gif",
+                      "type": "file"
+                    },
+                    {
+                      "name": "right.gif",
+                      "type": "file"
+                    },
+                    {
+                      "name": "up.gif",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "mod",
+                  "type": "dir",
+                  "children": [
+                    {
+                      "name": "core.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "core.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "directive-dict.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "directive-dict.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "directives.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "directives.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "event.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "index.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "index.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_access_compat.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_access_compat.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_actions.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_actions.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_alias.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_alias.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_allowmethods.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_asis.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_asis.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_auth_basic.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_auth_basic.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_auth_digest.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_auth_form.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_anon.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_anon.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_core.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_dbd.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_dbm.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_dbm.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_file.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_file.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authn_socache.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authnz_fcgi.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authnz_ldap.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_core.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_dbd.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_dbm.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_groupfile.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_groupfile.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_host.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_owner.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_owner.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_user.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_authz_user.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_autoindex.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_autoindex.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_brotli.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_buffer.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cache.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cache.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cache_disk.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cache_disk.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cache_socache.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cern_meta.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cgi.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cgi.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cgid.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_cgid.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_charset_lite.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_data.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dav.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dav.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dav_fs.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dav_fs.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dav_lock.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dav_lock.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dbd.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_deflate.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_deflate.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dialup.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dir.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dir.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dumpio.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_dumpio.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_echo.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_echo.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_env.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_env.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_example_hooks.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_expires.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_expires.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_ext_filter.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_ext_filter.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_file_cache.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_filter.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_headers.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_headers.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_heartbeat.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_heartmonitor.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_http2.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_ident.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_ident.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_imagemap.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_include.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_include.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_info.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_info.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_isapi.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_lbmethod_bybusyness.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_lbmethod_byrequests.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_lbmethod_bytraffic.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_lbmethod_heartbeat.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_ldap.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_log_config.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_log_config.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_log_debug.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_log_forensic.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_log_forensic.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_logio.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_logio.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_lua.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_macro.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_md.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_mime.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_mime.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_mime_magic.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_negotiation.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_negotiation.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_nw_ssl.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_privileges.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_ajp.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_ajp.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_balancer.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_balancer.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_connect.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_connect.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_express.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_fcgi.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_fdpass.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_ftp.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_hcheck.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_html.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_http.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_http2.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_scgi.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_uwsgi.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_proxy_wstunnel.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_ratelimit.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_reflector.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_remoteip.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_reqtimeout.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_request.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_rewrite.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_sed.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_session.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_session_cookie.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_session_crypto.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_session_dbd.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_setenvif.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_setenvif.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_slotmem_plain.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_slotmem_shm.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_so.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_so.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_socache_dbm.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_socache_dc.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_socache_memcache.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_socache_redis.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_socache_shmcb.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_speling.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_speling.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_ssl.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_status.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_status.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_substitute.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_suexec.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_suexec.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_systemd.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_unique_id.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_unique_id.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_unixd.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_userdir.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_userdir.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_usertrack.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_version.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_version.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_vhost_alias.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_watchdog.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mod_xml2enc.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "module-dict.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "module-dict.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mpm_common.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mpm_common.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mpm_netware.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mpm_winnt.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mpm_winnt.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "mpmt_os2.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "overrides.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "prefork.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "prefork.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "quickreference.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "quickreference.ja.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "worker.html",
+                      "type": "file"
+                    },
+                    {
+                      "name": "worker.ja.html",
+                      "type": "file"
+                    }
+                  ]
+                },
+                {
+                  "name": "modules.json",
+                  "type": "file"
+                },
+                {
+                  "name": "style",
+                  "type": "dir",
+                  "children": [
+                    {
+                      "name": "css",
+                      "type": "dir",
+                      "children": [
+                        {
+                          "name": "manual-chm.css",
+                          "type": "file"
+                        },
+                        {
+                          "name": "manual-loose-100pc.css",
+                          "type": "file"
+                        },
+                        {
+                          "name": "manual-print.css",
+                          "type": "file"
+                        },
+                        {
+                          "name": "manual-zip-100pc.css",
+                          "type": "file"
+                        },
+                        {
+                          "name": "manual-zip.css",
+                          "type": "file"
+                        },
+                        {
+                          "name": "manual.css",
+                          "type": "file"
+                        },
+                        {
+                          "name": "prettify.css",
+                          "type": "file"
+                        }
+                      ]
+                    },
+                    {
+                      "name": "scripts",
+                      "type": "dir",
+                      "children": [
+                        {
+                          "name": "MINIFY",
+                          "type": "file"
+                        },
+                        {
+                          "name": "prettify.js",
+                          "type": "file"
+                        },
+                        {
+                          "name": "prettify.min.js",
+                          "type": "file"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "container-monitor.mjs",
+          "type": "file"
+        },
+        {
           "name": "earth.jpg",
+          "type": "file"
+        },
+        {
+          "name": "fx-wasm.mjs",
           "type": "file"
         },
         {
@@ -1531,6 +4787,102 @@
           "type": "file"
         },
         {
+          "name": "rust-1.100-apis",
+          "type": "dir",
+          "children": [
+            {
+              "name": "apis.wasm",
+              "type": "file"
+            },
+            {
+              "name": "app.js",
+              "type": "file"
+            },
+            {
+              "name": "index.html",
+              "type": "file"
+            },
+            {
+              "name": "source.rs",
+              "type": "file"
+            },
+            {
+              "name": "style.css",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "rust-allocator-sample",
+          "type": "dir",
+          "children": [
+            {
+              "name": "allocator.wasm",
+              "type": "file"
+            },
+            {
+              "name": "app.js",
+              "type": "file"
+            },
+            {
+              "name": "index.html",
+              "type": "file"
+            },
+            {
+              "name": "source.rs",
+              "type": "file"
+            },
+            {
+              "name": "style.css",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "rust-never-sample",
+          "type": "dir",
+          "children": [
+            {
+              "name": "app.js",
+              "type": "file"
+            },
+            {
+              "name": "index.html",
+              "type": "file"
+            },
+            {
+              "name": "never.wasm",
+              "type": "file"
+            },
+            {
+              "name": "source.rs",
+              "type": "file"
+            },
+            {
+              "name": "style.css",
+              "type": "file"
+            }
+          ]
+        },
+        {
+          "name": "static-assets-sample",
+          "type": "dir",
+          "children": [
+            {
+              "name": "app.js",
+              "type": "file"
+            },
+            {
+              "name": "index.html",
+              "type": "file"
+            },
+            {
+              "name": "style.css",
+              "type": "file"
+            }
+          ]
+        },
+        {
           "name": "sw-earth-composer-2.5.js",
           "type": "file"
         },
@@ -1541,6 +4893,118 @@
         {
           "name": "sw.js",
           "type": "file"
+        },
+        {
+          "name": "tailscale-connect",
+          "type": "dir",
+          "children": [
+            {
+              "name": "1.102.3-3",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "LICENSE.go",
+                  "type": "file"
+                },
+                {
+                  "name": "LICENSE.tailscale",
+                  "type": "file"
+                },
+                {
+                  "name": "LICENSE.xterm",
+                  "type": "file"
+                },
+                {
+                  "name": "build-info.json",
+                  "type": "file"
+                },
+                {
+                  "name": "main.wasm.gz",
+                  "type": "file"
+                },
+                {
+                  "name": "pkg.js",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "tailscale-wasm-client.mjs",
+          "type": "file"
+        },
+        {
+          "name": "vendor",
+          "type": "dir",
+          "children": [
+            {
+              "name": "libfx",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "LICENSE",
+                  "type": "file"
+                },
+                {
+                  "name": "browser-agent.js",
+                  "type": "file"
+                },
+                {
+                  "name": "chatgpt.js",
+                  "type": "file"
+                },
+                {
+                  "name": "core-output.js",
+                  "type": "file"
+                },
+                {
+                  "name": "custom-provider.js",
+                  "type": "file"
+                },
+                {
+                  "name": "durable.js",
+                  "type": "file"
+                },
+                {
+                  "name": "engine.js",
+                  "type": "file"
+                },
+                {
+                  "name": "fx-core.wasm",
+                  "type": "file"
+                },
+                {
+                  "name": "fx-harness.js",
+                  "type": "file"
+                },
+                {
+                  "name": "grok.js",
+                  "type": "file"
+                },
+                {
+                  "name": "manifest.json",
+                  "type": "file"
+                },
+                {
+                  "name": "subscription.js",
+                  "type": "file"
+                },
+                {
+                  "name": "tool-observation.js",
+                  "type": "file"
+                },
+                {
+                  "name": "wasm-module.js",
+                  "type": "file"
+                },
+                {
+                  "name": "wasm-runtime.js",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "wasm",
@@ -1723,9 +5187,25 @@
       "type": "file"
     },
     {
+      "name": "rust-toolchain.toml",
+      "type": "file"
+    },
+    {
       "name": "scripts",
       "type": "dir",
       "children": [
+        {
+          "name": "agent-inquiries-contributions.test.mjs",
+          "type": "file"
+        },
+        {
+          "name": "agent-inquiries-migrations.test.mjs",
+          "type": "file"
+        },
+        {
+          "name": "agent-inquiries-rule-checks.test.mjs",
+          "type": "file"
+        },
         {
           "name": "audit-local-branches.sh",
           "type": "file"
@@ -1735,11 +5215,31 @@
           "type": "file"
         },
         {
+          "name": "build-allocator-api-wasm.sh",
+          "type": "file"
+        },
+        {
           "name": "build-d1-query-catalog.js",
           "type": "file"
         },
         {
+          "name": "build-demo-packages-ubuntu26.sh",
+          "type": "file"
+        },
+        {
+          "name": "build-moonbit.mjs",
+          "type": "file"
+        },
+        {
           "name": "build-msb-wasm.sh",
+          "type": "file"
+        },
+        {
+          "name": "build-never-wasm.sh",
+          "type": "file"
+        },
+        {
+          "name": "build-rust-1.100-apis-wasm.sh",
           "type": "file"
         },
         {
@@ -1751,7 +5251,83 @@
           "type": "file"
         },
         {
+          "name": "check-cf-containers.sh",
+          "type": "file"
+        },
+        {
+          "name": "check-container-monitor-browser.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-conversation-stream-auth.ts",
+          "type": "file"
+        },
+        {
+          "name": "check-fx-wasm-browser.mjs",
+          "type": "file"
+        },
+        {
           "name": "check-migration-table-registry.js",
+          "type": "file"
+        },
+        {
+          "name": "check-muse-status-browser.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-muse-vm-wasm-live.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-t3-pwa-browser.cjs",
+          "type": "file"
+        },
+        {
+          "name": "check-tailscale-wasm-browser.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-tree-view-muse-runtime.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-worker-aichat-muse-live.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-worker-muse-do-live.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-worker-muse-post-live.mjs",
+          "type": "file"
+        },
+        {
+          "name": "check-worker-tailscale-wasm.mjs",
+          "type": "file"
+        },
+        {
+          "name": "claude-full-test-guard.js",
+          "type": "file"
+        },
+        {
+          "name": "claude-japanese-guard.js",
+          "type": "file"
+        },
+        {
+          "name": "claude-push-guard.js",
+          "type": "file"
+        },
+        {
+          "name": "claude-self-check-guard.js",
+          "type": "file"
+        },
+        {
+          "name": "codex-harness-hooks.test.py",
+          "type": "file"
+        },
+        {
+          "name": "container-monitor-ui.test.mjs",
           "type": "file"
         },
         {
@@ -1769,11 +5345,31 @@
           ]
         },
         {
+          "name": "demo-image-lock.mjs",
+          "type": "file"
+        },
+        {
+          "name": "demo-packages-apply.mjs",
+          "type": "file"
+        },
+        {
+          "name": "deploy-with-container-build.sh",
+          "type": "file"
+        },
+        {
           "name": "evaluate-table-pattern-scores.test.ts",
           "type": "file"
         },
         {
           "name": "evaluate-table-pattern-scores.ts",
+          "type": "file"
+        },
+        {
+          "name": "extract-apache-manual.py",
+          "type": "file"
+        },
+        {
+          "name": "fx-wasm.test.mjs",
           "type": "file"
         },
         {
@@ -1801,7 +5397,23 @@
           "type": "file"
         },
         {
+          "name": "install-claude-user-hooks.sh",
+          "type": "file"
+        },
+        {
+          "name": "install-t3-pwa-auth.py",
+          "type": "file"
+        },
+        {
+          "name": "never-wasm.test.mjs",
+          "type": "file"
+        },
+        {
           "name": "render-harness-hook-log-report.js",
+          "type": "file"
+        },
+        {
+          "name": "select-demo-container-image.mjs",
           "type": "file"
         },
         {
@@ -1810,6 +5422,34 @@
         },
         {
           "name": "sqlc-codegen-ir.js",
+          "type": "file"
+        },
+        {
+          "name": "sync-tailscale-connect.mjs",
+          "type": "file"
+        },
+        {
+          "name": "tailscale-wasm-client.test.mjs",
+          "type": "file"
+        },
+        {
+          "name": "test-t3-pwa-auth.cjs",
+          "type": "file"
+        },
+        {
+          "name": "vendor-libfx.py",
+          "type": "file"
+        },
+        {
+          "name": "verify-wasm-tailscale.mjs",
+          "type": "file"
+        },
+        {
+          "name": "wasm-build-contract.test.mjs",
+          "type": "file"
+        },
+        {
+          "name": "write-container-build-info.sh",
           "type": "file"
         }
       ]
@@ -1889,6 +5529,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-askmuse-integration.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-auto-vectorize-settings.test.ts",
           "type": "file"
         },
@@ -1930,6 +5574,10 @@
         },
         {
           "name": "aichat-codex-question-display.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-codex-reset-display.test.ts",
           "type": "file"
         },
         {
@@ -2029,6 +5677,18 @@
           "type": "file"
         },
         {
+          "name": "aichat-job-cancel.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-job-fetch.test-helper.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-job-wiring.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-kb-panel-toggle.test.ts",
           "type": "file"
         },
@@ -2097,6 +5757,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-keyword-toggle-3state-20261028.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-kw-cat-badge-dimmed.test.ts",
           "type": "file"
         },
@@ -2154,6 +5818,10 @@
         },
         {
           "name": "aichat-kw-mid-category-solo-select-20260821.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-kw-midcat-toggle.test.ts",
           "type": "file"
         },
         {
@@ -2225,6 +5893,14 @@
           "type": "file"
         },
         {
+          "name": "aichat-muse-default-and-tunnels-fallback.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-muse-transport.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-navbar-visibility.test.ts",
           "type": "file"
         },
@@ -2286,6 +5962,10 @@
         },
         {
           "name": "aichat-scissors-auto-vectorize-20260918.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-scissors-embeddinggemma2-20261115.test.ts",
           "type": "file"
         },
         {
@@ -2445,6 +6125,10 @@
           "type": "file"
         },
         {
+          "name": "aichat-stream-frame-csp.test.ts",
+          "type": "file"
+        },
+        {
           "name": "aichat-subqueries-cat-badge-color-20260817.test.ts",
           "type": "file"
         },
@@ -2478,6 +6162,10 @@
         },
         {
           "name": "aichat-swipe-text-selection.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "aichat-tab-title.test.ts",
           "type": "file"
         },
         {
@@ -2669,6 +6357,10 @@
           "type": "file"
         },
         {
+          "name": "apache-manual-assets.test.ts",
+          "type": "file"
+        },
+        {
           "name": "api-endpoint-stats.test.ts",
           "type": "file"
         },
@@ -2733,6 +6425,14 @@
           "type": "file"
         },
         {
+          "name": "askgk-timeout-settings-api.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "askmgs.test.ts",
+          "type": "file"
+        },
+        {
           "name": "base64-page-20260729.test.ts",
           "type": "file"
         },
@@ -2777,6 +6477,218 @@
           "type": "file"
         },
         {
+          "name": "cf-containers-apache-health-split.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-apache.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-apt-tools.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-build-features.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-claude-cli.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-codex-cf-contract.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-demo-auto-build.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-demo-packages-build-script.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-deploy-script.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-dockerfile-copy.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-gh-effective-rate.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-gh-token.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-go-toolchain.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-health-docker.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-health-tailscale.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-health-versions.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-image-lock.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-installed-baseline.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-lib-restore-wait.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-lib-route-access.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-lib-route-wiring.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-lib-ssi.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-muse-proxy.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-no-autostop.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-page-menu.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-page.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-prebuilt-binaries.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-preprint-wrapper.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-redmine.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-restart-log.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-ruby.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-source-build-allowlist.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-ssh-host-keys.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-ssh-keys.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-ssh-path.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-sshd-port.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-sshguard-tools.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-contract.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-cookie-variants.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-forwarded-host.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-health.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-one-click-pairing.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-pwa-auto-approve.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-pwa-diagnose-browser.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-pwa-diagnose.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-pwa-handoff-client.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-pwa-handoff.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3-stale-session.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-t3.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-tailscale-login.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-tailscale-peers.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-tool-updates.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "cf-containers-tunnels-envcheck.test.ts",
+          "type": "file"
+        },
+        {
           "name": "cf-dashboard-cloudflare-api.test.ts",
           "type": "file"
         },
@@ -2817,6 +6729,22 @@
           "type": "file"
         },
         {
+          "name": "claude-full-test-guard.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "claude-japanese-guard.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "claude-push-guard.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "claude-self-check-guard.test.ts",
+          "type": "file"
+        },
+        {
           "name": "clef-playground-endpoint.test.ts",
           "type": "file"
         },
@@ -2826,6 +6754,10 @@
         },
         {
           "name": "column-fk-targets-completeness-20260820.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "commit-activity-summary-endpoint.test.ts",
           "type": "file"
         },
         {
@@ -2845,7 +6777,61 @@
           "type": "file"
         },
         {
+          "name": "container-monitor-api.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "containers",
+          "type": "dir",
+          "children": [
+            {
+              "name": "demoContainer.lifecycle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "demoContainer.liveState.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "demoContainer.secrets.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "demoContainer.t3Power.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "demoContainer.ts",
+              "type": "file"
+            },
+            {
+              "name": "demoContainerFakeCtx.ts",
+              "type": "file"
+            },
+            {
+              "name": "demoContainerStub.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "demoContainerStub.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
           "name": "conversation-hash.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "conversation-stream-health-endpoint.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "conversation-stream-hosts-api.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "conversation-stream-routes-external.test.ts",
           "type": "file"
         },
         {
@@ -2901,7 +6887,15 @@
               "type": "file"
             },
             {
+              "name": "apacheManual.ts",
+              "type": "file"
+            },
+            {
               "name": "apiEndpointList.ts",
+              "type": "file"
+            },
+            {
+              "name": "askgk-routes.json",
               "type": "file"
             },
             {
@@ -2922,6 +6916,10 @@
             },
             {
               "name": "cloudflare-workers-github-oauth-1.tree.json",
+              "type": "file"
+            },
+            {
+              "name": "conversation-stream-routes.json",
               "type": "file"
             },
             {
@@ -3015,6 +7013,20 @@
           "type": "file"
         },
         {
+          "name": "durable",
+          "type": "dir",
+          "children": [
+            {
+              "name": "aichatJob.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleWasm.ts",
+              "type": "file"
+            }
+          ]
+        },
+        {
           "name": "dynamicneko-ai-share-save.test.ts",
           "type": "file"
         },
@@ -3071,6 +7083,10 @@
           "type": "file"
         },
         {
+          "name": "firewall-hourly-cron.test.ts",
+          "type": "file"
+        },
+        {
           "name": "fk-verification.test.ts",
           "type": "file"
         },
@@ -3089,6 +7105,30 @@
         {
           "name": "function-history-api.test.ts",
           "type": "file"
+        },
+        {
+          "name": "fx-wasm.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "generated",
+          "type": "dir",
+          "children": [
+            {
+              "name": "moonbit",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "buildlog.d.ts",
+                  "type": "file"
+                },
+                {
+                  "name": "buildlog.js",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "gh-attach-routes.test.ts",
@@ -3865,6 +7905,50 @@
           "type": "file"
         },
         {
+          "name": "muse-chat-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-handle-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-key-delete-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-keys-isolation.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-keys-owner.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-monitor-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-search-keys-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-search-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-search-threads-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-thread-search-route.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "muse-wasm-test-route.test.ts",
+          "type": "file"
+        },
+        {
           "name": "notification-settings.test.ts",
           "type": "file"
         },
@@ -3941,6 +8025,10 @@
           "type": "file"
         },
         {
+          "name": "repo-node-modules-untracked.test.ts",
+          "type": "file"
+        },
+        {
           "name": "repositories-toast-z.test.ts",
           "type": "file"
         },
@@ -3982,6 +8070,34 @@
             },
             {
               "name": "status-tables.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewConversationStream.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewConversationStream.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewMuseChat.live.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewMuseChat.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewMuseChat.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewT3Power.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewT3Power.ts",
               "type": "file"
             }
           ]
@@ -4028,6 +8144,10 @@
         },
         {
           "name": "ruby-wasm-version-info.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "select-demo-container-image.test.ts",
           "type": "file"
         },
         {
@@ -4095,6 +8215,10 @@
           "type": "file"
         },
         {
+          "name": "static-assets-sample.test.ts",
+          "type": "file"
+        },
+        {
           "name": "status-aichat-images-preview.test.ts",
           "type": "file"
         },
@@ -4104,6 +8228,14 @@
         },
         {
           "name": "table-page-map-20260907.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tailscale-wasm-durable-tasks.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tailscale-wasm-route.test.ts",
           "type": "file"
         },
         {
@@ -4124,6 +8256,10 @@
         },
         {
           "name": "tree-view-cron-notification.test.ts",
+          "type": "file"
+        },
+        {
+          "name": "tree-view-keyword-search-log-latest-external.test.ts",
           "type": "file"
         },
         {
@@ -4223,6 +8359,14 @@
               "type": "file"
             },
             {
+              "name": "aichatJob.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatJob.ts",
+              "type": "file"
+            },
+            {
               "name": "aichatLinkFootnotes.test.ts",
               "type": "file"
             },
@@ -4271,6 +8415,14 @@
               "type": "file"
             },
             {
+              "name": "answerKeywordExtractionStore.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "answerKeywordExtractionStore.ts",
+              "type": "file"
+            },
+            {
               "name": "apiKeyStats.test.ts",
               "type": "file"
             },
@@ -4284,6 +8436,34 @@
             },
             {
               "name": "apiKeys.ts",
+              "type": "file"
+            },
+            {
+              "name": "askgkRoutes.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "askgkRoutes.ts",
+              "type": "file"
+            },
+            {
+              "name": "askgkTimeoutSettings.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "askgkTimeoutSettings.ts",
+              "type": "file"
+            },
+            {
+              "name": "authorizedKeyInput.ts",
+              "type": "file"
+            },
+            {
+              "name": "bridgeJobs.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "bridgeJobs.ts",
               "type": "file"
             },
             {
@@ -4319,7 +8499,87 @@
               "type": "file"
             },
             {
+              "name": "cfBuildsApi.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfBuildsApi.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerBanner.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerBanner.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerCost.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerCost.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerFirewallSnapshot.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerFirewallSnapshot.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerInstalledBaseline.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerOperationLog.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerOperationLog.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerPackageReleaseStatus.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerSessions.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerSessions.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerSnapshot.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerSnapshot.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerStatus.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainerStatus.ts",
+              "type": "file"
+            },
+            {
               "name": "cfDashboardD1.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfWorkerSecretApi.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfWorkerSecretApi.ts",
               "type": "file"
             },
             {
@@ -4351,6 +8611,14 @@
               "type": "file"
             },
             {
+              "name": "cloudflareTunnelApi.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cloudflareTunnelApi.ts",
+              "type": "file"
+            },
+            {
               "name": "codexAskgkQuestion.test.ts",
               "type": "file"
             },
@@ -4367,11 +8635,27 @@
               "type": "file"
             },
             {
+              "name": "codexResetCountdown.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "codexResetCountdown.ts",
+              "type": "file"
+            },
+            {
               "name": "columnRelationStats.test.ts",
               "type": "file"
             },
             {
               "name": "columnRelationStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitActivitySummary.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitActivitySummary.ts",
               "type": "file"
             },
             {
@@ -4391,6 +8675,74 @@
               "type": "file"
             },
             {
+              "name": "commitSummaryTopics.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerBuildCacheEffects.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerBuildCacheEffects.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerBuildTimings.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerBuildTimings.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerEndpoints.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerEndpoints.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerFleet.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerFleet.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerImageRecords.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerImageRecords.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerMonitor.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerMonitor.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerPlan.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerPlan.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerVersionsForMuse.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerVersionsForMuse.ts",
+              "type": "file"
+            },
+            {
               "name": "contentHash.ts",
               "type": "file"
             },
@@ -4400,6 +8752,38 @@
             },
             {
               "name": "conversationHash.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamHealth.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamHealth.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamHosts.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamOverrides.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamOverrides.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamRegistry.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamRoutes.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamRoutes.ts",
               "type": "file"
             },
             {
@@ -4467,6 +8851,14 @@
               "type": "file"
             },
             {
+              "name": "dockerDashboardProxy.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "dockerDashboardProxy.ts",
+              "type": "file"
+            },
+            {
               "name": "dynamicWorkerPing.test.ts",
               "type": "file"
             },
@@ -4504,6 +8896,14 @@
             },
             {
               "name": "emailVerify.ts",
+              "type": "file"
+            },
+            {
+              "name": "embeddingKeywordExtraction.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "embeddingKeywordExtraction.ts",
               "type": "file"
             },
             {
@@ -4576,6 +8976,14 @@
             },
             {
               "name": "goDiffWasmServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "goLifecycle.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "goLifecycle.ts",
               "type": "file"
             },
             {
@@ -4711,6 +9119,14 @@
               "type": "file"
             },
             {
+              "name": "latestToolVersions.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "latestToolVersions.ts",
+              "type": "file"
+            },
+            {
               "name": "logger.ts",
               "type": "file"
             },
@@ -4771,6 +9187,14 @@
               "type": "file"
             },
             {
+              "name": "moonbitBuildLog.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "moonbitBuildLog.ts",
+              "type": "file"
+            },
+            {
               "name": "moondreamAnalyze.test.ts",
               "type": "file"
             },
@@ -4783,6 +9207,158 @@
               "type": "file"
             },
             {
+              "name": "multiContainerSchema.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museAgentJobs.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museAgentJobs.ts",
+              "type": "file"
+            },
+            {
+              "name": "museAnswerView.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museAnswerView.ts",
+              "type": "file"
+            },
+            {
+              "name": "museConversationSearch.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museConversationSearch.ts",
+              "type": "file"
+            },
+            {
+              "name": "museDirectAsk.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museDirectAsk.ts",
+              "type": "file"
+            },
+            {
+              "name": "museHandles.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museHandles.ts",
+              "type": "file"
+            },
+            {
+              "name": "museInquiryBoard.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museInquiryBoard.ts",
+              "type": "file"
+            },
+            {
+              "name": "museMessages.ts",
+              "type": "file"
+            },
+            {
+              "name": "museMonitor.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museMonitor.ts",
+              "type": "file"
+            },
+            {
+              "name": "museNodeReady.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museNodeReady.ts",
+              "type": "file"
+            },
+            {
+              "name": "museNodeStatus.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museNodeStatus.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSearchAnswers.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSearchAnswers.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSearchKeys.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSearchKeys.testdb.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSearchKeys.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSenderDetection.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museTailscalePreflight.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museTailscalePreflight.ts",
+              "type": "file"
+            },
+            {
+              "name": "museThreadSearchLog.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museThreadSearchLog.ts",
+              "type": "file"
+            },
+            {
+              "name": "museThreads.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museThreads.ts",
+              "type": "file"
+            },
+            {
+              "name": "museWorkerAsk.route.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museWorkerAsk.ts",
+              "type": "file"
+            },
+            {
+              "name": "museWorkerHealth.coldStart.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museWorkerIsolation.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "nodeBootRecovery.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "nodeBootRecovery.ts",
+              "type": "file"
+            },
+            {
               "name": "notifyDispatch.test.ts",
               "type": "file"
             },
@@ -4792,6 +9368,14 @@
             },
             {
               "name": "parse-functions.ts",
+              "type": "file"
+            },
+            {
+              "name": "proxyIdentity.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "proxyIdentity.ts",
               "type": "file"
             },
             {
@@ -4879,6 +9463,10 @@
               "type": "file"
             },
             {
+              "name": "rerankerPlayground.ts",
+              "type": "file"
+            },
+            {
               "name": "resendWebhook.ts",
               "type": "file"
             },
@@ -4892,6 +9480,14 @@
             },
             {
               "name": "revoke.ts",
+              "type": "file"
+            },
+            {
+              "name": "routeParam.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "routeParam.ts",
               "type": "file"
             },
             {
@@ -4924,6 +9520,14 @@
             },
             {
               "name": "securemineLogin.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineRedmineFeatures.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "securemineRedmineFeatures.ts",
               "type": "file"
             },
             {
@@ -5011,6 +9615,14 @@
               "type": "file"
             },
             {
+              "name": "sshPublicKey.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "sshPublicKey.ts",
+              "type": "file"
+            },
+            {
               "name": "stripThinkTags.test.ts",
               "type": "file"
             },
@@ -5024,6 +9636,46 @@
             },
             {
               "name": "syntaxHighlight.ts",
+              "type": "file"
+            },
+            {
+              "name": "t3PairingHandoff.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "t3PairingHandoff.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleLoginServer.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleLoginServer.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleNodeHealth.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleNodeHealth.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscalePageTools.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscalePageTools.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleWebhook.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleWebhook.ts",
               "type": "file"
             },
             {
@@ -5052,6 +9704,30 @@
             },
             {
               "name": "treeViewCronNotify.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewCronPolicy.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewKeywordOccurrence.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewKeywordOccurrence.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewKeywordSearchAutoSave.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewKeywordSearchLog.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "treeViewKeywordSearchLog.ts",
               "type": "file"
             },
             {
@@ -5087,6 +9763,10 @@
               "type": "file"
             },
             {
+              "name": "tunnelSignerDiagnostics.test.ts",
+              "type": "file"
+            },
+            {
               "name": "uuid.ts",
               "type": "file"
             },
@@ -5115,6 +9795,30 @@
               "type": "file"
             },
             {
+              "name": "wasmMuseBridge.diagnosis.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmMuseBridge.keyProof.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmMuseBridge.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmMuseBridge.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmTailnetService.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "wasmTailnetService.ts",
+              "type": "file"
+            },
+            {
               "name": "webBotAuthVerify.test.ts",
               "type": "file"
             },
@@ -5127,11 +9831,23 @@
               "type": "file"
             },
             {
+              "name": "workerMuseCost.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "workerMuseCost.ts",
+              "type": "file"
+            },
+            {
               "name": "workerRequestSignature.test.ts",
               "type": "file"
             },
             {
               "name": "workerRequestSignature.ts",
+              "type": "file"
+            },
+            {
+              "name": "workerStaticAssets.ts",
               "type": "file"
             },
             {
@@ -5189,11 +9905,51 @@
               "type": "file"
             },
             {
+              "name": "aichatDraft.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatDraft.ts",
+              "type": "file"
+            },
+            {
               "name": "aichatImageGallery.test.ts",
               "type": "file"
             },
             {
               "name": "aichatImageGallery.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatJobClient.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatJobClient.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatMuseHealth.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatMuseHealth.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatMuseSubmissionHealth.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatMuseTransport.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatPending.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "aichatPending.ts",
               "type": "file"
             },
             {
@@ -5249,6 +10005,30 @@
               "type": "file"
             },
             {
+              "name": "cfContainers.apache-help-window.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainers.apache-module-help.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainers.apache-modules.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainers.navigation.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainers.script-syntax.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "cfContainers.ts",
+              "type": "file"
+            },
+            {
               "name": "cheeseSearch.ts",
               "type": "file"
             },
@@ -5282,6 +10062,30 @@
             },
             {
               "name": "columnStats.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitActivityBackfillStatus.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "commitActivityBackfillStatus.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerMonitor.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerPlanner.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "containerPlanner.ts",
+              "type": "file"
+            },
+            {
+              "name": "conversationStreamIdle.test.ts",
               "type": "file"
             },
             {
@@ -5365,6 +10169,10 @@
               "type": "file"
             },
             {
+              "name": "fxWasm.ts",
+              "type": "file"
+            },
+            {
               "name": "galaxy.ts",
               "type": "file"
             },
@@ -5434,6 +10242,14 @@
             },
             {
               "name": "jsonStructuralDiff.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordSearchTrends.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "keywordSearchTrends.ts",
               "type": "file"
             },
             {
@@ -5517,6 +10333,10 @@
               "type": "file"
             },
             {
+              "name": "moonbitSample.ts",
+              "type": "file"
+            },
+            {
               "name": "moondreamAnalyzeLog.test.ts",
               "type": "file"
             },
@@ -5530,6 +10350,38 @@
             },
             {
               "name": "moondreamVlm.ts",
+              "type": "file"
+            },
+            {
+              "name": "museInquiries.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museInquiries.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSearch.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museSearch.ts",
+              "type": "file"
+            },
+            {
+              "name": "museStatus.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museStatus.ts",
+              "type": "file"
+            },
+            {
+              "name": "museWasmTest.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "museWasmTest.ts",
               "type": "file"
             },
             {
@@ -5578,6 +10430,10 @@
             },
             {
               "name": "repositories.ts",
+              "type": "file"
+            },
+            {
+              "name": "rerankerPlayground.ts",
               "type": "file"
             },
             {
@@ -5669,6 +10525,22 @@
               "type": "file"
             },
             {
+              "name": "tailscaleWasm.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleWasm.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleWasmCost.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "tailscaleWasmCost.ts",
+              "type": "file"
+            },
+            {
               "name": "tdf.ts",
               "type": "file"
             },
@@ -5682,6 +10554,10 @@
             },
             {
               "name": "threadTracker.ts",
+              "type": "file"
+            },
+            {
+              "name": "tsubuyaki-markdown.test.ts",
               "type": "file"
             },
             {
@@ -5806,6 +10682,18 @@
             },
             {
               "name": "wineSearch.ts",
+              "type": "file"
+            },
+            {
+              "name": "workerConversationStream.test.ts",
+              "type": "file"
+            },
+            {
+              "name": "workerConversationStream.ts",
+              "type": "file"
+            },
+            {
+              "name": "workerStaticAssets.ts",
               "type": "file"
             },
             {
@@ -6075,6 +10963,10 @@
           "type": "file"
         },
         {
+          "name": "worker-conversation-stream.test.ts",
+          "type": "file"
+        },
+        {
           "name": "worker-entry-config.test.ts",
           "type": "file"
         },
@@ -6119,6 +11011,26 @@
         {
           "name": "README.md",
           "type": "file"
+        },
+        {
+          "name": "allocator-api-wasm",
+          "type": "dir",
+          "children": [
+            {
+              "name": "README.md",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
         },
         {
           "name": "dig-wasm",
@@ -6320,6 +11232,46 @@
             },
             {
               "name": "Cargo.toml",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "never-wasm",
+          "type": "dir",
+          "children": [
+            {
+              "name": "README.md",
+              "type": "file"
+            },
+            {
+              "name": "src",
+              "type": "dir",
+              "children": [
+                {
+                  "name": "lib.rs",
+                  "type": "file"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "rust-1.100-apis",
+          "type": "dir",
+          "children": [
+            {
+              "name": "README.md",
               "type": "file"
             },
             {
