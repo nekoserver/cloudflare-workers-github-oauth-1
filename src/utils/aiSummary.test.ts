@@ -325,12 +325,24 @@ describe('detectCommitAgentFromText', () => {
 
   it('日本語の「バージョン」表記からもバージョンを抽出する', () => {
     const detected = detectCommitAgentFromText('codex バージョン 1.24.0 で生成');
-    expect(detected?.agentName).toBe('Codex');
+    expect(detected?.agentName).toBe('codex');
     expect(detected?.agentVersion).toBe('1.24.0');
   });
 });
 
 describe('detectCommitAgentFromPrText', () => {
+  it('Codex Bot が作成した PR を本文に手がかりがなくても検出する', () => {
+    expect(detectCommitAgentFromPrText('fix: update', null, 'codex[bot]')).toEqual({
+      agentName: 'codex', agentVersion: null, signal: 'pr',
+    });
+    expect(detectCommitAgentFromPrText('fix: update', null, 'nekoserver')).toBeNull();
+  });
+
+  it('人のアカウントから作成した PR の明示的な Codex 表記を使う', () => {
+    expect(detectCommitAgentFromPrText('fix: update', 'Claude Code との互換性を確認しました。\n\nAgent: codex', 'nekoserver'))
+      .toEqual({ agentName: 'codex', agentVersion: null, signal: 'pr' });
+  });
+
   it('PR本文の表記からエージェントを検出し signal=pr を返す', () => {
     const detected = detectCommitAgentFromPrText(
       'feat: refactor auth',
