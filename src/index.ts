@@ -21014,6 +21014,7 @@ app.get('/api/muse-search/thread', authMiddleware, cfDashboardAdminMiddleware, a
   }
   return c.json({
     threadId: result.data.threadId, chatId: result.data.chatId, role: result.data.role, createdAt: result.data.createdAt, truncated,
+    markdown: content,
     paragraphs: highlightParagraphs(toParagraphs(content), keywords),
     ...(highlightError ? { highlightError } : {}),
   });

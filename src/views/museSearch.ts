@@ -9,7 +9,7 @@ export const MUSE_SEARCH_CSP = "default-src 'none'; script-src 'unsafe-inline'; 
 
 /**
  * /muse-search のページ script(2026-11-19)。依存を受け取る関数に分け、museSearch.test.ts で動かす。
- * チャット本文は共有 Markdown パーサーを通す。その他の上流の文字列はテキストとして表示する。
+ * チャットとスレッドの本文は共有 Markdown パーサーを通す。その他の上流の文字列はテキストとして表示する。
  * このファイルのscriptはTypeScriptのtemplate literalの中にあるので、バックスラッシュ・正規表現・バッククォートを書かない。
  */
 export const MUSE_SEARCH_SCRIPT = `
@@ -250,8 +250,8 @@ export const MUSE_SEARCH_SCRIPT = `
       });
     }
 
-    function renderMuseChatMarkdown(doc, post) {
-      var body = museSearchEl(doc, 'div', 'muse-chat-markdown');
+    function renderMusePostMarkdown(doc, post) {
+      var body = museSearchEl(doc, 'div', 'muse-post-markdown');
       var paragraphs = post.paragraphs;
       var markdown = post.markdown;
       if (typeof markdown !== 'string') {
@@ -411,7 +411,7 @@ export const MUSE_SEARCH_SCRIPT = `
           heading.appendChild(meta);
           section.appendChild(heading);
           if (post.role === 'user' || index === latestAnswerIndex) section.setAttribute('open', '');
-          section.appendChild(renderMuseChatMarkdown(doc, post));
+          section.appendChild(renderMusePostMarkdown(doc, post));
           if (post.truncated) section.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '長いため、途中までを表示しています。'));
           wrap.appendChild(section);
         });
@@ -1127,7 +1127,7 @@ export const MUSE_SEARCH_SCRIPT = `
     }
 
     // 初期画面のスレッド一覧。各スレッドへの最終書き込みの日時が新しいほうから順に(APIの順のまま)、スレッドタイトルのリンクだけを並べる。
-    // リンクを押すと、そのスレッドへの最終書き込みを、リンクの下に、段落ごとの <p> で出す。もう一度押すと閉じる。開き直しでは取り直さない。
+    // リンクを押すと、そのスレッドへの最終書き込みを、リンクの下に、Markdown で表示する。もう一度押すと閉じる。開き直しでは取り直さない。
     var MUSE_THREAD_ROLE_LABELS = { user: '質問', assistant: '回答' };
     function failText(r, what) {
       var why = r.data && r.data.detail ? r.data.detail : (r.data && r.data.error ? r.data.error : '');
@@ -1138,15 +1138,7 @@ export const MUSE_SEARCH_SCRIPT = `
       var meta = museSearchEl(doc, 'p', 'muse-thread-meta', '最終書き込み: ' + formatMuseSearchTime(data.createdAt) + '・' + (MUSE_THREAD_ROLE_LABELS[data.role] || data.role) + '・チャット ');
       meta.appendChild(createMuseChatLink(doc, fetchFn, data.chatId));
       wrap.appendChild(meta);
-      // 各段落は、強調の区間(サーバーが、閲覧ユーザーが持つキーワードで計算済み)の並び。強調(hit)は <mark>、それ以外は文字。文字は textContent だけで入れる。
-      data.paragraphs.forEach(function (segments) {
-        var paragraph = museSearchEl(doc, 'p', 'muse-thread-paragraph');
-        segments.forEach(function (segment) {
-          if (segment.hit) paragraph.appendChild(museSearchEl(doc, 'mark', '', segment.text));
-          else paragraph.appendChild(doc.createTextNode(segment.text));
-        });
-        wrap.appendChild(paragraph);
-      });
+      wrap.appendChild(renderMusePostMarkdown(doc, data));
       // 強調に使うキーワードを読めなかったときは、本文は出したまま、強調なしであることと、その理由を伝える(強調なしを「正常」に見せない)。
       if (data.highlightError) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta muse-thread-highlight-error', 'キーワードの強調は、できませんでした: ' + data.highlightError));
       if (data.truncated) wrap.appendChild(museSearchEl(doc, 'p', 'muse-thread-meta', '本文が長いため、途中までを表示しています。'));
@@ -1519,8 +1511,6 @@ export function getMuseSearchPage(): string {
     .muse-thread-link { color: var(--accent-color); text-decoration: none; overflow-wrap: anywhere; }
     .muse-thread-last { margin: 6px 0 4px 4px; padding: 6px 0 2px 12px; border-left: 2px solid var(--border-color); color: var(--text-primary); }
     .muse-thread-meta { margin: 0 0 8px; font-size: 12px; color: var(--text-secondary); }
-    .muse-thread-paragraph mark { background: var(--warning-color); color: var(--bg-primary); border-radius: 2px; padding: 0 2px; }
-    .muse-thread-paragraph { margin: 0 0 10px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
     .muse-search-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
     .muse-search-item { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; min-width: 0; }
     .muse-search-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13px; }
@@ -1568,15 +1558,15 @@ export function getMuseSearchPage(): string {
     .muse-chat-heading { cursor: pointer; }
     .muse-chat-meta { color: var(--text-secondary); font-size: 13px; }
     .muse-chat-role { font-weight: 700; color: var(--text-primary); }
-    ${getMarkdownPreviewCSS().replaceAll('.preview-area', '.muse-chat-markdown')}
-    .muse-chat-markdown { margin-top: 8px; overflow-wrap: anywhere; overflow-x: auto; }
-    .muse-chat-markdown > :first-child { margin-top: 0; }
-    .muse-chat-markdown > :last-child { margin-bottom: 0; }
-    .muse-chat-markdown mark { background: var(--warning-color); color: var(--text-on-warning, var(--text-primary)); }
+    ${getMarkdownPreviewCSS().replaceAll('.preview-area', '.muse-post-markdown')}
+    .muse-post-markdown { margin-top: 8px; overflow-wrap: anywhere; overflow-x: auto; }
+    .muse-post-markdown > :first-child { margin-top: 0; }
+    .muse-post-markdown > :last-child { margin-bottom: 0; }
+    .muse-post-markdown mark { background: var(--warning-color); color: var(--text-on-warning, var(--text-primary)); }
     #muse-chat-title { min-width: 0; overflow-wrap: anywhere; }
     .muse-chat-highlight { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; white-space: nowrap; cursor: pointer; font-size: 13px; }
     .muse-chat-highlight input { margin: 0; accent-color: var(--accent-color); }
-    .muse-chat-highlight-off .muse-chat-markdown mark { background: transparent; color: inherit; }
+    .muse-chat-highlight-off .muse-post-markdown mark { background: transparent; color: inherit; }
     .muse-confirm-overlay { position: fixed; inset: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--modal-overlay); }
     .muse-confirm-dialog { box-sizing: border-box; width: 100%; max-width: 340px; padding: 20px 18px 16px; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; }
     .muse-confirm-title { margin: 0 0 8px; font-size: 15px; }
