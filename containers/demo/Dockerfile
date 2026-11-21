@@ -2,7 +2,7 @@
 ARG TAILSCALE_VERSION=1.104.7
 ARG GH_VERSION=2.105.0
 ARG JJ_VERSION=0.47.1
-ARG RUBY_VERSION=4.0.9
+ARG RUBY_VERSION=4.0.10
 ARG GIT_VERSION=2.56.1
 ARG OPENSSH_VERSION=10.6p2
 ARG APACHE_VERSION=2.4.71
@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # sha256はhttps://www.ruby-lang.org/en/downloads/ に載っている値で固定し、取得物の改ざん・破損で失敗させる。
 FROM ubuntu:26.04 AS ruby-build
 ARG RUBY_VERSION
-ARG RUBY_SHA256=c35350682ff050b79702d57ade4516e7336063f510155d19fb2fb5b3f3909511
+ARG RUBY_SHA256=b53eef3371fa5d3e3b74340edcd015f06d5d8853968d4e539a5264fce41ed9f1
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl build-essential autoconf bison pkg-config \
         libssl-dev libyaml-dev zlib1g-dev libffi-dev libgmp-dev \
@@ -61,9 +61,9 @@ FROM ubuntu:26.04
 ARG NODE_VERSION=26.13.1
 ARG NODE_SHA256=5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864
 ARG NPM_VERSION=12.2.2
-ARG CODEX_VERSION=0.170.0
-ARG T3_VERSION=0.1.10
-ARG CLAUDE_VERSION=2.1.327
+ARG CODEX_VERSION=0.171.0
+ARG T3_VERSION=0.1.11
+ARG CLAUDE_VERSION=2.1.330
 ARG VITEST_VERSION=5.1.0
 ARG TYPESCRIPT_VERSION=7.0.2
 ARG CLOUDFLARED_VERSION=2026.11.1
@@ -230,7 +230,7 @@ RUN for b in node npm npx codex vitest tsc tsserver; do if command -v "$b" >/dev
     && printf 'export PATH=/opt/node22/bin:$PATH\n' > /etc/profile.d/node22.sh \
     && printf '\n# /opt/node22/bin(npm install -gしたCLI)をログインしない対話シェルでも使えるようにする\nexport PATH=/opt/node22/bin:$PATH\n' >> /etc/bash.bashrc
 # npm 12 blocks install scripts by default; allow only Claude's native installer.
-ARG CLAUDE_NATIVE_SHA256=343c744baa14bfd38286a7cb90871051f04379956da6c5b803a9e66019a76ac9
+ARG CLAUDE_NATIVE_SHA256=f390eaa0814e6a1bff74cbb47acb74cb9c89d30ced809fe0af5af00c7bfe8ebb
 RUN /opt/node22/bin/npm install -g @anthropic-ai/claude-code@${CLAUDE_VERSION} --allow-scripts=@anthropic-ai/claude-code \
     && ln -sf /opt/node22/bin/claude /usr/local/bin/claude \
     && echo "${CLAUDE_NATIVE_SHA256}  /opt/node22/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-x64/claude" | sha256sum -c - \

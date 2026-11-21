@@ -13,7 +13,12 @@ import { readFileSync } from 'node:fs';
 // 画面以外は、別のポートと状態ディレクトリで起動した実物でも確かめた。0.1.7 で GET /api/auth/clients は無くなった(このリポジトリは使っていない)。
 // T3の版を上げるときは、テストを先に直す: 新しい版のソースで下の各項目を確かめ直し、CONTRACT_VERIFIED_VERSION を上げてから、
 // Dockerfile の T3_VERSION を上げる。確かめないまま版だけ上げると、このテストが失敗する。
-const CONTRACT_VERIFIED_VERSION = '0.1.10';
+// 0.1.11(タグ v0.1.11、59651c17)のソースで全9項目を確かめ直した(2026-11-21)。全項目とも 0.1.10 と同じ: getSessionState・selectRequestCredential・
+// EnvironmentAuthenticatedAuth(packages/contracts/src/environmentHttp.ts)・resolveSessionCookieName(auth/utils.ts は差分なし)・pairingCredential(access:write)・
+// DEFAULT_ONE_TIME_TOKEN_TTL_MINUTES = minutes(5)・getPairingTokenFromUrl(packages/shared/src/remote.ts)・takePairingTokenFromUrl/peekPairingTokenFromUrl・
+// waitForAuthenticatedSessionAfterBootstrap(2秒・100ms)。effect は pnpm-lock で 4.1.3 のまま。違いは、画面の文言が多言語化された(m(msg(...)))ことだけで、
+// 9番目の失敗メッセージの文字列は、表示の言語によって変わりうる(挙動は同じ。このリポジトリのコードは、その文字列に頼っていない)。
+const CONTRACT_VERIFIED_VERSION = '0.1.11';
 const CONTRACT = [
   { behavior: '/api/auth/session は、認証に失敗した要求に、401ではなく 200 の { authenticated: false } を返す', source: 'サーバー getSessionState の catchIf(isServerAuthCredentialError)' },
   { behavior: 'ほかの認証付きAPIは、認証に失敗すると 401 を返す', source: 'サーバー EnvironmentAuthenticatedAuth' },
