@@ -74,7 +74,7 @@ describe('GET /api/muse-search/thread', () => {
     const res = await get(request, 't1', { DYNAMICNEKO: up });
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toBe('no-store');
-    expect(await res.json()).toEqual({ threadId: 't1', chatId: 'c1', role: 'assistant', createdAt: 100, truncated: false, paragraphs: [plain('一段落目\n二行目'), plain('二段落目')] });
+    expect(await res.json()).toEqual({ threadId: 't1', chatId: 'c1', role: 'assistant', createdAt: 100, truncated: false, markdown: last.content, paragraphs: [plain('一段落目\n二行目'), plain('二段落目')] });
     expect((up.fetch.mock.calls[0] as unknown as [string])[0]).toBe('https://dynamicneko.internal/api/tree-view/muse-thread-last?threadId=t1');
   });
   it('長すぎる本文は10万文字で切り、truncated: true にする', async () => {

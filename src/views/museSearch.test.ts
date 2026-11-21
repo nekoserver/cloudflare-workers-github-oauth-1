@@ -1104,7 +1104,7 @@ describe('初期画面のスレッド一覧', () => {
       const modal = document.querySelector<HTMLElement>('[data-overlay="muse-chat"]')!;
       expect(modal.querySelector('h2')!.textContent).toBe('チャット ' + chatId);
       expect(modal.querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(false);
-      expect(modal.querySelector('.muse-chat-markdown strong mark')!.textContent).toBe('本文');
+      expect(modal.querySelector('.muse-post-markdown strong mark')!.textContent).toBe('本文');
       expect([...modal.querySelectorAll<HTMLDetailsElement>('details')].map((post) => post.open)).toEqual([true, false, true]);
       modal.querySelector<HTMLButtonElement>('button[data-action="close"]')!.click();
       expect(document.activeElement).toBe(chatLink);
@@ -1113,7 +1113,7 @@ describe('初期画面のスレッド一覧', () => {
       localStorage.removeItem(storageKey);
     }
   });
-  it('押すと /api/muse-search/thread をスレッドIDをエンコードして読み、リンクの下に、最終書き込みを段落ごとの <p> で出す(段落の中の改行は残す)。ページ遷移はしない', async () => {
+  it('押すと /api/muse-search/thread をスレッドIDをエンコードして読み、リンクの下に、最終書き込みを段落ごとの <p> で出す(段落の中の改行は br で表示する)。ページ遷移はしない', async () => {
     const fetchFn = router(threadsRoutes());
     mount(fetchFn);
     await flush();
@@ -1125,7 +1125,8 @@ describe('初期画面のスレッド一覧', () => {
     const panel = panelOf(links()[1])!;
     expect(panel).not.toBeNull();
     expect(links()[1].nextElementSibling).toBe(panel);
-    expect([...panel.querySelectorAll('p.muse-thread-paragraph')].map((p) => p.textContent)).toEqual(['一段落目\n二行目', '二段落目']);
+    expect([...panel.querySelectorAll('.muse-post-markdown p')].map((p) => p.textContent)).toEqual(['一段落目二行目', '二段落目']);
+    expect(panel.querySelector('.muse-post-markdown p br')).not.toBeNull();
     expect(panel.querySelector('.muse-thread-meta')!.textContent).toContain(script.formatMuseSearchTime(1763538600));
     expect(panel.querySelector('.muse-thread-meta')!.textContent).toContain('回答');
     expect(panel.querySelector('.muse-thread-meta')!.textContent).toContain('c-A2');
@@ -1145,6 +1146,20 @@ describe('初期画面のスレッド一覧', () => {
     expect(panelOf(links()[0])!.hidden).toBe(false);
     expect(links()[0].getAttribute('aria-expanded')).toBe('true');
     expect(calls(fetchFn).filter((u) => u.startsWith('/api/muse-search/thread?'))).toHaveLength(1);
+  });
+  it('個別スレッドの Markdown を描画し、コードの空行とキーワード強調を保つ', async () => {
+    const markdown = '## 見出し\n\n**Static** Assets\n\n```txt\na\n\n  b\n```\n\n<img src=x>';
+    const post = lastPost({ markdown, paragraphs: [[{ text: 'Static', hit: true }]] });
+    mount(router(threadsRoutes({ '/api/muse-search/thread?': json(post) })));
+    await flush();
+    links()[0].click();
+    await flush();
+    const panel = panelOf(links()[0])!;
+    expect(panel.querySelector('h2')?.textContent).toBe('見出し');
+    expect(panel.querySelector('strong mark')?.textContent).toBe('Static');
+    expect(panel.querySelector('pre code')?.textContent).toBe('a\n\n  b');
+    expect(panel.querySelector('img')).toBeNull();
+    expect(panel.textContent).toContain('<img src=x>');
   });
   it('複数のスレッドを、それぞれ開ける(ほかのスレッドを閉じない)。質問(user)の最終書き込みは「質問」と出す', async () => {
     mount(router(threadsRoutes({ '/api/muse-search/thread?threadId=t2': json(lastPost({ threadId: 't2', role: 'user', paragraphs: [[{ text: '質問の本文', hit: false }]] })), '/api/muse-search/thread?threadId=t1': json(lastPost()) })));
@@ -1169,12 +1184,12 @@ describe('初期画面のスレッド一覧', () => {
     release(new Response(JSON.stringify({ errorCode: 'http_error', detail: 'upstream 404' }), { status: 502 }));
     await flush();
     expect(panelOf(links()[0])!.textContent).toMatch(/502.*upstream 404/);
-    expect(panelOf(links()[0])!.querySelectorAll('p.muse-thread-paragraph')).toHaveLength(0);
+    expect(panelOf(links()[0])!.querySelectorAll('.muse-post-markdown p')).toHaveLength(0);
     links()[0].click();
     links()[0].click();
     await flush();
     expect(attempt).toBe(2);
-    expect(panelOf(links()[0])!.querySelectorAll('p.muse-thread-paragraph').length).toBeGreaterThan(0);
+    expect(panelOf(links()[0])!.querySelectorAll('.muse-post-markdown p').length).toBeGreaterThan(0);
   });
   it('切り詰めたときは、その旨を出す', async () => {
     mount(router(threadsRoutes({ '/api/muse-search/thread?': json(lastPost({ truncated: true })) })));
@@ -1184,7 +1199,7 @@ describe('初期画面のスレッド一覧', () => {
     expect(panelOf(links()[0])!.textContent).toContain('長いため');
   });
   // 各回答(最終書き込み)に、閲覧ユーザーが持つキーワードを強調する(2026-11-19、ユーザー指定)。強調の区間はサーバーで計算済み。画面は <mark> で描く。
-  it('最終書き込みの各段落で、強調の区間(hit: true)を <mark> にする。段落の文字は、つなぐと変わらない(改行も残る)', async () => {
+  it('最終書き込みの各段落で、強調の区間(hit: true)を <mark> にする。段落の文字は、つなぐと変わらない(改行は br で表示する)', async () => {
     mount(router(threadsRoutes({ '/api/muse-search/thread?': json(lastPost({ paragraphs: [
       [{ text: 'Workers の', hit: false }, { text: 'Static', hit: true }, { text: ' を配信\n二行目', hit: false }],
       [{ text: '二段落目の', hit: false }, { text: 'static', hit: true }, { text: ' と ', hit: false }, { text: 'ASSETS', hit: true }],
@@ -1192,8 +1207,8 @@ describe('初期画面のスレッド一覧', () => {
     await flush();
     links()[0].click();
     await flush();
-    const paragraphs = [...panelOf(links()[0])!.querySelectorAll('p.muse-thread-paragraph')];
-    expect(paragraphs.map((p) => p.textContent)).toEqual(['Workers のStatic を配信\n二行目', '二段落目のstatic と ASSETS']);
+    const paragraphs = [...panelOf(links()[0])!.querySelectorAll('.muse-post-markdown p')];
+    expect(paragraphs.map((p) => p.textContent)).toEqual(['Workers のStatic を配信二行目', '二段落目のstatic と ASSETS']);
     expect(paragraphs.map((p) => [...p.querySelectorAll('mark')].map((m) => m.textContent))).toEqual([['Static'], ['static', 'ASSETS']]);
   });
   it('強調が無い段落には、<mark> を付けない', async () => {
@@ -1218,7 +1233,7 @@ describe('初期画面のスレッド一覧', () => {
     links()[0].click();
     await flush();
     const panel = panelOf(links()[0])!;
-    expect(panel.querySelectorAll('p.muse-thread-paragraph').length).toBeGreaterThan(0);
+    expect(panel.querySelectorAll('.muse-post-markdown p').length).toBeGreaterThan(0);
     expect(panel.querySelector('.muse-thread-highlight-error')!.textContent).toContain('強調');
     expect(panel.querySelector('.muse-thread-highlight-error')!.textContent).toContain('d1 down');
     document.body.innerHTML = '';
@@ -1232,7 +1247,7 @@ describe('初期画面のスレッド一覧', () => {
     const html = getMuseSearchPage();
     const start = html.indexOf('<style id="muse-search-style">');
     const style = html.slice(start, html.indexOf('</style>', start));
-    expect(style).toMatch(/\.muse-thread-paragraph mark \{[^}]*var\(--warning-color\)/);
+    expect(style).toMatch(/\.muse-post-markdown mark \{[^}]*var\(--warning-color\)/);
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
   it('サーバーから来た文字列(タイトル・本文)は、HTMLとして解釈せず文字のまま出す', async () => {
@@ -1243,7 +1258,7 @@ describe('初期画面のスレッド一覧', () => {
     await flush();
     expect(section().querySelectorAll('img')).toHaveLength(0);
     expect(links()[0].textContent).toBe(evil);
-    expect(panelOf(links()[0])!.querySelector('p.muse-thread-paragraph')!.textContent).toBe(evil);
+    expect(panelOf(links()[0])!.querySelector('.muse-post-markdown p')!.textContent).toBe(evil);
   });
   it('スレッドが1つも無いときは案内を出す。一覧を取れなかったときは、理由つきのエラー(例外にしない・空の一覧に見せない)', async () => {
     mount(router(threadsRoutes({ '/api/muse-search/threads': json({ threads: [] }) })));
@@ -1357,7 +1372,7 @@ describe('初期画面のスレッド一覧', () => {
       for (const a of links()) {
         expect(a.getAttribute('aria-expanded')).toBe('true');
         expect(panelOf(a)!.hidden).toBe(false);
-        expect(panelOf(a)!.querySelectorAll('p.muse-thread-paragraph').length).toBeGreaterThan(0);
+        expect(panelOf(a)!.querySelectorAll('.muse-post-markdown p').length).toBeGreaterThan(0);
       }
       expect(toggleAll().textContent).toBe('全閉');
     });
@@ -1436,7 +1451,7 @@ describe('初期画面のスレッド一覧', () => {
       expect(peak).toBeLessThanOrEqual(4);
       expect(peak).toBeGreaterThan(1);
       expect(threadUrls(fetchFn)).toHaveLength(12);
-      expect(links().every((a) => panelOf(a)!.querySelectorAll('p.muse-thread-paragraph').length > 0)).toBe(true);
+      expect(links().every((a) => panelOf(a)!.querySelectorAll('.muse-post-markdown p').length > 0)).toBe(true);
     });
     it('検索(上の検索窓)を始めると、この検索窓・ボタンも、一覧と一緒に隠れる', async () => {
       const page = mount(router(threadsRoutes({ '/api/muse-search/threads': json(threeThreads), '/api/muse-search?': json({ count: 0, pairs: [] }) })));
@@ -1461,7 +1476,7 @@ describe('初期画面のスレッド一覧', () => {
     const start = html.indexOf('<style id="muse-search-style">');
     const style = html.slice(start, html.indexOf('</style>', start));
     expect(style).toMatch(/\.muse-thread-link \{[^}]*text-decoration: none/);
-    expect(style).toMatch(/\.muse-thread-paragraph \{[^}]*white-space: pre-wrap/);
+    expect(style).toMatch(/\.muse-post-markdown \{[^}]*overflow-wrap: anywhere/);
     expect(style).toMatch(/\.muse-thread-last \{[^}]*var\(--/);
     expect(style).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
@@ -2423,8 +2438,8 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect(posts.map((p) => p.querySelector('.muse-chat-role')!.textContent)).toEqual(['質問', '回答']);
     expect(posts.map((p) => p.getAttribute('data-role'))).toEqual(['user', 'assistant']);
     expect(posts[0].querySelector('.muse-chat-time')!.textContent).toBe(script.formatMuseSearchTime(100));
-    expect(posts[1].querySelectorAll('.muse-chat-markdown p')).toHaveLength(2);
-    expect(posts[1].querySelector('.muse-chat-markdown p')!.textContent).toBe('Workers の Static Assets です');
+    expect(posts[1].querySelectorAll('.muse-post-markdown p')).toHaveLength(2);
+    expect(posts[1].querySelector('.muse-post-markdown p')!.textContent).toBe('Workers の Static Assets です');
     expect([...posts[1].querySelectorAll('mark')].map((m) => m.textContent)).toEqual(['Static']);
     expect(posts[0].querySelectorAll('mark')).toHaveLength(0);
   });
@@ -2483,7 +2498,7 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     link().click();
     await flush();
 
-    const bodies = modal()!.querySelectorAll('.muse-chat-markdown');
+    const bodies = modal()!.querySelectorAll('.muse-post-markdown');
     expect(bodies[0].querySelector('h2')?.textContent).toBe('質問の見出し');
     expect(bodies[1].querySelector('strong mark')?.textContent).toBe('Static');
     expect(bodies[1].querySelector('ul li')?.textContent).toBe('例');
@@ -2522,7 +2537,7 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     await flush();
 
     const questionBox = modal()!.querySelector('.muse-chat-post[data-role="user"]')!;
-    expect(questionBox.querySelector('.muse-chat-markdown p')?.textContent).toBe('静的アセットとは?');
+    expect(questionBox.querySelector('.muse-post-markdown p')?.textContent).toBe('静的アセットとは?');
     const answers = [...modal()!.querySelectorAll<HTMLDetailsElement>('details.muse-chat-post[data-role="assistant"]')];
     expect(answers.map((answer) => answer.open)).toEqual([true, false]);
     const heading = answers[1].querySelector('summary')!;
@@ -2531,7 +2546,7 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     expect(heading.textContent).not.toContain('以前の回答');
     heading.click();
     expect(answers[1].open).toBe(true);
-    expect(answers[1].querySelector('.muse-chat-markdown p')?.textContent).toBe('以前の回答');
+    expect(answers[1].querySelector('.muse-post-markdown p')?.textContent).toBe('以前の回答');
   });
 
   it('読み込み中の表示を出す。サーバーから来た文字列は、HTMLとして解釈せず文字のまま出す(強調の中も)', async () => {
@@ -2608,7 +2623,7 @@ describe('検索結果のチャットIDのリンクと、チャットのモー�
     const style = html.slice(start, html.indexOf('</style>', start));
     expect(style).toMatch(/\.muse-chat-link \{[^}]*var\(--/);
     expect(style).toMatch(/\.muse-chat-link \{[^}]*text-decoration: none/);
-    expect(style).toMatch(/\.muse-chat-highlight-off \.muse-chat-markdown mark \{[^}]*background: transparent; color: inherit/);
+    expect(style).toMatch(/\.muse-chat-highlight-off \.muse-post-markdown mark \{[^}]*background: transparent; color: inherit/);
     // 実ブラウザ(スマホ幅)で見つけた表示: タップしたリンクのハイライトが、開いたモーダルの上に、青い四角として透けて見えた。
     expect(style).toMatch(/\.muse-chat-link \{[^}]*-webkit-tap-highlight-color: transparent/);
     expect(style).toMatch(/\.muse-chat-post \{[^}]*\bborder: 1px solid var\(--/);
