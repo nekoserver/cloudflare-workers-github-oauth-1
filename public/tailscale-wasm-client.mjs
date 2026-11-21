@@ -27,6 +27,10 @@ export async function loadTailscaleClient(config, fetcher = fetch) {
   if (!response.ok) throw new Error(`WASM取得 HTTP ${response.status}`);
   const bytes = await decodeTailscaleWasm(await response.arrayBuffer());
   const wasmURL = URL.createObjectURL(new Blob([bytes], { type: 'application/wasm' }));
-  try { return await (await import(`${TAILSCALE_WASM_ROOT}/pkg.js`)).createIPN({ ...config, wasmURL }); }
-  finally { URL.revokeObjectURL(wasmURL); }
+  try {
+    const client = await (await import(`${TAILSCALE_WASM_ROOT}/pkg.js`)).createIPN({ ...config, wasmURL });
+    if (client instanceof Error) throw client;
+    if (!client || typeof client.run !== 'function') throw new Error('Tailscale WASM が起動可能なノードを返しませんでした');
+    return client;
+  } finally { URL.revokeObjectURL(wasmURL); }
 }

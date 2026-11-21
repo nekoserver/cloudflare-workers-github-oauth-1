@@ -7,12 +7,12 @@ import { WasmTailnetService } from '../utils/wasmTailnetService';
 import { WasmMuseBridge, type MuseKeyStat } from '../utils/wasmMuseBridge';
 import { readMuseNodeSnapshot, waitForMuseNode } from '../utils/museNodeReady';
 import { MuseAgentJobs } from '../utils/museAgentJobs';
-import { createGoLifecycle } from '../utils/goLifecycle';
+import { createGoLifecycle, GoNodeUnavailableError, startGoNode } from '../utils/goLifecycle';
 import { decideBootRecovery, fingerprintState } from '../utils/nodeBootRecovery';
 
 // Go が終了したら(2026-11-12 19:29:33 UTC に exit code 1 で終了した)、次の要求で起動し直す。ノードの状態は SQLite に残るので、ログインし直しは要らない。
 const goRuntime = createGoLifecycle(() => {
-  const go = new Go();
+  const go = new Go() as Go & { exited?: boolean };
   const instance = new WebAssembly.Instance(wasm, go.importObject);
   (globalThis as { newIPN?: unknown }).newIPN = undefined;
   const exited = go.run(instance);
@@ -20,14 +20,13 @@ const goRuntime = createGoLifecycle(() => {
     let failure = false;
     exited.catch(() => { failure = true; });
     for (let i = 0; i < 500 && typeof globalThis.newIPN !== 'function'; i++) {
-      if (failure) throw new Error('Tailscale WASM startup failed');
+      if (failure || go.exited) throw new Error('Tailscale WASM startup failed');
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     if (typeof globalThis.newIPN !== 'function') throw new Error('Tailscale WASM startup timed out');
   })();
-  return { ready, exited };
+  return { ready, exited, isExited: () => go.exited === true };
 });
-function startGo(): Promise<void> { return goRuntime.start(); }
 /** One server-owned node, credentials in private DO SQLite, never in browser storage. */
 export class TailscaleWasm extends DurableObject<Bindings> {
   private service!: WasmTailnetService;
@@ -89,7 +88,7 @@ export class TailscaleWasm extends DurableObject<Bindings> {
         lastDiscardedFingerprint = typeof parsed.fingerprint === 'string' ? parsed.fingerprint : null;
       } catch { lastDiscardedFingerprint = null; }
     }
-    if (decideBootRecovery({ stateFingerprint, lastDiscardedFingerprint }) !== 'discard-and-retry') return false;
+    if (error instanceof GoNodeUnavailableError || decideBootRecovery({ stateFingerprint, lastDiscardedFingerprint }) !== 'discard-and-retry') return false;
     const reason = String(error).slice(0, 200);
     sql.exec('DELETE FROM tailnet_state');
     sql.exec("INSERT INTO worker_settings(key,value) VALUES('node_boot_recovery_discard',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -101,15 +100,12 @@ export class TailscaleWasm extends DurableObject<Bindings> {
   }
   private async bootNode(): Promise<void> {
       const ctx = this.ctx, env = this.env;
-      await startGo();
-      const node = globalThis.newIPN({ hostname: 'main-worker-muse', ephemeral: false, logUpload: false, stateStorage: {
+      const node = await startGoNode(goRuntime, () => globalThis.newIPN({ hostname: 'main-worker-muse', ephemeral: false, logUpload: false, stateStorage: {
         getState(key) { return [...ctx.storage.sql.exec<{ value: string }>('SELECT value FROM tailnet_state WHERE key = ?', key)][0]?.value ?? ''; },
         setState(key, value) { ctx.storage.sql.exec('INSERT INTO tailnet_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', key, value); },
-      } });
-      if (node instanceof Error) throw new Error('Tailscale node initialization failed');
-      this.service = new WasmTailnetService(node as IPN, env);
-      this.node = node as IPN;
-      this.bridge = new WasmMuseBridge(this.node, env.MUSE_API_KEY, undefined, undefined, {
+      } }));
+      const service = new WasmTailnetService(node, env);
+      const bridge = new WasmMuseBridge(node, env.MUSE_API_KEY, undefined, undefined, {
         record(fingerprint, replied) {
           ctx.storage.sql.exec(replied
             ? 'INSERT INTO muse_key_results(fingerprint,replied,updated_at) VALUES(?,1,?) ON CONFLICT(fingerprint) DO UPDATE SET replied=replied+1, updated_at=excluded.updated_at'
@@ -117,7 +113,12 @@ export class TailscaleWasm extends DurableObject<Bindings> {
         },
         list() { return [...ctx.storage.sql.exec<MuseKeyStat>('SELECT fingerprint, replied, unanswered FROM muse_key_results ORDER BY replied DESC LIMIT 10')].map(r => ({ fingerprint: r.fingerprint, replied: r.replied, unanswered: r.unanswered })); },
       });
-      node.run({ notifyState() {}, notifyNetMap() {}, notifyBrowseToURL: url => this.service.browse(url), notifyPanicRecover() {} });
+      node.run({ notifyState() {}, notifyNetMap() {}, notifyBrowseToURL: url => service.browse(url), notifyPanicRecover() {
+        console.warn('[tailscale-wasm] Go reported a node startup or callback error');
+      } });
+      this.node = node;
+      this.service = service;
+      this.bridge = bridge;
   }
   private async deliver(request: Request): Promise<Response> {
     await this.ensureNode();
