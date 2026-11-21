@@ -37,7 +37,7 @@ describe('/api/muse-monitor/:section', () => {
     expect(new URL(req.url).pathname).toBe('/api/hmac/monitor/jobs');
     const ts = req.headers.get('X-Muse-Timestamp')!;
     expect(Math.abs(Number(ts) - Date.now() / 1000)).toBeLessThan(5);
-    expect(req.headers.get('X-Muse-Signature')).toBe(createHmac('sha256', 'shared').update(`${ts}.jobs`).digest('hex'));
+    expect(req.headers.get('X-Muse-Signature')).toBe(createHmac('sha256', 'shared').update(`${ts}./api/hmac/monitor/jobs.jobs`).digest('hex'));
   });
 
   it('muse-monitorの上流のエラーは502で、状態と本文を付けて返す', async () => {

@@ -4,7 +4,8 @@ import { fetchMuseMonitor, MUSE_MONITOR_SECTIONS, signMuseMonitor } from './muse
 
 // 対象: 本体Workerからmuse-monitor(Service Binding MUSE_MONITOR)の/api/hmac/*を呼ぶ処理。
 // 署名はmuse-monitorのsrc/index.ts hmacMatchesに合わせる: X-Muse-Timestamp(UNIX秒)と
-// X-Muse-Signature = hex(HMAC-SHA256(MONITOR_HMAC_SECRET, "<ts>.<section>"))。
+// X-Muse-Signature = hex(HMAC-SHA256(MONITOR_HMAC_SECRET, "<ts>.<経路>.<section>"))。
+// 経路束縛(REQ-SEC-066): 署名は作った経路でしか通用しない。
 // 故障想定: 署名の形がmuse-monitorと違う / sectionの取り違え / 鍵やバインディングが無いときに例外や
 // 無意味な401になる / 鍵の不一致が「unauthorized」だけで原因が分からない / 応答がJSONでない。
 
@@ -24,9 +25,16 @@ function fetcher(answer: (req: Request) => Response | Promise<Response>) {
 }
 
 describe('signMuseMonitor', () => {
-  it('"<ts>.<section>"のHMAC-SHA256を小文字hexで返す', async () => {
-    const expected = createHmac('sha256', SECRET).update(`${TS}.jobs`).digest('hex');
-    expect(await signMuseMonitor(SECRET, 'jobs', TS)).toBe(expected);
+  it('"<ts>.<経路>.<section>"のHMAC-SHA256を小文字hexで返す', async () => {
+    const expected = createHmac('sha256', SECRET).update(`${TS}./api/hmac/monitor/jobs.jobs`).digest('hex');
+    expect(await signMuseMonitor(SECRET, '/api/hmac/monitor/jobs', 'jobs', TS)).toBe(expected);
+  });
+
+  it('同じsectionでも経路が違えば署名が違う（経路束縛、REQ-SEC-066）', async () => {
+    const forStatusRoute = await signMuseMonitor(SECRET, '/api/hmac/status', 'status', TS);
+    const forMonitorRoute = await signMuseMonitor(SECRET, '/api/hmac/monitor/status', 'status', TS);
+    expect(forStatusRoute).not.toBe(forMonitorRoute);
+    expect(forStatusRoute).toBe(createHmac('sha256', SECRET).update(`${TS}./api/hmac/status.status`).digest('hex'));
   });
 });
 
@@ -36,8 +44,9 @@ describe('fetchMuseMonitor', () => {
     expect(await fetchMuseMonitor(f, SECRET, 'status', NOW)).toEqual({ ok: true, status: 200, body: { section: 'x', output: 'ok' } });
     await fetchMuseMonitor(f, SECRET, 'diag', NOW);
     expect(seen.map((s) => new URL(s.url).pathname)).toEqual(['/api/hmac/status', '/api/hmac/monitor/diag']);
+    expect(seen[0].headers.get('X-Muse-Signature')).toBe(createHmac('sha256', SECRET).update(`${TS}./api/hmac/status.status`).digest('hex'));
     expect(seen[1].headers.get('X-Muse-Timestamp')).toBe(String(TS));
-    expect(seen[1].headers.get('X-Muse-Signature')).toBe(createHmac('sha256', SECRET).update(`${TS}.diag`).digest('hex'));
+    expect(seen[1].headers.get('X-Muse-Signature')).toBe(createHmac('sha256', SECRET).update(`${TS}./api/hmac/monitor/diag.diag`).digest('hex'));
     expect(seen[1].headers.get('Authorization')).toBeNull();
   });
 
