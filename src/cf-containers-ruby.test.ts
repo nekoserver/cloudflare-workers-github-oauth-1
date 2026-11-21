@@ -12,8 +12,9 @@ const server = require('../containers/demo/server.js') as {
 
 describe('demoコンテナ: Rubyをソースからビルドする', () => {
   it('公式のソースを固定したsha256で検証してビルドし、/opt/rubyに入れる', () => {
-    expect(dockerfile).toMatch(/^ARG RUBY_VERSION=4\.0\.9$/m);
-    expect(dockerfile).toMatch(/^ARG RUBY_SHA256=c35350682ff050b79702d57ade4516e7336063f510155d19fb2fb5b3f3909511$/m);
+    // 4.0.10(2026-11-18公開)。sha256はリリースノート https://www.ruby-lang.org/en/news/2026/11/18/ruby-4-0-10-released/ の値と、取得物の両方で照合した(2026-11-21)。
+    expect(dockerfile).toMatch(/^ARG RUBY_VERSION=4\.0\.10$/m);
+    expect(dockerfile).toMatch(/^ARG RUBY_SHA256=b53eef3371fa5d3e3b74340edcd015f06d5d8853968d4e539a5264fce41ed9f1$/m);
     expect(dockerfile).toContain('FROM ubuntu:26.04 AS ruby-build');
     expect(dockerfile).toContain('https://cache.ruby-lang.org/pub/ruby/');
     expect(dockerfile).toContain('sha256sum -c -');
@@ -35,7 +36,7 @@ describe('demoコンテナ: Rubyをソースからビルドする', () => {
 
 describe('demoコンテナ: Codex・Claude CLIの版', () => {
   it('最新版に上げる', () => {
-    expect(dockerfile).toMatch(/^ARG CODEX_VERSION=0\.170\.0$/m);
-    expect(dockerfile).toMatch(/^ARG CLAUDE_VERSION=2\.1\.327$/m);
+    expect(dockerfile).toMatch(/^ARG CODEX_VERSION=0\.171\.0$/m);
+    expect(dockerfile).toMatch(/^ARG CLAUDE_VERSION=2\.1\.330$/m);
   });
 });

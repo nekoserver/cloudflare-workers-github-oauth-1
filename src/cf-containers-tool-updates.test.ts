@@ -7,7 +7,7 @@ const server=require('../containers/demo/server.js');
 const df=readFileSync('containers/demo/Dockerfile','utf8');
 const arg=(n:string)=>df.match(new RegExp('^ARG '+n+'=(\\S+)','m'))?.[1];
 // Official metadata and downloaded binaries checked 2026-11-05 (Claude 2026-11-11; cloudflared・Tailscale・Claude 2026-11-13); see REPORT.
-const VERIFIED={CLOUDFLARED_VERSION:'2026.11.1',TAILSCALE_VERSION:'1.104.7',CLAUDE_VERSION:'2.1.327',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
+const VERIFIED={CLOUDFLARED_VERSION:'2026.11.1',TAILSCALE_VERSION:'1.104.7',CLAUDE_VERSION:'2.1.330',JJ_VERSION:'0.47.1',PREPRINT_VERSION:'0.1.2'};
 describe('container tools: verified precompiled releases',()=>{
  it('pins every requested tool to its verified release',()=>{for(const [n,v] of Object.entries(VERIFIED))expect(arg(n),n).toBe(v);});
  it('verifies downloaded archives and native Claude bytes',()=>{
@@ -15,7 +15,8 @@ describe('container tools: verified precompiled releases',()=>{
   expect(arg('TAILSCALE_SHA256')).toBe('e56693ff74a64f2591b7e819c280635a100aae1ddfb0ef058fcd052b7cd8d16c');
   expect(arg('PREPRINT_SHA256')).toBe('451a0ec62252e8747080daa4f8dc08c85949db9fea67ecedac45d4ce56e3ba9f');
   expect(arg('CHROME_SHA256')).toBe('a62b277dc03da2cff50cc04589deb66f6875be339c066d46adb49b49eedb629d');
-  expect(arg('CLAUDE_NATIVE_SHA256')).toBe('343c744baa14bfd38286a7cb90871051f04379956da6c5b803a9e66019a76ac9');
+  // 2.1.330: npm の @anthropic-ai/claude-code-linux-x64@2.1.330 の tarball を、registry の integrity(sha512)と照合してから、中の claude の sha256 を出した(2026-11-21)。
+  expect(arg('CLAUDE_NATIVE_SHA256')).toBe('f390eaa0814e6a1bff74cbb47acb74cb9c89d30ced809fe0af5af00c7bfe8ebb');
   for(const name of ['TAILSCALE','PREPRINT','CHROME','CLAUDE_NATIVE'])expect(df).toContain('${'+name+'_SHA256}');
  });
  it('uses official Tailscale binaries without a Go build',()=>{
@@ -70,5 +71,5 @@ describe('container tools: verified precompiled releases',()=>{
 it('checks the actual T3 Code version without changing its verified install pin',()=>{
  expect(server.VERSION_SOURCES).toContainEqual({name:'t3',cmd:'t3',args:['--version'],key:'t3'});
  expect(df).toContain('"t3":"%s"');
- expect(arg('T3_VERSION')).toBe('0.1.10');
+ expect(arg('T3_VERSION')).toBe('0.1.11');
 });
